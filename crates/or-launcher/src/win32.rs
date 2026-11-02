@@ -77,6 +77,22 @@ pub fn pick_folder(title: &str) -> Option<PathBuf> {
     }
 }
 
+/// Opens a web page in the default browser (under Wine, the desktop's).
+pub fn open_url(url: &str) {
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    unsafe {
+        ShellExecuteW(
+            null_mut(),
+            wide("open").as_ptr(),
+            wide(url).as_ptr(),
+            null(),
+            null(),
+            SW_SHOWNORMAL,
+        );
+    }
+}
+
 pub fn is_wine() -> bool {
     unsafe {
         let ntdll = GetModuleHandleW(wide("ntdll.dll").as_ptr());

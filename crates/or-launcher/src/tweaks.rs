@@ -6,10 +6,10 @@
 //! the INI files keep the user's edits to keys this launcher does not own.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use crate::config::{HdTextures, Settings};
-use crate::runtime;
+use crate::config::Settings;
+use crate::ini;
 use crate::soundtrack;
 
 /// Files of the OutRun2006Tweaks build this launcher is wired for, next to
@@ -18,7 +18,6 @@ use crate::soundtrack;
 pub const TWEAKS_DIR: &str = "tweaks";
 const VC_DIR: &str = "vc";
 const DXVK_MARKER: &str = ".or-dxvk";
-const TEXTURES_MARKER: &str = ".or-hd-textures";
 
 /// The x86 VC++ 2022 runtime DLLs the mod needs, deployed app-local (the
 /// officially supported way) so no installer is ever run.
@@ -123,7 +122,8 @@ pub fn install(
             _ => BASE_INI.into(),
         };
     }
-    let tuned = settings.apply_tweaks(&base);
+    let pack = hd_texture_base(settings, launcher_dir, log);
+    let tuned = texture_keys(&settings.apply_tweaks(&base), pack.as_deref());
     fs::write(&ini_path, &tuned)
         .map_err(|e| format!("cannot write {}: {e}", ini_path.display()))?;
 
@@ -134,7 +134,6 @@ pub fn install(
         .map_err(|e| format!("cannot write {}: {e}", game_ini.display()))?;
 
     install_dxvk(runtime, launcher_dir, linux, log)?;
-    install_textures(runtime, launcher_dir, settings, log)?;
 
     if settings.soundtrack_fix.unwrap_or(true) {
         match soundtrack::apply(runtime, launcher_dir) {
@@ -180,58 +179,63 @@ fn install_dxvk(
     fs::write(&marker, b"d3d9.dll is managed by OutRunLauncher\n").map_err(|e| e.to_string())
 }
 
-/// The HD texture pack into `textures/load` (the mod's replacement folder).
-/// `Bundled` uses the pack shipped or dropped next to the launcher;
-/// `Folder` any folder of replacement textures; off removes a pack the
-/// launcher installed (a marker says it is ours to remove).
-fn install_textures(
-    runtime: &Path,
-    launcher_dir: &Path,
-    settings: &Settings,
-    log: &mut dyn FnMut(&str),
-) -> Result<(), String> {
-    let load = runtime.join("textures").join("load");
-    let marker = runtime.join(TEXTURES_MARKER);
-    let source = match &settings.hd_textures {
-        Some(HdTextures::Bundled) => Some(launcher_dir.join("textures-pack")),
-        Some(HdTextures::Folder(dir)) => Some(dir.clone()),
-        None | Some(HdTextures::Off) => None,
-    };
-    let Some(source) = source else {
-        if marker.is_file() {
-            fs::remove_dir_all(&load)
-                .map_err(|e| format!("cannot remove {}: {e}", load.display()))?;
-            let _ = fs::remove_file(&marker);
-            log("hd textures: removed");
-        }
-        return Ok(());
-    };
-    // The pack may be its `load` folder itself or the folder above it.
-    let from = if source.join("load").is_dir() {
-        source.join("load")
+/// The folder Tweaks should read HD textures from (`TextureBaseFolder`,
+/// which holds `load`), for a pack unzipped anywhere: the folder it was
+/// unzipped to (`textures/load` inside), its `textures` folder, or `load`
+/// itself. None when it holds no `load` folder.
+pub fn texture_base(source: &Path) -> Option<PathBuf> {
+    if source.join("textures").join("load").is_dir() {
+        Some(source.join("textures"))
+    } else if source.join("load").is_dir() {
+        Some(source.to_path_buf())
+    } else if source.is_dir()
+        && source
+            .file_name()
+            .is_some_and(|name| name.eq_ignore_ascii_case("load"))
+    {
+        source.parent().map(Path::to_path_buf)
     } else {
-        source.clone()
-    };
-    if !from.is_dir() {
-        return Err(format!(
-            "the HD texture folder does not exist: {}",
-            source.display()
-        ));
+        None
     }
-    let copied = runtime::mirror(&from, &load).map_err(|e| e.to_string())?;
-    fs::write(&marker, b"textures/load is managed by OutRunLauncher\n")
-        .map_err(|e| e.to_string())?;
-    log(&format!(
-        "hd textures: {copied} files (from {})",
-        from.display()
-    ));
-    Ok(())
+}
+
+/// The HD pack's base folder when it is on and found; a missing pack is
+/// logged and the game starts with its own textures.
+fn hd_texture_base(
+    settings: &Settings,
+    launcher_dir: &Path,
+    log: &mut dyn FnMut(&str),
+) -> Option<PathBuf> {
+    let source = settings.hd_textures_source(launcher_dir)?;
+    let base = texture_base(&source);
+    match &base {
+        Some(base) => log(&format!("hd textures: {}", base.display())),
+        None => log(&format!(
+            "warning: hd textures are on but {} holds no textures\\load folder; download the pack from {} and choose its folder",
+            source.display(),
+            crate::config::HD_PACK_PAGE
+        )),
+    }
+    base
+}
+
+/// Points Tweaks at the HD pack where it was unzipped (no copy), or at the
+/// game's own `textures` folder. The pack draws Clarissa as in the
+/// Japanese release, so she is restored with it.
+pub fn texture_keys(ini: &str, pack: Option<&Path>) -> String {
+    let folder = pack.map_or_else(|| "textures".to_string(), |p| p.display().to_string());
+    let t = ini::set_section_key(ini, "Graphics", "TextureBaseFolder", &folder);
+    ini::set_section_key(
+        &t,
+        "Misc",
+        "RestoreJPClarissa",
+        if pack.is_some() { "true" } else { "false" },
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::HdTextures;
 
     fn temp(name: &str) -> std::path::PathBuf {
         let p = std::env::temp_dir().join(format!("or-tweaks-{}-{name}", std::process::id()));
@@ -391,44 +395,64 @@ mod tests {
     }
 
     #[test]
-    fn textures_install_and_clean_up() {
+    fn the_hd_pack_is_read_where_it_was_unzipped() {
         let at = temp("textures");
         let launcher_dir = launcher(&at);
-        let pack = launcher_dir.join("textures-pack");
-        fs::create_dir_all(pack.join("cs_CS_BEAC_pmt")).unwrap();
-        fs::write(pack.join("cs_CS_BEAC_pmt").join("a.dds"), b"dds").unwrap();
         let runtime = at.join("runtime");
         fs::create_dir_all(&runtime).unwrap();
-        let mut log = |_line: &str| {};
+        let ini =
+            |runtime: &Path| fs::read_to_string(runtime.join("OutRun2006Tweaks.ini")).unwrap();
 
+        // The zip as published: textures/load inside the folder chosen.
+        let unzipped = at.join("OR2-HD-GUI");
+        fs::create_dir_all(unzipped.join("textures/load/spr_a")).unwrap();
+        assert_eq!(texture_base(&unzipped), Some(unzipped.join("textures")));
+        assert_eq!(
+            texture_base(&unzipped.join("textures")),
+            Some(unzipped.join("textures"))
+        );
+        assert_eq!(
+            texture_base(&unzipped.join("textures/load")),
+            Some(unzipped.join("textures"))
+        );
+        assert_eq!(texture_base(&at.join("nope")), None);
+
+        let mut lines = Vec::new();
+        let mut log = |line: &str| lines.push(line.to_string());
         let mut s = Settings::parse_file("hd_textures = on\n").0;
+        s.hd_textures_folder = Some(unzipped.clone());
         install(&runtime, &launcher_dir, false, &s, &mut log).unwrap();
-        assert!(runtime.join("textures/load/cs_CS_BEAC_pmt/a.dds").is_file());
+        let tuned = ini(&runtime);
+        assert!(tuned.contains(&format!(
+            "TextureBaseFolder = {}",
+            unzipped.join("textures").display()
+        )));
+        assert!(tuned.contains("RestoreJPClarissa = true"));
+        // Nothing is copied into the runtime.
+        assert!(!runtime.join("textures").exists());
 
-        // A user file in the load folder survives switching off? No: the
-        // marker says we own the folder; off removes it wholesale.
-        s.hd_textures = Some(HdTextures::Off);
+        // Off: the game's own textures folder.
+        s.hd_textures = Some(false);
         install(&runtime, &launcher_dir, false, &s, &mut log).unwrap();
-        assert!(!runtime.join("textures/load").exists());
+        assert!(ini(&runtime).contains("TextureBaseFolder = textures"));
+        assert!(ini(&runtime).contains("RestoreJPClarissa = false"));
 
-        // A folder of the user's choosing works too, with or without a
-        // `load` subfolder.
-        let own = at.join("own");
-        fs::create_dir_all(&own).unwrap();
-        fs::write(own.join("b.dds"), b"dds").unwrap();
-        s.hd_textures = Some(HdTextures::Folder(own.clone()));
+        // On without a pack: a warning, and the game still starts.
+        s.hd_textures = Some(true);
+        s.hd_textures_folder = Some(at.join("nope"));
         install(&runtime, &launcher_dir, false, &s, &mut log).unwrap();
-        assert!(runtime.join("textures/load/b.dds").is_file());
-        let own2 = at.join("own2");
-        fs::create_dir_all(own2.join("load")).unwrap();
-        fs::write(own2.join("load").join("c.dds"), b"dds").unwrap();
-        s.hd_textures = Some(HdTextures::Folder(own2));
-        install(&runtime, &launcher_dir, false, &s, &mut log).unwrap();
-        assert!(runtime.join("textures/load/c.dds").is_file());
+        assert!(ini(&runtime).contains("TextureBaseFolder = textures"));
+        assert!(lines.iter().any(|l| l.starts_with("warning: hd textures")));
 
-        // A missing folder is an error, not silence.
-        s.hd_textures = Some(HdTextures::Folder(at.join("nope")));
-        assert!(install(&runtime, &launcher_dir, false, &s, &mut log).is_err());
+        // No folder chosen: textures-pack next to the launcher.
+        fs::create_dir_all(launcher_dir.join("textures-pack/load")).unwrap();
+        s.hd_textures_folder = None;
+        let mut quiet = |_: &str| {};
+        install(&runtime, &launcher_dir, false, &s, &mut quiet).unwrap();
+        assert!(ini(&runtime).contains(&format!(
+            "TextureBaseFolder = {}",
+            launcher_dir.join("textures-pack").display()
+        )));
         fs::remove_dir_all(&at).unwrap();
     }
 

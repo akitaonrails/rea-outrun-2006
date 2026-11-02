@@ -182,7 +182,9 @@ mod app {
         let exe_path = game.join(EXE);
         let exe_bytes = fs::read(&exe_path)
             .map_err(|error| format!("cannot read {}: {error}", exe_path.display()))?;
-        let detected = edition::identify(&exe_bytes).map_err(|digest| {
+        let bundled =
+            launcher_dir().and_then(|dir| fs::read(dir.join(tweaks::TWEAKS_DIR).join(EXE)).ok());
+        let detected = edition::identify_with_bundled(&exe_bytes, bundled.as_deref()).map_err(|digest| {
             format!(
                 "This OR2006C2C.exe is a version the launcher doesn't know.\n\nSHA-256: {}\n\nPlease report it at https://github.com/akitaonrails/rea-outrun-2006/issues with where your copy comes from (Steam, DVD, which repack).",
                 edition::to_hex(&digest)

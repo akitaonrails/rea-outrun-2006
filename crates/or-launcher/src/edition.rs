@@ -47,6 +47,16 @@ pub fn identify(bytes: &[u8]) -> Result<Edition, [u8; 32]> {
         .ok_or(digest)
 }
 
+/// Like `identify`, also recognising `bundled`: the replacement EXE that
+/// ships with the launcher, which may be a newer Tweaks build than the
+/// table knows.
+pub fn identify_with_bundled(bytes: &[u8], bundled: Option<&[u8]>) -> Result<Edition, [u8; 32]> {
+    identify(bytes).or_else(|digest| match bundled {
+        Some(exe) if exe == bytes => Ok(TWEAKS),
+        _ => Err(digest),
+    })
+}
+
 pub fn to_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -76,6 +86,16 @@ mod tests {
         );
         assert_ne!(table[0].0, table[1].0);
         assert!(!table[0].1.patched && table[1].1.patched);
+    }
+
+    #[test]
+    fn the_bundled_replacement_exe_is_recognised() {
+        assert_eq!(
+            identify_with_bundled(b"newer tweaks", Some(b"newer tweaks")),
+            Ok(TWEAKS)
+        );
+        assert!(identify_with_bundled(b"something else", Some(b"newer tweaks")).is_err());
+        assert!(identify_with_bundled(b"newer tweaks", None).is_err());
     }
 
     #[test]

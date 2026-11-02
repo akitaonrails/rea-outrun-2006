@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 
-use crate::config::{self, Backend, Feedback, HdTextures, Settings, Vsync};
+use crate::config::{self, Backend, Feedback, Settings, Vsync};
 
 pub use crate::config::Scaler;
 
@@ -87,8 +87,9 @@ pub struct Form {
     pub soundtrack_fix: bool,
 
     pub scaler: Scaler,
-    /// A folder `hd_textures` names instead of the bundled pack, kept as is.
-    pub hd_folder: Option<String>,
+    /// Where the unzipped HD texture pack is (empty: `textures-pack` next to
+    /// the launcher). Kept when the pack is switched off.
+    pub hd_folder: String,
 }
 
 /// The Steam Deck's screen (1280x800, 16:10).
@@ -135,7 +136,7 @@ impl Form {
             show_miles: false,
             soundtrack_fix: false,
             scaler: Scaler::Linear,
-            hd_folder: None,
+            hd_folder: String::new(),
             game: String::new(),
             saves: String::new(),
         }
@@ -176,7 +177,7 @@ impl Form {
             character_select: true,
             show_miles: true,
             soundtrack_fix: true,
-            hd_folder: None,
+            hd_folder: String::new(),
             scaler: Scaler::Linear,
             game: String::new(),
             saves: String::new(),
@@ -216,10 +217,7 @@ impl Form {
             sky_glow: s.sky_glow.unwrap_or(true),
             xbox_brightness: s.xbox_brightness.unwrap_or(false),
             hd_characters: s.hd_characters.unwrap_or(true),
-            hd_textures: matches!(
-                s.hd_textures,
-                Some(HdTextures::Bundled | HdTextures::Folder(_))
-            ),
+            hd_textures: s.hd_textures.unwrap_or(false),
             deadzone: s.deadzone.unwrap_or(20),
             vibration: s.vibration.unwrap_or(Feedback::On),
             vibration_strength: s.vibration_strength.unwrap_or(7),
@@ -236,10 +234,7 @@ impl Form {
             show_miles: s.show_miles.unwrap_or(true),
             soundtrack_fix: s.soundtrack_fix.unwrap_or(true),
             scaler: s.scaler.unwrap_or(Scaler::Linear),
-            hd_folder: match &s.hd_textures {
-                Some(HdTextures::Folder(dir)) => Some(dir.display().to_string()),
-                _ => None,
-            },
+            hd_folder: path(&s.hd_textures_folder),
         }
         .derived_look(screen, wine)
     }
@@ -258,7 +253,7 @@ impl Form {
         probe.look = Look::Original;
         probe.game.clear();
         probe.saves.clear();
-        probe.hd_folder = None;
+        probe.hd_folder.clear();
         if probe == Form::original(wine) {
             return Look::Original;
         }
@@ -283,7 +278,7 @@ impl Form {
         self.look = look;
         let game = std::mem::take(&mut self.game);
         let saves = std::mem::take(&mut self.saves);
-        let hd_folder = self.hd_folder.clone();
+        let hd_folder = std::mem::take(&mut self.hd_folder);
         let scaler = self.scaler;
         *self = match look {
             Look::Original => Form::original(wine),
@@ -338,12 +333,9 @@ impl Form {
         put("hd_characters", Some(self.hd_characters.to_string()));
         put(
             "hd_textures",
-            Some(if self.hd_textures {
-                self.hd_folder.clone().unwrap_or_else(|| "on".into())
-            } else {
-                "off".into()
-            }),
+            Some(if self.hd_textures { "on" } else { "off" }.into()),
         );
+        put("hd_textures_folder", path(&self.hd_folder));
         put("deadzone", Some(self.deadzone.to_string()));
         put("vibration", Some(self.vibration.key().into()));
         put(
@@ -585,15 +577,24 @@ mod tests {
     fn hd_textures_keep_their_folder() {
         let mut f = form(config::TEMPLATE);
         f.hd_textures = true;
-        f.hd_folder = Some(r"D:\pack".into());
+        f.hd_folder = r"D:\pack".into();
         let saved = f.save(config::TEMPLATE);
-        assert!(saved.contains("hd_textures = D:\\pack"));
-        assert_eq!(
-            Settings::parse_file(&saved).0.hd_textures,
-            Some(HdTextures::Folder(PathBuf::from(r"D:\pack")))
-        );
-        f.hd_folder = None;
-        assert!(f.save(config::TEMPLATE).contains("hd_textures = on"));
+        assert!(saved.contains("hd_textures = on"));
+        assert!(saved.contains("hd_textures_folder = D:\\pack"));
+        assert_eq!(form(&saved).hd_folder, r"D:\pack");
+
+        // Switching the pack off keeps where it is.
+        f.hd_textures = false;
+        let off = f.save(&saved);
+        assert!(off.contains("hd_textures = off"));
+        assert_eq!(form(&off).hd_folder, r"D:\pack");
+
+        // A look keeps the folder too.
+        f.set_look(Look::Original, SCREEN, false);
+        assert_eq!(f.hd_folder, r"D:\pack");
+
+        f.hd_folder.clear();
+        assert!(!f.save(&off).contains("hd_textures_folder = D"));
     }
 
     #[test]

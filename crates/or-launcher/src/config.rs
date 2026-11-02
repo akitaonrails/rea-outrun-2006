@@ -7,7 +7,7 @@
 //! the launcher later changes only the keys it owns. Unknown keys are
 //! ignored; values it cannot read are reported and ignored.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::ini;
 
@@ -42,7 +42,11 @@ pub struct Settings {
     pub xbox_brightness: Option<bool>,
     /// The hi-def passenger models the PC release left unused.
     pub hd_characters: Option<bool>,
-    pub hd_textures: Option<HdTextures>,
+    /// The community HD texture pack (a separate download).
+    pub hd_textures: Option<bool>,
+    /// Where the unzipped pack is; without it, `textures-pack` next to the
+    /// launcher.
+    pub hd_textures_folder: Option<PathBuf>,
 
     // Controls
     /// Steering deadzone in percent (game default 20).
@@ -172,15 +176,12 @@ impl Backend {
     }
 }
 
-/// Where HD textures come from (`hd_textures`).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum HdTextures {
-    Off,
-    /// The community texture pack shipped with the launcher (`textures-pack`).
-    Bundled,
-    /// A folder (or zip) of replacement textures for `textures/load`.
-    Folder(PathBuf),
-}
+/// The community HD texture pack's download page (a separate download:
+/// 326 MB zipped, 3.2 GB unpacked).
+pub const HD_PACK_PAGE: &str = "https://github.com/envido32/OR2006Sprites/releases";
+
+/// The pack's folder next to the launcher, used when no folder is chosen.
+pub const TEXTURES_PACK: &str = "textures-pack";
 
 /// `scaler` (Linux, gamescope's filter): sharp pixels, sharp pixels of even
 /// size, FSR, or plain smoothing.
@@ -208,16 +209,6 @@ impl Scaler {
     fn parse(value: &str) -> Option<Scaler> {
         let value = value.trim().to_ascii_lowercase();
         Scaler::ALL.into_iter().find(|s| s.key() == value)
-    }
-}
-
-impl HdTextures {
-    pub fn parse(value: &str) -> HdTextures {
-        match parse_bool(value) {
-            Some(true) => HdTextures::Bundled,
-            Some(false) => HdTextures::Off,
-            None => HdTextures::Folder(value.into()),
-        }
     }
 }
 
@@ -288,9 +279,13 @@ game =
 # The hi-def passenger models the PC release shipped unused.
 #hd_characters = true
 
-# HD texture pack: on uses the community pack shipped with the launcher
-# (or give a folder of replacement textures). off keeps the game's own.
+# The community HD texture pack (sharper menus, HUD and sprites). It is a
+# separate download: get it from
+# https://github.com/envido32/OR2006Sprites/releases, unzip it anywhere and
+# give its folder below (the one with textures\load inside). Without a
+# folder, a textures-pack folder next to OutRunLauncher.exe is used.
 #hd_textures = off
+#hd_textures_folder =
 
 # Steering deadzone in percent, 0 to 50 (the game's default is 20).
 #deadzone = 20
@@ -362,7 +357,8 @@ OutRunLauncher [options]
   --sky-glow on|off         the console versions' glowing sky
   --xbox-brightness on|off  the Xbox releases' brighter picture
   --hd-characters on|off    hi-def passenger models
-  --hd-textures <folder>    HD texture pack: on, off, or a folder
+  --hd-textures on|off      the community HD texture pack
+  --hd-textures-folder <folder>  where the unzipped pack is
   --deadzone <0-50>         steering deadzone in percent
   --vibration <mode>        rumble: off, on, swapped or merged
   --vibration-strength <0-10>
@@ -493,7 +489,12 @@ impl Settings {
                 "sky_glow" => boolean(&mut s.sky_glow, "sky_glow"),
                 "xbox_brightness" => boolean(&mut s.xbox_brightness, "xbox_brightness"),
                 "hd_characters" => boolean(&mut s.hd_characters, "hd_characters"),
-                "hd_textures" => s.hd_textures = Some(HdTextures::parse(value)),
+                "hd_textures" => s.set_hd_textures(value),
+                "hd_textures_folder" => {
+                    s.hd_textures_folder = Some(value.trim())
+                        .filter(|v| !v.is_empty())
+                        .map(PathBuf::from)
+                }
                 "deadzone" => match value.parse().ok().filter(|n| *n <= 50) {
                     Some(d) => s.deadzone = Some(d),
                     None => bad("deadzone needs 0 to 50, not"),
@@ -534,6 +535,31 @@ impl Settings {
         (s, warnings)
     }
 
+    /// `hd_textures`: on or off, or (older files) the pack's folder, which
+    /// also turns it on.
+    fn set_hd_textures(&mut self, value: &str) {
+        match parse_bool(value) {
+            Some(on) => self.hd_textures = Some(on),
+            None => {
+                self.hd_textures = Some(true);
+                self.hd_textures_folder = Some(value.trim().into());
+            }
+        }
+    }
+
+    /// Where the HD textures come from when they are on: the chosen folder,
+    /// or `textures-pack` next to the launcher.
+    pub fn hd_textures_source(&self, launcher_dir: &Path) -> Option<PathBuf> {
+        if !self.hd_textures.unwrap_or(false) {
+            return None;
+        }
+        Some(
+            self.hd_textures_folder
+                .clone()
+                .unwrap_or_else(|| launcher_dir.join(TEXTURES_PACK)),
+        )
+    }
+
     /// Command-line values override the file's.
     pub fn merged(self, over: Settings) -> Settings {
         macro_rules! merge {
@@ -557,6 +583,7 @@ impl Settings {
             xbox_brightness,
             hd_characters,
             hd_textures,
+            hd_textures_folder,
             deadzone,
             vibration,
             vibration_strength,
@@ -807,18 +834,6 @@ impl Settings {
             "AllowHorn",
             if self.on(&self.horn) { "true" } else { "false" },
         );
-        // The bundled texture pack draws Clarissa as in the Japanese
-        // release; its sprites only match with her restored.
-        t = put(
-            &t,
-            "Misc",
-            "RestoreJPClarissa",
-            if self.hd_textures == Some(HdTextures::Bundled) {
-                "true"
-            } else {
-                "false"
-            },
-        );
         t = put(
             &t,
             "Misc",
@@ -949,8 +964,9 @@ impl Settings {
                         )
                     })?);
                 }
-                "--hd-textures" => {
-                    s.hd_textures = Some(HdTextures::parse(&value("--hd-textures")?))
+                "--hd-textures" => s.set_hd_textures(&value("--hd-textures")?),
+                "--hd-textures-folder" => {
+                    s.hd_textures_folder = Some(value("--hd-textures-folder")?.into())
                 }
                 "--vsync" => {
                     let v = value("--vsync")?;
@@ -1125,12 +1141,6 @@ mod tests {
             out[at..out.find("[Window]").unwrap()].contains("VibrationStrength = 7\n")
         }));
 
-        // The bundled texture pack needs the Japanese Clarissa.
-        let pack = Settings::parse_file("hd_textures = on\n")
-            .0
-            .apply_tweaks(base);
-        assert!(in_section(&pack, "Misc", "RestoreJPClarissa = true"));
-
         // The unlimited cap turns interpolation on.
         let fast = Settings::parse_file("fps_limit = unlimited\n").0;
         assert!(
@@ -1147,7 +1157,6 @@ mod tests {
         assert!(stock.contains("SkipIntroLogos = false"));
         assert!(stock.contains("DisableCountdownTimer = false"));
         assert!(in_section(&stock, "Audio", "AllowHorn = false"));
-        assert!(in_section(&stock, "Misc", "RestoreJPClarissa = false"));
         assert!(stock.contains("RandomHighwayAnimSets = false"));
         assert!(stock.contains("AllowCharacterSelection = false"));
         assert!(stock.contains("ShowOutRunMilesOnMenu = false"));
@@ -1226,17 +1235,34 @@ mod tests {
     }
 
     #[test]
-    fn hd_textures_parse_their_three_forms() {
-        assert_eq!(HdTextures::parse("on"), HdTextures::Bundled);
-        assert_eq!(HdTextures::parse("off"), HdTextures::Off);
+    fn hd_textures_have_a_switch_and_a_folder() {
+        let launcher = Path::new(r"C:\Launcher");
+        let on = Settings::parse_file("hd_textures = on\n").0;
+        assert_eq!(on.hd_textures, Some(true));
         assert_eq!(
-            HdTextures::parse(r"D:\pack"),
-            HdTextures::Folder(PathBuf::from(r"D:\pack"))
+            on.hd_textures_source(launcher),
+            Some(launcher.join(TEXTURES_PACK))
         );
+
+        // Off keeps the folder for next time.
+        let off = Settings::parse_file("hd_textures = off\nhd_textures_folder = D:\\pack\n").0;
+        assert_eq!(off.hd_textures_folder, Some(PathBuf::from(r"D:\pack")));
+        assert_eq!(off.hd_textures_source(launcher), None);
+
+        let chosen = Settings::parse_file("hd_textures = on\nhd_textures_folder = D:\\pack\n").0;
         assert_eq!(
-            Settings::parse_file("hd_textures = on\n").0.hd_textures,
-            Some(HdTextures::Bundled)
+            chosen.hd_textures_source(launcher),
+            Some(PathBuf::from(r"D:\pack"))
         );
+
+        // Older files named the folder in hd_textures itself.
+        let old = Settings::parse_file("hd_textures = D:\\pack\n").0;
+        assert_eq!(old.hd_textures, Some(true));
+        assert_eq!(old.hd_textures_folder, Some(PathBuf::from(r"D:\pack")));
+
+        // An empty folder line means none.
+        let empty = Settings::parse_file("hd_textures_folder =\n").0;
+        assert_eq!(empty.hd_textures_folder, None);
     }
 
     #[test]
@@ -1306,6 +1332,6 @@ mod tests {
         assert_eq!(s.anisotropy, Some(8));
         assert_eq!(s.deadzone, Some(10));
         assert_eq!(s.vibration_strength, Some(5));
-        assert_eq!(s.hd_textures, Some(HdTextures::Off));
+        assert_eq!(s.hd_textures, Some(false));
     }
 }

@@ -17,8 +17,8 @@ use eframe::egui::{
 
 use or_launcher::config::{self, Settings};
 use or_launcher::config::{Backend, Feedback, Vsync};
-use or_launcher::edition;
 use or_launcher::form::{self, Form, Look, PadAction};
+use or_launcher::{edition, tweaks};
 
 use crate::win32;
 
@@ -197,7 +197,7 @@ fn check_game(folder: &str) -> Check {
         return Check::Problem(format!("There is no {} in this folder.", edition::EXE));
     };
     match std::fs::read(&exe) {
-        Ok(bytes) => match edition::identify(&bytes) {
+        Ok(bytes) => match edition::identify_with_bundled(&bytes, bundled_exe().as_deref()) {
             Ok(e) => Check::Found(e.name),
             Err(digest) => Check::Problem(format!(
                 "This {} is a version the launcher doesn't know.\nSHA-256: {} — please report it.",
@@ -207,6 +207,15 @@ fn check_game(folder: &str) -> Check {
         },
         Err(e) => Check::Problem(format!("Can't read {}: {e}", edition::EXE)),
     }
+}
+
+/// The replacement EXE shipped in `tweaks/` next to the launcher.
+fn bundled_exe() -> Option<Vec<u8>> {
+    let dir = std::env::current_exe()
+        .ok()?
+        .parent()?
+        .join(tweaks::TWEAKS_DIR);
+    std::fs::read(dir.join(edition::EXE)).ok()
 }
 
 struct Window<'a> {
@@ -720,9 +729,28 @@ impl Window<'_> {
             toggle(
                 ui,
                 &mut f.hd_textures,
-                "HD texture pack (the community sprites: tachometers, flags, prompts)",
+                "HD texture pack (the community's redrawn menus, HUD and sprites)",
             );
         });
+        if f.hd_textures {
+            row(ui, "HD pack", &mut |ui| {
+                ui.vertical(|ui| {
+                    folder_field(
+                        ui,
+                        &mut f.hd_folder,
+                        "The folder you unzipped the pack into",
+                        "Choose the folder you unzipped the HD texture pack into",
+                    );
+                    ui.horizontal(|ui| {
+                        if outline_button(ui, "Get it…").clicked() {
+                            win32::open_url(config::HD_PACK_PAGE);
+                        }
+                        let (note, color) = hd_pack_note(&f.hd_folder);
+                        ui.label(egui::RichText::new(note).font(font(13.0)).color(color));
+                    });
+                });
+            });
+        }
         if self.linux {
             row(ui, "Scaler", &mut |ui| {
                 let options: Vec<_> = form::SCALERS.iter().map(|s| (s.0, s.1)).collect();
@@ -1027,6 +1055,28 @@ fn field(ui: &mut egui::Ui, text: &str) {
 }
 
 /// A text field with a Browse button; true when it changed.
+/// Whether the chosen HD pack folder holds textures, for the note under it.
+fn hd_pack_note(folder: &str) -> (String, Color32) {
+    let folder = folder.trim();
+    if folder.is_empty() {
+        return (
+            "A separate download (326 MB). Unzip it anywhere and choose that folder.".to_string(),
+            MUTED,
+        );
+    }
+    match tweaks::texture_base(std::path::Path::new(folder)) {
+        Some(_) => (
+            "Pack found. It's read from there; nothing is copied.".to_string(),
+            SUN,
+        ),
+        None => (
+            "No textures\\load folder here: choose the folder the zip was unzipped into."
+                .to_string(),
+            ERROR,
+        ),
+    }
+}
+
 fn folder_field(ui: &mut egui::Ui, value: &mut String, hint: &str, title: &str) -> bool {
     let mut changed = false;
     ui.horizontal(|ui| {
