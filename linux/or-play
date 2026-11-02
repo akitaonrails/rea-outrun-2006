@@ -67,10 +67,21 @@ session_valid() {
   [ "$stats" = "$LOCK_PID $LOCK_START" ]
 }
 
+# A lock from or-play 0.1.0 holds only the pid of the or-play that is
+# still waiting for its game.
+old_lock_alive() {
+  [ -r "$LOCK" ] || return 1
+  IFS=' ' read -r old rest < "$LOCK" || return 1
+  [ -z "$rest" ] || return 1
+  case "$old" in ''|*[!0-9]*) return 1 ;; esac
+  kill -0 "$old" 2>/dev/null
+}
+
 # Running, or still starting (the launcher copies files before
-# OR2006C2C.exe appears): the session or-play started is alive. Another
-# OR2006C2C.exe (Steam's, say) is not ours and doesn't count.
-running() { session_valid; }
+# OR2006C2C.exe appears): the session or-play started is alive, or an
+# older or-play's lock names a live process. Another OR2006C2C.exe
+# (Steam's, say) is not ours and doesn't count.
+running() { session_valid || old_lock_alive; }
 
 # The best GPU for the game, as environment assignments (none: the
 # default GPU). A player's own DRI_PRIME / __NV_PRIME_RENDER_OFFLOAD win.
@@ -144,12 +155,16 @@ INNER
   fi
 }
 
-# Interrupted while the game runs: end the session we started.
+# Interrupted while the game runs: end the session we started and what is
+# left in our prefix (under distrobox the game may be outside the session),
+# then wait for the session to finish.
 launch_interrupted() {
   trap - EXIT HUP INT TERM
   if session_valid; then
     kill -TERM "-$LOCK_PID" 2>/dev/null || true
   fi
+  $RUN env WINEPREFIX="$PREFIX" wineserver -k 2>/dev/null
+  wait "$pid" 2>/dev/null
   rm -f "$LOCK"
   exit 143
 }
@@ -183,8 +198,9 @@ launch() {
 }
 
 # Ends the session or-play started (checked again right before the signal:
-# a stale or reused pid, or another OR2006C2C.exe, is never a target), then
-# whatever is left in our own Wine prefix.
+# a stale or reused pid, an older or-play's pid-only lock, or another
+# OR2006C2C.exe is never a target), then whatever is left in our own Wine
+# prefix.
 stop_session() {
   if session_valid; then
     kill -TERM "-$LOCK_PID" 2>/dev/null || true

@@ -48,11 +48,18 @@ if kill -0 "$STALE_PID" 2>/dev/null; then ok "stop left the stale/reused pid alo
 [ -f "$T/wineserver" ] && ok "stop ends our prefix's wineserver" || fail "stop did not run wineserver -k"
 stop_helper "$STALE_PID" "$STALE_START"; STALE_PID= STALE_START=
 
-# A lock holding or-play's own shell (the old lock) is no session of ours.
-echo $$ > "$LOCK"
-if running; then fail "a pid-only lock counted"; else ok "pid-only lock refused"; fi
+# A lock from or-play 0.1.0 (its own pid only): running while that pid
+# lives; stop never signals it (only our prefix's wineserver).
+sleep 30 & OTHER_PID=$!
+stats=$(proc_stat "$OTHER_PID"); OTHER_START=${stats#* }
+echo "$OTHER_PID" > "$LOCK"
+if running; then ok "old pid-only lock with a live pid is running"; else fail "old lock ignored"; fi
 stop_session
-ok "stop did not kill the helper's own shell"
+if kill -0 "$OTHER_PID" 2>/dev/null; then ok "stop did not signal an old lock's pid"; else fail "old lock's pid signalled"; fi
+stop_helper "$OTHER_PID" "$OTHER_START"; OTHER_PID= OTHER_START=
+echo 999999999 > "$LOCK"
+if running; then fail "old lock with a dead pid counted"; else ok "old lock with a dead pid is idle"; fi
+rm -f "$LOCK"
 
 # Another OR2006C2C.exe (Steam's, say) is not ours.
 ln -s "$(command -v sleep)" "$T/OR2006C2C.exe"
@@ -93,6 +100,26 @@ if kill -0 "$GAME_PID" 2>/dev/null; then fail "or-play still waiting after stop"
 if pgrep -s "$session" >/dev/null 2>&1; then fail "processes left in the session"; else ok "nothing left in the session"; fi
 GAME_PID=
 [ -f "$LOCK" ] && fail "stop left the lock" || ok "stop removed the lock"
+
+# or-play itself interrupted (TERM): the session ends, our prefix's
+# wineserver is stopped, and or-play waits for the session first.
+cat > "$T/bin/wine" <<'FAKE'
+#!/bin/sh
+printf '<%s>\n' "$@" > "$T/args"
+sleep 30 &
+wait
+FAKE
+rm -f "$T/args" "$T/wineserver"
+( start > /dev/null ) & GAME_PID=$!
+i=0; while [ ! -f "$T/args" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+read_lock; session=$LOCK_PID
+kill -TERM "$GAME_PID"
+i=0; while kill -0 "$GAME_PID" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+if kill -0 "$GAME_PID" 2>/dev/null; then fail "interrupted or-play still running"; else ok "interrupted or-play returns"; fi
+if pgrep -s "$session" >/dev/null 2>&1; then fail "interrupt left the session"; else ok "interrupt ended the session"; fi
+[ -f "$T/wineserver" ] && ok "interrupt stopped our prefix's wineserver" || fail "interrupt skipped wineserver -k"
+[ -f "$LOCK" ] && fail "interrupt left the lock" || ok "interrupt removed the lock"
+GAME_PID=
 
 # A natural exit removes the lock.
 cat > "$T/bin/wine" <<'FAKE'
