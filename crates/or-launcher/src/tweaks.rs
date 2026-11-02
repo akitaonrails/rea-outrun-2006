@@ -125,6 +125,9 @@ pub fn install(
     }
     let pack = hd_texture_base(settings, launcher_dir, log);
     let tuned = texture_keys(&settings.apply_tweaks(&base), pack.as_deref());
+    // Without a choice in launcher.cfg, the input API follows the platform.
+    let backend = settings.backend_on(linux).ini().to_string();
+    let tuned = ini::set_section_key(&tuned, "Controls", "InputBackend", &backend);
     fs::write(&ini_path, &tuned)
         .map_err(|e| format!("cannot write {}: {e}", ini_path.display()))?;
     reset_overlay_keys(&runtime.join(USER_INI), log)?;
@@ -542,5 +545,32 @@ mod tests {
             assert!(tuned.contains(&format!("[{section}]")), "{section} missing");
         }
         assert!(tuned.contains("01_Splash_wave.ogg"));
+    }
+
+    #[test]
+    fn the_input_api_follows_the_platform_unless_chosen() {
+        let at = temp("backend");
+        let launcher_dir = launcher(&at);
+        let runtime = at.join("runtime");
+        fs::create_dir_all(&runtime).unwrap();
+        fs::create_dir_all(launcher_dir.join("linux")).unwrap();
+        fs::write(launcher_dir.join("linux").join("d3d9.dll"), b"dxvk").unwrap();
+        let backend = |runtime: &Path| {
+            ini::section_key(
+                &fs::read_to_string(runtime.join("OutRun2006Tweaks.ini")).unwrap(),
+                "Controls",
+                "InputBackend",
+            )
+        };
+        let mut quiet = |_: &str| {};
+        let unset = Settings::default();
+        install(&runtime, &launcher_dir, true, &unset, &mut quiet).unwrap();
+        assert_eq!(backend(&runtime).as_deref(), Some("3"), "XInput under Wine");
+        install(&runtime, &launcher_dir, false, &unset, &mut quiet).unwrap();
+        assert_eq!(backend(&runtime).as_deref(), Some("0"), "WGI on Windows");
+        let chosen = Settings::parse_file("input_backend = dinput\n").0;
+        install(&runtime, &launcher_dir, true, &chosen, &mut quiet).unwrap();
+        assert_eq!(backend(&runtime).as_deref(), Some("2"), "a choice wins");
+        fs::remove_dir_all(&at).unwrap();
     }
 }

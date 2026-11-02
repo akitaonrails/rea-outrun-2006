@@ -137,6 +137,14 @@ pub enum Backend {
 }
 
 impl Backend {
+    pub fn default_on(wine: bool) -> Backend {
+        if wine {
+            Backend::XInput
+        } else {
+            Backend::WindowsGaming
+        }
+    }
+
     pub const ALL: [Backend; 4] = [
         Backend::WindowsGaming,
         Backend::Raw,
@@ -295,8 +303,10 @@ game =
 # Xbox Series impulse triggers: off, on, swapped (recommended), or merged.
 #impulse_triggers = swapped
 
-# Input API for the mod's controller system: wgi (Windows.Gaming.Input,
-# the default), raw, dinput or xinput. Try another if a pad isn't seen.
+# Input API for the mod's controller system: wgi (Windows.Gaming.Input),
+# raw, dinput or xinput. Without a choice: wgi on Windows, xinput under
+# Wine and Proton (whose wgi loses the d-pad). Try another if a pad isn't
+# seen.
 #input_backend = wgi
 
 # Start races with the manual gearbox selected.
@@ -644,6 +654,13 @@ impl Settings {
 
     pub fn backend(&self) -> Backend {
         self.input_backend.unwrap_or(Backend::WindowsGaming)
+    }
+
+    /// The input API when launcher.cfg names none: Windows.Gaming.Input
+    /// on Windows (Tweaks' choice); XInput under Wine and Proton, whose
+    /// Windows.Gaming.Input loses the d-pad.
+    pub fn backend_on(&self, wine: bool) -> Backend {
+        self.input_backend.unwrap_or(Backend::default_on(wine))
     }
 
     /// The game's `outrun2006.ini`, written whole every run: the game's

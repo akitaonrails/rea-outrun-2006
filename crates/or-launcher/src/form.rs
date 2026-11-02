@@ -105,7 +105,6 @@ impl Form {
     /// The original 2006 game: stock picture, stock extras, in a borderless
     /// window (exclusive fullscreen is fragile and caps the frame rate).
     pub fn original(wine: bool) -> Form {
-        let _ = wine;
         Form {
             look: Look::Original,
             resolution: None,
@@ -124,7 +123,7 @@ impl Form {
             vibration: Feedback::Off,
             vibration_strength: 7,
             impulse_triggers: Feedback::Off,
-            input_backend: Backend::WindowsGaming,
+            input_backend: Backend::default_on(wine),
             manual_gearbox: false,
             cd_switcher: false,
             music_shuffle: false,
@@ -146,7 +145,6 @@ impl Form {
     /// borderless window: exclusive fullscreen is fragile under Wine and on
     /// mixed-monitor desktops.
     pub fn coast_to_coast(screen: Option<(u32, u32)>, wine: bool) -> Form {
-        let _ = wine;
         Form {
             look: Look::CoastToCoast,
             resolution: screen.and_then(landscape),
@@ -165,7 +163,7 @@ impl Form {
             vibration: Feedback::On,
             vibration_strength: 7,
             impulse_triggers: Feedback::Swapped,
-            input_backend: Backend::WindowsGaming,
+            input_backend: Backend::default_on(wine),
             manual_gearbox: false,
             cd_switcher: true,
             music_shuffle: false,
@@ -189,7 +187,8 @@ impl Form {
             resolution: Some(STEAM_DECK_SCREEN),
             fps_limit: 60,
             reflections: 1024,
-            ..Form::coast_to_coast(Some(STEAM_DECK_SCREEN), false)
+            // The Deck runs the game under Proton.
+            ..Form::coast_to_coast(Some(STEAM_DECK_SCREEN), true)
         }
     }
 
@@ -220,7 +219,7 @@ impl Form {
             vibration: s.vibration.unwrap_or(Feedback::On),
             vibration_strength: s.vibration_strength.unwrap_or(7),
             impulse_triggers: s.impulse_triggers.unwrap_or(Feedback::Swapped),
-            input_backend: s.input_backend.unwrap_or(Backend::WindowsGaming),
+            input_backend: s.backend_on(wine),
             manual_gearbox: s.manual_gearbox.unwrap_or(false),
             cd_switcher: s.cd_switcher.unwrap_or(true),
             music_shuffle: s.music_shuffle.unwrap_or(false),
