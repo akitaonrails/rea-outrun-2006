@@ -51,6 +51,10 @@ All notable changes to this project. The format follows
   SHA-256 checked) instead of whatever appimagetool downloads, and carries
   the README, licences, third-party list and Linux guide under
   `usr/share/doc/or`.
+- Releases carry a `SHA256SUMS` file and take their notes from the
+  version's CHANGELOG section (`packaging/release-notes.sh`); CI builds
+  with `--locked`, fails when an artifact is missing, and checks the
+  shell scripts' syntax.
 
 ## [0.1.0] - 2026-11-02
 

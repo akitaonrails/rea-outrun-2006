@@ -29,16 +29,21 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Unit tests (host)
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
       - name: Linux helper tests (GPU choice, scalers, session)
         run: sh linux/tests/gpu-env.sh && sh linux/tests/scaler.sh && sh linux/tests/supervision.sh
 
+      - name: Packaging script tests (shell syntax, release notes)
+        run: |
+          sh -n linux/or-play packaging/appimage/AppRun packaging/appimage/build.sh packaging/package.sh packaging/release-notes.sh
+          sh packaging/tests/release-notes.sh
+
       - name: Lint (Windows target)
-        run: cargo clippy --release --target i686-pc-windows-gnu --workspace --all-targets -- -D warnings
+        run: cargo clippy --release --target i686-pc-windows-gnu --workspace --all-targets --locked -- -D warnings
 
       - name: Build OutRunLauncher.exe
-        run: cargo build --release --target i686-pc-windows-gnu --workspace
+        run: cargo build --release --target i686-pc-windows-gnu --workspace --locked
 
       - name: Package (fetches the pinned components)
         run: |
@@ -58,11 +63,13 @@ jobs:
         with:
           name: OutRunLauncher-windows
           path: ${{ env.PACKAGE }}
+          if-no-files-found: error
 
       - uses: actions/upload-artifact@v7
         with:
           name: OutRunLauncher-linux
           path: ${{ env.APPIMAGE }}
+          if-no-files-found: error
 
   release:
     name: Publish a release for version tags
@@ -72,11 +79,20 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+
       - uses: actions/download-artifact@v8
         with:
           pattern: OutRunLauncher-*
           merge-multiple: true
+          path: release
+
+      - name: Checksums and notes from the tag's CHANGELOG section
+        run: |
+          (cd release && sha256sum ./*.zip ./*.AppImage | sed 's| \./| |' > SHA256SUMS && cat SHA256SUMS)
+          packaging/release-notes.sh "$GITHUB_REF_NAME" > release-notes.md
+
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes ./*.zip ./*.AppImage
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes-file release-notes.md release/*.zip release/*.AppImage release/SHA256SUMS
