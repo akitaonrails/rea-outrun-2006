@@ -10,6 +10,11 @@ modes or registry edits: everything the game needs is bundled and set up
 for you. Your game folder is never changed; the launcher plays from its
 own private copy.
 
+[![A race in 4K with the launcher: a silver convertible at 255 km/h on the first stage, widescreen HUD](https://new-uploads-akitaonrails.s3.us-east-2.amazonaws.com/2026/11/02/outrun-2006/showcase-poster.jpg)](https://new-uploads-akitaonrails.s3.us-east-2.amazonaws.com/2026/11/02/outrun-2006/showcase-h264.mp4)
+
+*The settings window, then the game in 4K with the HD texture pack, played
+on Linux. Click to watch (2:43, with sound).*
+
 ![The launcher's Play tab: the game folder, the four looks and the Play button](docs/images/launcher-play.png)
 
 This project contains **no game files**. You need your own copy of the
