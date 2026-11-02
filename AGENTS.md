@@ -55,9 +55,37 @@ Windows and on Linux (Proton/Wine). It is not a distribution of the game.
   INI files (`outrun2006.ini`, `OutRun2006Tweaks.ini`) → the game. INI
   writing preserves every comment and unmanaged key the user may have
   edited; the launcher re-applies only the keys it owns, every run.
-- Rust for our own code. Keep `unsafe` and Win32 FFI in `win32.rs`.
+- Rust for our own code. Win32 calls go through `rea-launcher-win32`; the
+  launcher's own `unsafe` and FFI (the WinHTTP download) stay in `win32.rs`.
 - Unit-test the logic that can run on the host (edition detection, INI
   writing, configuration, runtime planning, manifest sync) before each
   milestone commit; record what was checked by running the game in
   `docs/RUNTIME_NOTES.md`.
 - Use Conventional Commit subjects. Commit at working milestones.
+
+## Shared SDK
+
+- Generic launcher code lives in
+  [rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk):
+  the `rea-launcher` crate (runtime copy, saves mirror, INI and
+  `launcher.cfg` editing, identification, Wine overrides, display, pad,
+  log), `rea-launcher-win32` (dialogs, registry, XInput, displays, Wine
+  DPI) and `rea-launcher-ui` (theme, fonts, widgets, window sizing, pad
+  navigation), as git dependencies; and, vendored under `sdk/`, the
+  play library `rea-play.sh` that `linux/or-play` sources and the
+  packaging scripts (pins, AppImage, allowlist, release notes). CI runs
+  the SDK's reusable workflows.
+- OutRun's knowledge stays here: the runtime `Policy`, the edition table,
+  the two INI generators, the Tweaks, DXVK, HD pack and soundtrack
+  steps, the window's tabs, palette and art, or-play's settings.
+- Never fork SDK code into this repository or edit `sdk/` by hand. When
+  the SDK lacks something or has a bug, keep local code for that piece and
+  propose the change upstream.
+- To bump: change the tag in the root `Cargo.toml` (all three crates) and
+  in `.github/workflows/build.yml`, then run `scripts/sdk-sync .` from an
+  SDK checkout at the same tag and commit `sdk/` with `sdk/VERSION`
+  (`scripts/sdk-sync --check .` is what CI runs).
+- Tests and probes run headless by default: the Windows-target tests under
+  Wine with the SDK's `scripts/wine-test` (no display, crash dialog off),
+  real-game runs in `gamescope --backend headless`. Open a visible window
+  only deliberately.

@@ -6,6 +6,26 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Built on the shared [rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk)
+  v0.1.0: the runtime copy, saves mirror, INI and `launcher.cfg` editing,
+  Win32 helpers, the settings window's kit, `or-play`'s session and
+  gamescope handling (`sdk/rea-play.sh`, shipped beside `or-play`), the
+  AppImage builder and CI now come from it. Settings, files, commands and
+  variables stay the same. Differences a player may notice:
+  - a save the game deleted stays deleted instead of coming back one
+    launch later;
+  - `launcher.cfg`: an unknown setting is reported in `launcher.log`, and
+    a value set for the first time fills its commented `#key =` line
+    instead of being appended at the end;
+  - `launcher.log` starts afresh past 1 MiB;
+  - the settings window shows a focus ring for keyboard and pad, and the
+    d-pad's left/right step the focused row of choices;
+  - `or-play` keeps the settings window's errors in
+    `~/.config/or-launcher/settings.log` and also accepts `settings`,
+    `play`, `--stop`, `--status` and `--help`.
+
 ### Fixed
 
 - Saves: the runtime copy records each save file as of the last copy
