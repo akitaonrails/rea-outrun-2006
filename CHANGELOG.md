@@ -60,6 +60,8 @@ All notable changes to this project. The format follows
 
 ### Changed
 
+- A weekly `sdk-update` workflow opens a pull request when
+  rea-launcher-sdk has a new tag, with its Migration items listed.
 - Updated rea-launcher-sdk to v0.3.0. Screen readers now name the folder
   fields by their heading ("Game folder", "Saves", "Pack folder") and read
   the hint as their description.
