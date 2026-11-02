@@ -2,14 +2,17 @@
 # Tests or-play's own-session lock, stop and inner script with fakes; only
 # harmless sleeps run: sh linux/tests/supervision.sh
 set -u
+# Run as or-play itself ($0), so it finds the vendored ../sdk/rea-play.sh.
+if [ -z "${OR_TEST_LOADED:-}" ]; then
+  OR_TEST_LOADED=1 exec sh -c '. "$1"' "$(dirname "$(readlink -f "$0")")/../or-play" "$(readlink -f "$0")"
+fi
 unset GAMESCOPE_WAYLAND_DISPLAY
-HERE=$(dirname "$(readlink -f "$0")")
 T=$(mktemp -d)
-export T HOME=$T OR_PREFIX=$T/prefix OR_SYSFS=$T/nosys
+export T HOME=$T OR_PREFIX=$T/prefix
 STALE_PID= STALE_START= OTHER_PID= OTHER_START= GAME_PID=
 stop_helper() {
   [ -n "$1" ] || return 0
-  stats=$(proc_stat "$1") || return 0
+  stats=$(rea_proc_stat "$1") || return 0
   if [ "${stats#* }" = "$2" ]; then kill "$1" 2>/dev/null || true; fi
   wait "$1" 2>/dev/null || true
 }
@@ -21,7 +24,8 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 mkdir -p "$OR_PREFIX/drive_c/users/me/AppData/Local/OutRunLauncher"
-OR_PLAY_FUNCTIONS_ONLY=1 . "$HERE/../or-play"
+OR_PLAY_FUNCTIONS_ONLY=1 . "$0"
+REA_TEST=1 REA_SYSFS=$T/nosys
 fails=0
 ok() { echo "ok   $1"; }
 fail() { echo "FAIL $1"; fails=$((fails + 1)); }
@@ -36,14 +40,14 @@ esac
 exec "$@"
 FAKE
 chmod +x "$T/fake-run"
-RUN=$T/fake-run GPU=
+REA_RUN=$T/fake-run REA_GPU=
 
 # A live pid with the wrong start time: a stale lock, or a reused pid.
 sleep 30 & STALE_PID=$!
-stats=$(proc_stat "$STALE_PID"); STALE_START=${stats#* }
-printf '%s %s\n' "$STALE_PID" "$((STALE_START + 1))" > "$LOCK"
-if running; then fail "stale identity reported running"; else ok "stale/reused pid refused"; fi
-stop_session
+stats=$(rea_proc_stat "$STALE_PID"); STALE_START=${stats#* }
+printf '%s %s\n' "$STALE_PID" "$((STALE_START + 1))" > "$REA_LOCK"
+if rea_running; then fail "stale identity reported running"; else ok "stale/reused pid refused"; fi
+rea_stop
 if kill -0 "$STALE_PID" 2>/dev/null; then ok "stop left the stale/reused pid alone"; else fail "stale pid was signalled"; fi
 [ -f "$T/wineserver" ] && ok "stop ends our prefix's wineserver" || fail "stop did not run wineserver -k"
 stop_helper "$STALE_PID" "$STALE_START"; STALE_PID= STALE_START=
@@ -51,23 +55,23 @@ stop_helper "$STALE_PID" "$STALE_START"; STALE_PID= STALE_START=
 # A lock from or-play 0.1.0 (its own pid only): running while that pid
 # lives; stop never signals it (only our prefix's wineserver).
 sleep 30 & OTHER_PID=$!
-stats=$(proc_stat "$OTHER_PID"); OTHER_START=${stats#* }
-echo "$OTHER_PID" > "$LOCK"
-if running; then ok "old pid-only lock with a live pid is running"; else fail "old lock ignored"; fi
-stop_session
+stats=$(rea_proc_stat "$OTHER_PID"); OTHER_START=${stats#* }
+echo "$OTHER_PID" > "$REA_LOCK"
+if rea_running; then ok "old pid-only lock with a live pid is running"; else fail "old lock ignored"; fi
+rea_stop
 if kill -0 "$OTHER_PID" 2>/dev/null; then ok "stop did not signal an old lock's pid"; else fail "old lock's pid signalled"; fi
 stop_helper "$OTHER_PID" "$OTHER_START"; OTHER_PID= OTHER_START=
-echo 999999999 > "$LOCK"
-if running; then fail "old lock with a dead pid counted"; else ok "old lock with a dead pid is idle"; fi
-rm -f "$LOCK"
+echo 999999999 > "$REA_LOCK"
+if rea_running; then fail "old lock with a dead pid counted"; else ok "old lock with a dead pid is idle"; fi
+rm -f "$REA_LOCK"
 
 # Another OR2006C2C.exe (Steam's, say) is not ours.
 ln -s "$(command -v sleep)" "$T/OR2006C2C.exe"
 "$T/OR2006C2C.exe" 30 & OTHER_PID=$!
-stats=$(proc_stat "$OTHER_PID"); OTHER_START=${stats#* }
-rm -f "$LOCK"
-if running; then fail "unrelated OR2006C2C.exe blocked a launch"; else ok "unrelated OR2006C2C.exe doesn't block"; fi
-stop_session
+stats=$(rea_proc_stat "$OTHER_PID"); OTHER_START=${stats#* }
+rm -f "$REA_LOCK"
+if rea_running; then fail "unrelated OR2006C2C.exe blocked a launch"; else ok "unrelated OR2006C2C.exe doesn't block"; fi
+rea_stop
 if kill -0 "$OTHER_PID" 2>/dev/null; then ok "unrelated OR2006C2C.exe not signalled"; else fail "unrelated game was signalled"; fi
 stop_helper "$OTHER_PID" "$OTHER_START"; OTHER_PID= OTHER_START=
 
@@ -87,19 +91,19 @@ FAKE
 chmod +x "$T/bin/wine" "$T/bin/wineserver"
 PATH=$T/bin:$PATH
 mkdir -p "$T/launcher it's here"
-LAUNCHER=$T/"launcher it's here"/OutRunLauncher.exe; : > "$LAUNCHER"
-start > /dev/null & GAME_PID=$!
+REA_EXE=$T/"launcher it's here"/OutRunLauncher.exe; : > "$REA_EXE"
+rea_start > /dev/null & GAME_PID=$!
 i=0; while [ ! -f "$T/args" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
-if running; then ok "a launched session is running"; else fail "launched session not seen"; fi
-if [ "$(head -1 "$T/args")" = "<$LAUNCHER>" ]; then ok "apostrophe+space launcher is one argument"; else fail "launcher argument: $(cat "$T/args")"; fi
-read_lock; session=$LOCK_PID
+if rea_running; then ok "a launched session is running"; else fail "launched session not seen"; fi
+if [ "$(head -1 "$T/args")" = "<$REA_EXE>" ]; then ok "apostrophe+space launcher is one argument"; else fail "launcher argument: $(cat "$T/args")"; fi
+rea_read_lock; session=$REA_LOCK_PID
 [ "$session" != $$ ] && ok "the lock holds the game's session, not or-play" || fail "lock holds or-play's pid"
-stop_session
+rea_stop
 i=0; while kill -0 "$GAME_PID" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
 if kill -0 "$GAME_PID" 2>/dev/null; then fail "or-play still waiting after stop"; else ok "stop ended the game session"; fi
 if pgrep -s "$session" >/dev/null 2>&1; then fail "processes left in the session"; else ok "nothing left in the session"; fi
 GAME_PID=
-[ -f "$LOCK" ] && fail "stop left the lock" || ok "stop removed the lock"
+[ -f "$REA_LOCK" ] && fail "stop left the lock" || ok "stop removed the lock"
 
 # or-play itself interrupted (TERM): the session ends, our prefix's
 # wineserver is stopped, and or-play waits for the session first.
@@ -110,15 +114,15 @@ sleep 30 &
 wait
 FAKE
 rm -f "$T/args" "$T/wineserver"
-( start > /dev/null ) & GAME_PID=$!
+( rea_start > /dev/null ) & GAME_PID=$!
 i=0; while [ ! -f "$T/args" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
-read_lock; session=$LOCK_PID
+rea_read_lock; session=$REA_LOCK_PID
 kill -TERM "$GAME_PID"
 i=0; while kill -0 "$GAME_PID" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
 if kill -0 "$GAME_PID" 2>/dev/null; then fail "interrupted or-play still running"; else ok "interrupted or-play returns"; fi
 if pgrep -s "$session" >/dev/null 2>&1; then fail "interrupt left the session"; else ok "interrupt ended the session"; fi
 [ -f "$T/wineserver" ] && ok "interrupt stopped our prefix's wineserver" || fail "interrupt skipped wineserver -k"
-[ -f "$LOCK" ] && fail "interrupt left the lock" || ok "interrupt removed the lock"
+[ -f "$REA_LOCK" ] && fail "interrupt left the lock" || ok "interrupt removed the lock"
 GAME_PID=
 
 # A natural exit removes the lock.
@@ -126,15 +130,16 @@ cat > "$T/bin/wine" <<'FAKE'
 #!/bin/sh
 exit 0
 FAKE
-start > /dev/null
-[ -f "$LOCK" ] && fail "natural exit left the lock" || ok "natural exit removes the lock"
+rea_start > /dev/null
+[ -f "$REA_LOCK" ] && fail "natural exit left the lock" || ok "natural exit removes the lock"
 
-case "$(cat "$STATE/inner.sh")" in
-  *'wine "$1" --no-window'*) ok "inner script takes the launcher as \$1" ;;
-  *) fail "inner script does not use wine \"\$1\"" ;;
+case "$(cat "$REA_STATE/inner.sh")" in
+  *'wine "$@"'*) ok "inner script takes the launcher as an argument" ;;
+  *) fail "inner script does not use wine \"\$@\"" ;;
 esac
-case "$(cat "$STATE/inner.sh")" in
-  *"$LAUNCHER"*) fail "launcher path written into the inner script" ;;
+[ "$(sed -n 2p "$T/args")" = "<--no-window>" ] && ok "the game runs with --no-window" || fail "launcher flags: $(cat "$T/args")"
+case "$(cat "$REA_STATE/inner.sh")" in
+  *"$REA_EXE"*) fail "launcher path written into the inner script" ;;
   *) ok "launcher path absent from the inner script" ;;
 esac
 
@@ -147,11 +152,11 @@ exit 0
 FAKE
 for case in 0:0 4:0 3:1 1:1; do
   echo "${case%:*}" > "$T/rc"
-  if settings; then got=0; else got=1; fi
+  if rea_settings; then got=0; else got=1; fi
   [ "$got" = "${case#*:}" ] && ok "settings exit ${case%:*} -> $got" || fail "settings exit ${case%:*} gave $got"
 done
 case "$(cat "$T/settings")" in
-  *"WINEPREFIX=$OR_PREFIX"*"SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1"*"wine $LAUNCHER --settings --linux") ok "settings window: our prefix, SDL, helper flags" ;;
+  *"SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1"*"WINEPREFIX=$OR_PREFIX"*"wine $REA_EXE --settings --linux") ok "settings window: our prefix, SDL, helper flags" ;;
   *) fail "settings command: $(cat "$T/settings")" ;;
 esac
 

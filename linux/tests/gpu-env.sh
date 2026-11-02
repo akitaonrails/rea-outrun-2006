@@ -1,16 +1,19 @@
 #!/bin/sh
-# Tests or-play's GPU choice against fake sysfs trees: sh linux/tests/gpu-env.sh
+# Tests or-play's GPU choice (the shared rea_gpu_env, as or-play configures
+# it) against fake sysfs trees: sh linux/tests/gpu-env.sh
 set -u
+# Run as or-play itself ($0), so it finds the vendored ../sdk/rea-play.sh.
+if [ -z "${OR_TEST_LOADED:-}" ]; then
+  OR_TEST_LOADED=1 exec sh -c '. "$1"' "$(dirname "$(readlink -f "$0")")/../or-play" "$(readlink -f "$0")"
+fi
 # A clean environment: the player's own choice would win every case.
-unset DRI_PRIME __NV_PRIME_RENDER_OFFLOAD __GLX_VENDOR_LIBRARY_NAME
-HERE=$(dirname "$(readlink -f "$0")")
+unset DRI_PRIME __NV_PRIME_RENDER_OFFLOAD __GLX_VENDOR_LIBRARY_NAME VK_DRIVER_FILES VK_ICD_FILENAMES
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 export HOME=$T OR_PREFIX=$T/prefix
-# or-play asks the wrapper whether NVIDIA's OpenGL library is installed.
-fake_run() { [ -n "${NV_LIB:-}" ]; }
-RUN=fake_run
-OR_PLAY_FUNCTIONS_ONLY=1 . "$HERE/../or-play"
-RUN=fake_run
+OR_PLAY_FUNCTIONS_ONLY=1 . "$0"
+# or-play asks whether NVIDIA's OpenGL library is installed.
+REA_TEST=1 REA_NV_LIB_CHECK=nv_lib
+nv_lib() { [ -n "${NV_LIB:-}" ]; }
 
 # gpu <tree> <card> <vendor> <driver> <boot_vga> [vram]
 gpu() {
@@ -23,7 +26,7 @@ gpu() {
 }
 fails=0
 check() { # name tree expected [NV_LIB]
-  got=$(OR_SYSFS=$T/$2 NV_LIB=${4:-} gpu_env)
+  got=$(REA_SYSFS=$T/$2 NV_LIB=${4:-} rea_gpu_env)
   if [ "$got" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: got '$got', want '$3'"; fails=$((fails + 1)); fi
 }
 NV="__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia __VK_LAYER_NV_optimus=NVIDIA_only"

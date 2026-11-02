@@ -31,7 +31,8 @@ WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
 
 cp "$EXE" "$OUT/"
 cp "$ROOT/README.md" "$ROOT/THIRD_PARTY.md" "$ROOT/LICENSE-MIT" "$ROOT/LICENSE-APACHE" "$OUT/"
-cp "$ROOT/linux/or-play" "$ROOT/linux/README.md" "$OUT/linux/"
+# or-play and the shared play library it sources (rea-launcher-sdk).
+cp "$ROOT/linux/or-play" "$ROOT/linux/README.md" "$ROOT/sdk/rea-play.sh" "$OUT/linux/"
 chmod +x "$OUT/linux/or-play"
 
 # OutRun2006Tweaks: the replacement EXE, dinput8.dll, its two INI files,

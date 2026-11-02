@@ -37,7 +37,7 @@ cp "$PKG/OutRunLauncher.exe" "$APPDIR/usr/lib/or/"
 for dir in tweaks vc linux soundtrack; do
   if [ -d "$PKG/$dir" ]; then cp -r "$PKG/$dir" "$APPDIR/usr/lib/or/$dir"; fi
 done
-mv "$APPDIR/usr/lib/or/linux/or-play" "$APPDIR/usr/lib/or/or-play"
+mv "$APPDIR/usr/lib/or/linux/or-play" "$APPDIR/usr/lib/or/linux/rea-play.sh" "$APPDIR/usr/lib/or/"
 mkdir -p "$APPDIR/usr/share/doc/wine" "$APPDIR/usr/share/doc/or/linux"
 cp "$HERE"/wine/* "$APPDIR/usr/share/doc/wine/"
 # Our licences, the third-party list and the guides, as in the zip; the
