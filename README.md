@@ -102,11 +102,15 @@ every start, and keeps anything else you add to those files.
 
 ```sh
 cargo test                                            # host unit tests
-cargo build --release --target i686-pc-windows-gnu    # needs mingw-w64 (i686)
+cargo build --release --target i686-pc-windows-gnu    # needs mingw-w64 (i686) and lld
 sh linux/tests/gpu-env.sh && sh linux/tests/scaler.sh
-packaging/package.sh dist                             # fetches the pinned components
+packaging/package.sh dist/OutRunLauncher              # fetches the pinned components
 packaging/appimage/build.sh dist/OutRunLauncher dist  # the AppImage
 ```
+
+The Windows targets link with lld (`.cargo/config.toml`): GNU ld 2.47
+drops one of the two `kernel32.dll` import groups and the launcher crashes
+at start (see `docs/RUNTIME_NOTES.md`).
 
 Third-party components are downloaded at package time from the URLs and
 SHA-256 digests in `packaging/*.txt`; see [THIRD_PARTY.md](THIRD_PARTY.md).

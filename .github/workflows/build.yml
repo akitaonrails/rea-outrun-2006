@@ -1,0 +1,82 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Test, build and package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the 32-bit MinGW toolchain, lld and unpack tools
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-i686 lld zip unzip cabextract
+
+      - name: Install Rust (with the 32-bit Windows target)
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy,rustfmt
+          rustup target add i686-pc-windows-gnu
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Unit tests (host)
+        run: cargo test --workspace
+
+      - name: Linux helper tests (GPU choice, scalers)
+        run: sh linux/tests/gpu-env.sh && sh linux/tests/scaler.sh
+
+      - name: Lint (Windows target)
+        run: cargo clippy --release --target i686-pc-windows-gnu --workspace --all-targets -- -D warnings
+
+      - name: Build OutRunLauncher.exe
+        run: cargo build --release --target i686-pc-windows-gnu --workspace
+
+      - name: Package (fetches the pinned components)
+        run: |
+          name=OutRunLauncher-${GITHUB_REF_NAME//\//-}
+          packaging/package.sh "dist/$name"
+          (cd dist && zip -qr "$name.zip" "$name")
+          echo "PACKAGE=dist/$name.zip" >> "$GITHUB_ENV"
+          echo "PACKAGE_DIR=dist/$name" >> "$GITHUB_ENV"
+          echo "APPIMAGE=dist/$name-x86_64.AppImage" >> "$GITHUB_ENV"
+
+      - name: Build the Linux AppImage (with a portable Wine)
+        run: |
+          packaging/appimage/build.sh "$PACKAGE_DIR" dist/appimage
+          mv dist/appimage/OutRunLauncher-x86_64.AppImage "$APPIMAGE"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: OutRunLauncher-windows
+          path: ${{ env.PACKAGE }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: OutRunLauncher-linux
+          path: ${{ env.APPIMAGE }}
+
+  release:
+    name: Publish a release for version tags
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: OutRunLauncher-*
+          merge-multiple: true
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes ./*.zip ./*.AppImage

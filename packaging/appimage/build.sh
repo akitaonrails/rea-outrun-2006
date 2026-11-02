@@ -11,32 +11,20 @@
 set -eu
 PKG=$(readlink -f "$1"); OUT=$(readlink -f "$2")
 HERE=$(dirname "$(readlink -f "$0")")
-CACHE=${OR_CACHE:-$HOME/.cache/or-appimage}
+CACHE=${OR_CACHE:-$HOME/.cache/or-package}
+PINS=$(dirname "$HERE")
+. "$PINS/pins.sh"
 
-# Wine (LGPL-2.1+), Kron4ek's portable build of WineHQ's sources, in WoW64
-# mode so the 32-bit game needs no 32-bit system libraries.
-WINE_VERSION=11.20
-WINE_URL=https://github.com/Kron4ek/Wine-Builds/releases/download/$WINE_VERSION/wine-$WINE_VERSION-amd64-wow64.tar.xz
-WINE_SHA=482a493c755dcea776199b86560e0fb0f969bb0275c67d88120b0b35b0df34b9
-TOOL_URL=https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
-TOOL_SHA=ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
-
-fetch() { # url sha file
-  mkdir -p "$CACHE"
-  if [ ! -f "$CACHE/$3" ]; then
-    curl -sfL "$1" -o "$CACHE/$3.part"
-    mv "$CACHE/$3.part" "$CACHE/$3"
-  fi
-  echo "$2  $CACHE/$3" | sha256sum -c --quiet || { echo "checksum mismatch: $3"; rm -f "$CACHE/$3"; exit 1; }
-}
-fetch "$WINE_URL" "$WINE_SHA" wine.tar.xz
-fetch "$TOOL_URL" "$TOOL_SHA" appimagetool
-chmod +x "$CACHE/appimagetool"
+# Wine (packaging/wine.txt), Kron4ek's portable WoW64 build, so the 32-bit
+# game needs no 32-bit system libraries; appimagetool packs the AppDir.
+WINE=$(fetch wine)
+TOOL=$(fetch appimagetool)
+chmod +x "$TOOL"
 
 APPDIR=$(mktemp -d)/OutRunLauncher.AppDir
 trap 'rm -rf "$(dirname "$APPDIR")"' EXIT
 mkdir -p "$APPDIR/usr/lib/or" "$APPDIR/usr/lib/wine"
-tar -xJf "$CACHE/wine.tar.xz" -C "$APPDIR/usr/lib/wine" --strip-components=1
+tar -xJf "$WINE" -C "$APPDIR/usr/lib/wine" --strip-components=1
 # Development files aren't needed to run.
 rm -rf "$APPDIR/usr/lib/wine/include" "$APPDIR/usr/lib/wine/share/man"
 for tool in function_grep.pl widl winebuild winecpp winedump wineg++ winegcc winemaker wmc wrc msidb; do
@@ -54,6 +42,6 @@ cp "$HERE/AppRun" "$APPDIR/AppRun"
 cp "$HERE/outrun-launcher.desktop" "$HERE/outrun-launcher.png" "$APPDIR/"
 chmod +x "$APPDIR/AppRun" "$APPDIR/usr/lib/or/or-play"
 mkdir -p "$OUT"
-ARCH=x86_64 "$CACHE/appimagetool" --appimage-extract-and-run --no-appstream \
+ARCH=x86_64 "$TOOL" --appimage-extract-and-run --no-appstream \
   "$APPDIR" "$OUT/OutRunLauncher-x86_64.AppImage"
-echo "built $OUT/OutRunLauncher-x86_64.AppImage (Wine $WINE_VERSION)"
+echo "built $OUT/OutRunLauncher-x86_64.AppImage"

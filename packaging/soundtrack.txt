@@ -1,0 +1,7 @@
+# OutRun2006Tweaks' Soundtrack Fix 1.0 (linked from the Tweaks README):
+# the xdelta3 patch that restores the first two seconds of "Rush a
+# Difficulty" from the player's own file, and the official xdelta3 3.1.0
+# i686 build (GPL-2.0, byte-identical to jmacd/xdelta-gpl's release).
+# soundtrack/ gets the .vcdiff and xdelta3.exe.
+# One line: URL SHA-256.
+https://github.com/emoose/OutRun2006Tweaks/releases/download/v0.3.0-release/OutRun2006Tweaks-SoundtrackFix-1.0.zip 5b31a489a0690b142da1fcb56770027de559035585ccd289f7ceee865fe8a44d

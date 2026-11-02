@@ -1,0 +1,7 @@
+# The community HD texture pack (Envido32's compilation of the Sonic-TV
+# OR2006Sprites upscales, recommended by the Tweaks README): UI and
+# sprites, English. 326 MB zipped, 3.2 GB unpacked. It has no licence, so
+# packages include it only on request (OR_TEXTURES=1 packaging/package.sh).
+# textures-pack/load gets its textures/load folder.
+# One line: URL SHA-256.
+https://github.com/envido32/OR2006Sprites/releases/download/v0.26.09a/OR2-HD-GUI-v0.26.09a.zip 6bc9d6037b635d9e643f1a95cb82ccf98c90feb51da0193e0c51e6b700087878

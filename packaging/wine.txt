@@ -1,0 +1,4 @@
+# Wine 11.20 (LGPL-2.1+), Kron4ek's portable WoW64 build of the unmodified
+# WineHQ sources, for the Linux AppImage.
+# One line: URL SHA-256.
+https://github.com/Kron4ek/Wine-Builds/releases/download/11.20/wine-11.20-amd64-wow64.tar.xz 482a493c755dcea776199b86560e0fb0f969bb0275c67d88120b0b35b0df34b9
