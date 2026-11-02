@@ -9,7 +9,7 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 
 | Component | Licence | Source |
 | --- | --- | --- |
-| `rea-launcher`, `rea-launcher-win32`, `rea-launcher-ui`: the shared launcher SDK (runtime copy, saves, INI and settings editing, Win32 helpers, the settings window's kit) | MIT OR Apache-2.0 | https://github.com/akitaonrails/rea-launcher-sdk (tag `v0.2.0`) |
+| `rea-launcher`, `rea-launcher-win32`, `rea-launcher-ui`: the shared launcher SDK (runtime copy, saves, INI and settings editing, Win32 helpers, the settings window's kit) | MIT OR Apache-2.0 | https://github.com/akitaonrails/rea-launcher-sdk (the tag in `sdk/VERSION`) |
 | `sha2` and its RustCrypto dependencies | MIT OR Apache-2.0 | https://github.com/RustCrypto/hashes |
 | `windows-sys` | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
 | `eframe`, `egui` and their dependencies (`winit`, `glutin`, `glow`, …): the settings window | MIT OR Apache-2.0 (dependencies: MIT, Apache-2.0, Zlib, BSD; see `cargo tree`) | https://github.com/emilk/egui |
@@ -24,7 +24,7 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 | --- | --- | --- | --- |
 | `crates/or-launcher/assets/portrait.jpg` (compiled into OutRunLauncher.exe): a sunset coast with a red convertible, the window's hero art | an illustration generated for this project on 2026-11-01 (commit `6e34e3e`); the tool and prompt were not recorded. No game artwork, no SEGA material. **Origin to be confirmed by the owner.** | ours (MIT OR Apache-2.0), pending that confirmation | this repository |
 | `packaging/appimage/outrun-launcher.png`: the AppImage and desktop icon | made for this project (commit `91c67e7`); how it was made was not recorded. **To be confirmed by the owner.** | ours (MIT OR Apache-2.0), pending that confirmation | this repository |
-| `docs/images/launcher-*.png`: screenshots of the settings window (they show `portrait.jpg`) | this project | ours (MIT OR Apache-2.0) | this repository |
+| `docs/images/launcher-*.jpg`: screenshots of the settings window (they show `portrait.jpg`) | this project | ours (MIT OR Apache-2.0) | this repository |
 | README showcase poster and video (`showcase-poster.jpg`, `showcase-h264.mp4`): the settings window and the owner's own play-through on Linux, hosted outside the repository | the owner | screenshots and footage of the game, shown to illustrate the launcher; the game's images belong to SEGA | https://new-uploads-akitaonrails.s3.us-east-2.amazonaws.com/2026/11/02/outrun-2006/ |
 
 ## Fonts (compiled into OutRunLauncher.exe)
@@ -40,8 +40,8 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 | `tweaks/` | OutRun2006Tweaks by emoose, CI build of commit `08e5efb4`, repacked as a release of this repository with its `LICENSE.md` and `SOURCE.txt` (docs/TWEAKS.md): `dinput8.dll`, the DRM-free replacement `OR2006C2C.exe`, `OutRun2006Tweaks.ini`, `OutRun2006Tweaks.lods.ini` | MIT at this commit (the project moved to GPL-3.0 at `021e4bf5`; the release also carries the source); the replacement EXE is derived from SEGA's game EXE | `packaging/tweaks.txt`, https://github.com/emoose/OutRun2006Tweaks |
 | `soundtrack/` | OutRun2006Tweaks Soundtrack Fix 1.0: `14_Rush_a_Difficulty_1989.ogg.vcdiff` | no licence of its own (published with OutRun2006Tweaks, then MIT); the patch restores SEGA audio | `packaging/soundtrack.txt` |
 | `soundtrack/` | xdelta3 3.1.0 (i686), shipped in the Soundtrack Fix as `xdelta3-3.1.0-i686.exe`, renamed `xdelta3.exe` | GPL-2.0 | https://github.com/jmacd/xdelta-gpl |
-| `linux/` | DXVK 3.1.1, 32-bit `d3d9.dll` (used under Wine and Proton only) | zlib (mirrored in this repository's `thirdparty` release) | `packaging/mirrored.txt`, https://github.com/doitsujin/dxvk |
-| `vc/` | Microsoft Visual C++ 2015–2022 runtime 14.44.35211.0 (x86): `msvcp140.dll`, `vcruntime140.dll`, `vcomp140.dll`, deployed app-local | Microsoft Visual Studio Distributable Code (the redistributable package; mirrored in the `thirdparty` release) | `packaging/mirrored.txt`, https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist |
+| `linux/` | DXVK 3.1.1, 32-bit `d3d9.dll` (used under Wine and Proton only) | zlib (mirrored in this repository's `thirdparty` release) | `packaging/dxvk.txt`, https://github.com/doitsujin/dxvk |
+| `vc/` | Microsoft Visual C++ 2015–2022 runtime 14.44.35211.0 (x86): `msvcp140.dll`, `vcruntime140.dll`, `vcomp140.dll`, deployed app-local | Microsoft Visual Studio Distributable Code (the redistributable package; mirrored in the `thirdparty` release) | `packaging/vcredist.txt`, https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist |
 
 ## Bundled in the Linux AppImage (`packaging/appimage`)
 

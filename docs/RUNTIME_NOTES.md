@@ -63,7 +63,7 @@ confirming afterwards that no `OR2006C2C.exe`, `OutRunLauncher.exe`,
 - The settings window's new layout (a note under every row, grouped
   Picture tab, 13 pt caption plate on the photo, lighter control borders):
   judge it by eye on Windows and under Wine, at 1280×800 and 4K. The
-  README screenshots (`docs/images/launcher-*.png`) predate it.
+  README screenshots (`docs/images/launcher-*.jpg`) predate it: retake them.
 - `--check`, `--help` and errors printed to the terminal on Windows
   (`console::attach_parent`) and a dialog when double-clicked.
 - `or-play --play --scaler fsr` picks FSR for one run.
