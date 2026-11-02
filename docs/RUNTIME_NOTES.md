@@ -106,6 +106,26 @@ tests but not yet seen with the game:
   pad in menus and in a race with XInput and WGI, and that nothing reads
   it twice.
 
+## 2026-11-02 — follow-ups: gamescope from the look, the adapter fallback
+
+Same headless setup. `or-play --play --look steam_deck` with
+`DX/ADAPTER = 1` written into the runtime's `outrun2006.ini` first
+(`.work/realgame/logs/152154-wmclose`):
+
+- gamescope started at `-W 1280 -H 800 -w 1280 -h 800` (the look's race
+  size; it was 1920×1080 before), the game drew 1280×800.
+- `launcher.log`: "warning: outrun2006.ini: DX/ADAPTER = 1 but only 1
+  display adapter(s) attached; using 0 …"; the INI held `DX/ADAPTER = 0`
+  when the game started and after it exited; `.or-game-ini-owned` records
+  the player's 1. The game started and ran its attract mode (it stopped
+  with "Direct3D can't be set up" before), then exited 0 on `WM_CLOSE`.
+- Coast to Coast (the screen), Original (640×480), nothing set (640×480)
+  and the flag order are covered by `linux/tests/scaler.sh`.
+
+Upstream, not ours: gamescope 3.17.0's headless backend segfaults when it
+shuts down after its child exits, so or-play reports exit 139 and the host
+records a core dump. Every process is gone all the same.
+
 ## 2026-11-02 — SDK v0.3.3: Wine DLL overrides through AppDefaults
 
 Same headless setup as the verification below. The launcher started with
@@ -174,7 +194,7 @@ and races need input, so every screenshot is the attract mode.
 | `--fps-limit unlimited --vsync off` | VERIFIED: `FramerateLimit = 0`, `VSync = 0`; DXVK HUD 4,363 fps in the attract video (the GPU runs flat out) | `135527-stop` |
 | Input API `wgi`/`raw`/`dinput` (and `xinput`, the Wine default, every other run) without a pad | VERIFIED as far as it goes: `InputBackend` 0/1/2(/3) written and read, the new input hook applied, the game runs 20 s and quits cleanly, no CrashDumps. Reading a pad through each: NOT CHECKABLE HEADLESS (needs a pad and a person in the menus) | `140241-stop`, `140321-stop`, `140400-stop` |
 | `outrun2006.ini` keeps `LANGUAGE`, `DX/FOG`, `DX/ADAPTER` | VERIFIED: set to 2/0/1 in the runtime copy, the launcher rewrote only the size (1920×1080) and kept them, the game kept them on exit, and its messages came up in German (`LANGUAGE = 2`) | `140130-wmclose` |
-| `DX/ADAPTER = 1` on this machine | FAILED (the game's, kept by design): DXVK under or-play shows the game one adapter (NVIDIA only), so the game stops with "Direct3D kann mit den aktuellen Einstellungen nicht eingerichtet werden" (Direct3D can't be set up). A copy whose INI names a second GPU won't start here; for the owner to decide whether the launcher should reset an adapter that isn't there | `shots/140130-wmclose-shot-gamescopectl.jpg` |
+| `DX/ADAPTER = 1` on this machine | FAILED then, fixed since (adapter fallback, see above): DXVK under or-play shows the game one adapter (NVIDIA only), so the game stops with "Direct3D kann mit den aktuellen Einstellungen nicht eingerichtet werden" (Direct3D can't be set up). A copy whose INI names a second GPU won't start here; for the owner to decide whether the launcher should reset an adapter that isn't there | `shots/140130-wmclose-shot-gamescopectl.jpg` |
 | `or-play --play --scaler fsr --resolution 1280x720` | VERIFIED: gamescope `-W 1280 -H 720 -w 1280 -h 720 … -F fsr`, the game at 1280×720, `launcher.cfg` unchanged (same MD5) | `140451-stop` |
 | `or-play --play --resolution off` | VERIFIED: gamescope 640×480, the game 640×480 | `140526-stop` |
 | SDL background-events variables reach the game | VERIFIED: `SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS=1`, `SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1` in the game's environment | `140451-stop/mid.txt` |
@@ -186,11 +206,9 @@ Found on the way:
 - **Fixed:** a `look =` line in `launcher.cfg` played that look, but the
   settings window opened on Custom at 640×480 and Play saved 640×480 over
   it (`fix(form): open the window on the look launcher.cfg names`).
-- `or-play --play --look …` (and `look =` without a `resolution`) sizes
-  gamescope at 1920×1080 whatever the look's race size: or-play reads only
-  `resolution` and `scaler`. With `-S fit` gamescope scales the game's
-  window (a 1280×800 Steam Deck race shows letterboxed in 16:9). Not
-  changed; for the owner.
+- `or-play --play --look …` (and `look =` without a `resolution`) sized
+  gamescope at 1920×1080 whatever the look's race size. Fixed since
+  (gamescope from the look, see above).
 - A `launcher.cfg` holding only `game =` (what `--play --game` writes on
   a first run) plays 640×480 (the documented exception for an unset
   resolution) while or-play still starts gamescope at 1920×1080, and the
