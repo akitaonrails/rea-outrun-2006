@@ -803,9 +803,21 @@ impl Settings {
         );
         t = put(
             &t,
-            "Misc",
+            "Audio",
             "AllowHorn",
             if self.on(&self.horn) { "true" } else { "false" },
+        );
+        // The bundled texture pack draws Clarissa as in the Japanese
+        // release; its sprites only match with her restored.
+        t = put(
+            &t,
+            "Misc",
+            "RestoreJPClarissa",
+            if self.hd_textures == Some(HdTextures::Bundled) {
+                "true"
+            } else {
+                "false"
+            },
         );
         t = put(
             &t,
@@ -1075,6 +1087,16 @@ mod tests {
         );
     }
 
+    /// `line` sits inside `[section]` (before the next section starts).
+    fn in_section(text: &str, section: &str, line: &str) -> bool {
+        let Some(start) = text.find(&format!("[{section}]\n")) else {
+            return false;
+        };
+        let body = &text[start + section.len() + 3..];
+        let end = body.find("\n[").unwrap_or(body.len());
+        body[..end].lines().any(|l| l.trim() == line)
+    }
+
     #[test]
     fn tweaks_ini_gets_our_keys_and_keeps_the_rest() {
         let base = "[Performance]\nFramerateLimit = 0\n# comment stays\n\n[Controls]\nSteeringDeadZone = 0.2\n\n[Window]\nWindowedBorderless=true\n\n[CDTracks]\n01_Splash_wave.ogg = Splash Wave\nLast_Wave.ogg = Last Wave\nSEGA441.ogg = SEGA Intro\n\n[Misc]\n";
@@ -1103,6 +1125,12 @@ mod tests {
             out[at..out.find("[Window]").unwrap()].contains("VibrationStrength = 7\n")
         }));
 
+        // The bundled texture pack needs the Japanese Clarissa.
+        let pack = Settings::parse_file("hd_textures = on\n")
+            .0
+            .apply_tweaks(base);
+        assert!(in_section(&pack, "Misc", "RestoreJPClarissa = true"));
+
         // The unlimited cap turns interpolation on.
         let fast = Settings::parse_file("fps_limit = unlimited\n").0;
         assert!(
@@ -1118,7 +1146,8 @@ mod tests {
         assert!(stock.contains("SwitcherEnable = false"));
         assert!(stock.contains("SkipIntroLogos = false"));
         assert!(stock.contains("DisableCountdownTimer = false"));
-        assert!(stock.contains("AllowHorn = false"));
+        assert!(in_section(&stock, "Audio", "AllowHorn = false"));
+        assert!(in_section(&stock, "Misc", "RestoreJPClarissa = false"));
         assert!(stock.contains("RandomHighwayAnimSets = false"));
         assert!(stock.contains("AllowCharacterSelection = false"));
         assert!(stock.contains("ShowOutRunMilesOnMenu = false"));
