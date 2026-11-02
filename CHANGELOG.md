@@ -155,6 +155,11 @@ All notable changes to this project. The format follows
 
 ### Fixed
 
+- Errors that stop the launcher (game folder not found, an unknown
+  `OR2006C2C.exe`, a failed install) show a dialog under Wine and Proton
+  again, and are printed to `play.log` too. Since the console output
+  change they only reached the log there. `--no-window` runs print them
+  without a dialog.
 - A runtime folder without its own `outrun2006.ini` gets one again: when
   the game folder's copy already held the launcher's settings, the file
   was never written to the runtime.

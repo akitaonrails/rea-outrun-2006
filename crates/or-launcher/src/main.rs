@@ -4,15 +4,12 @@
 mod ui;
 
 #[cfg(windows)]
-use rea_launcher_win32::dialog::{self, Icon};
-
-#[cfg(windows)]
 fn main() {
     let code = match app::run() {
         Ok(code) => code,
         Err(error) => {
             app::log_line(&format!("error: {error}"));
-            dialog::message("OutRun 2006 launcher", &error, Icon::Error);
+            app::fatal(&error);
             1
         }
     };
@@ -32,6 +29,7 @@ mod app {
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     use or_launcher::config::{self, Settings};
     use or_launcher::instance::{self, SecondStart};
@@ -39,10 +37,10 @@ mod app {
     use or_launcher::{edition, form, hdpack, runtime, tweaks};
     use rea_launcher::fsx;
     use rea_launcher::log::Log;
-    use rea_launcher_win32::dialog::{self, Icon};
     use rea_launcher_win32::http::WinHttp;
     use rea_launcher_win32::instance::{self as win32_instance, Window};
-    use rea_launcher_win32::{console, disk, display, gpu, wine, xinput};
+    use rea_launcher_win32::report::{self, Mode};
+    use rea_launcher_win32::{disk, display, gpu, wine, xinput};
 
     use crate::ui;
 
@@ -116,23 +114,60 @@ mod app {
     const WINDOW_CLOSED: u32 = 3;
     const WINDOW_UNAVAILABLE: u32 = 4;
 
-    /// Text for the person who started the launcher: printed when there
-    /// is a terminal (or output is redirected), a dialog when a person
-    /// started it without one, nothing otherwise. Always logged.
-    fn tell(text: &str, error: bool, interactive: bool) {
+    const TITLE: &str = "OutRun 2006 launcher";
+
+    /// Set once the flags are read: `--no-window` (a script, nobody
+    /// watching).
+    static NO_WINDOW: AtomicBool = AtomicBool::new(false);
+
+    fn interactive() -> bool {
+        !NO_WINDOW.load(Ordering::Relaxed)
+    }
+
+    /// An error the launcher stops on: a dialog when a person may be
+    /// watching, and stdout, which or-play, the AppImage and Proton keep
+    /// in a log (SDK `report`, so it reaches the player under Wine too).
+    pub fn fatal(text: &str) {
+        report::fatal(
+            TITLE,
+            text,
+            Mode::Play {
+                interactive: interactive(),
+            },
+        );
+    }
+
+    /// A message while preparing to play (another launcher is running).
+    fn play_note(text: &str) {
+        log_lines(text);
+        report::note(
+            TITLE,
+            text,
+            Mode::Play {
+                interactive: interactive(),
+            },
+            true,
+        );
+    }
+
+    /// Output of a command (`--help`, `--check`, a bad flag): the
+    /// terminal, a dialog only when a person started the launcher without
+    /// one. Always logged.
+    fn command(text: &str, error: bool) {
+        log_lines(text);
+        let mode = Mode::Command {
+            interactive: interactive(),
+        };
+        if error {
+            report::fatal(TITLE, text, mode);
+        } else {
+            report::note(TITLE, text, mode, false);
+        }
+    }
+
+    fn log_lines(text: &str) {
         for line in text.lines() {
             log_line(line);
-        }
-        let attached = console::attach_parent();
-        match console::output(attached, console::stdout_usable(), interactive) {
-            console::Output::Terminal if error => eprintln!("{text}"),
-            console::Output::Terminal => println!("{text}"),
-            console::Output::Dialog => dialog::message(
-                "OutRun 2006 launcher",
-                text,
-                if error { Icon::Error } else { Icon::Info },
-            ),
-            console::Output::Nowhere => {}
         }
     }
 
@@ -257,7 +292,7 @@ mod app {
                 "Not ready to play:".to_string()
             },
         );
-        tell(&lines.join("\n"), !ok, true);
+        command(&lines.join("\n"), !ok);
         u32::from(!ok)
     }
 
@@ -269,19 +304,22 @@ mod app {
             .iter()
             .any(|a| matches!(a.as_str(), "--help" | "-h" | "/?"))
         {
-            tell(&config::usage(), false, true);
+            NO_WINDOW.store(cli.iter().any(|a| a == "--no-window"), Ordering::Relaxed);
+            command(&config::usage(), false);
             return Ok(0);
         }
         let (args, switches) = match Settings::parse_args(cli.clone()) {
             Ok(parsed) => parsed,
             Err(message) => {
-                tell(&message, true, true);
+                NO_WINDOW.store(cli.iter().any(|a| a == "--no-window"), Ordering::Relaxed);
+                command(&message, true);
                 return Ok(2);
             }
         };
         let switch = |name: &str| switches.iter().any(|s| s == name);
         let settings_only = switch("--settings");
         let no_window = switch("--no-window");
+        NO_WINDOW.store(no_window, Ordering::Relaxed);
         let check_only = switch("--check");
         // One launcher at a time, held until the game this run starts has
         // ended: a second start raises the window or says the game runs
@@ -296,7 +334,7 @@ mod app {
                         SecondStart::new(running.bring_to_front(Window::Title(window::TITLE)));
                     log_line(&format!("another launcher is running: {second:?}"));
                     if let Some(message) = second.message() {
-                        tell(message, false, true);
+                        play_note(message);
                     }
                     // or-play --settings: nothing was started.
                     return Ok(if settings_only { WINDOW_CLOSED } else { 0 });
