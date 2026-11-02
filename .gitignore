@@ -1,4 +1,18 @@
-/target
-/dist
-/.work
+# Local experiments, traces and investigation output. Never commit
+# third-party binaries or anything copied out of the game.
+/.work/
+
+# User-supplied game data and runtime copies made from it.
+/runtime-data/
+/original-data/
+
+# Build output.
+/target/
+/build/
+/dist/
 *.log
+
+# Editor and operating system noise.
+.DS_Store
+*.swp
+*~
