@@ -156,6 +156,12 @@ All notable changes to this project. The format follows
 
 ### Fixed
 
+- `or-play` sizes gamescope from the look when no resolution is set
+  (`look =` in `launcher.cfg`, or `--play --look …` for one run): Steam
+  Deck 1280×800, Coast to Coast the screen, Original 640×480. Nothing set
+  (a first `--play --game`) or an unreadable resolution is the game's
+  640×480, as the launcher draws it; it was 1920×1080 around a smaller
+  race.
 - Under Wine the game now loads the bundled VC++ runtime (`msvcp140`,
   `vcruntime140`, `vcomp140`) as well as Tweaks' `dinput8` and DXVK's
   `d3d9` from its copy whatever started the launcher: the launcher writes

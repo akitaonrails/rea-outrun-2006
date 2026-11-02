@@ -72,10 +72,29 @@ size_of 'resolution = OFF\n' 640 480 "off is 640x480 too"
 size_of 'resolution = Original\n' 640 480 "Original in any case"
 size_of 'resolution = 1920X1080\n' 1920 1080 "uppercase X"
 size_of 'resolution = 1280x800\r\n' 1280 800 "CRLF line"
-size_of 'resolution = big\n' 1920 1080 "garbage falls back"
-size_of 'resolution = 12x\n' 1920 1080 "half a size falls back"
+size_of 'resolution = big\n' 640 480 "garbage is the game's 640x480, as the launcher reads it"
+size_of 'resolution = 12x\n' 640 480 "half a size too"
 size_of 'resolution = 3840x2160\nfullscreen = true\n' 3840 2160 "exclusive fullscreen also in gamescope"
 size_of 'resolution = 3840x2160\nfullscreen = false\n' 3840 2160 "the borderless window also in gamescope"
+
+# A look without a resolution sizes gamescope as the launcher sizes the
+# race (form::look_settings): Steam Deck 1280x800, Coast to Coast the
+# screen, Original 640x480; no look and no resolution is the game's 640x480.
+size_of 'look = steam_deck\n' 1280 800 "file look steam_deck: 1280x800"
+REA_SCREEN=2560x1440 size_of 'look = Coast_To_Coast\n' 2560 1440 "file look coast_to_coast: the screen"
+size_of 'look = original\n' 640 480 "file look original: 640x480"
+size_of 'game = C:\\OR\n' 640 480 "only game = (a first --play --game): 640x480"
+size_of 'look = steam_deck\nresolution = 1920x1080\n' 1920 1080 "the file's own resolution wins over its look"
+rea_start --look steam_deck > /dev/null
+check "--look wins over the file's resolution" "gamescope -W 1280 -H 800 -w 1280 -h 800"
+check "--look still reaches the launcher" "--no-window --look steam_deck"
+REA_SCREEN=3840x2160 rea_start --look=coast_to_coast > /dev/null
+check "--look=coast_to_coast: the screen" "gamescope -W 3840 -H 2160"
+rea_start --look steam_deck --resolution 2560x1440 > /dev/null
+check "--resolution wins over --look" "gamescope -W 2560 -H 1440"
+rm "$CFG"
+rea_start > /dev/null
+check "no launcher.cfg: 640x480" "gamescope -W 640 -H 480"
 
 # SDL keeps reading pads in the background unless the caller chose.
 check "SDL controller background events default on" "SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS=1"

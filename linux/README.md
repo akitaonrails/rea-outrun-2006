@@ -48,11 +48,12 @@ has one more choice, the **Scaler** (how gamescope enlarges the picture):
 (`pixel`) and **FSR** (`fsr`, smooth then sharpened). Everything is saved
 in `launcher.cfg` inside the Wine prefix.
 
-Options after `--play` go to the launcher for that run; `--scaler` and
-`--resolution` also set gamescope's filter and size for that run only.
-With `resolution = original` or `off` gamescope matches the game's
-640×480; with no resolution saved (the **Original 2006** look) it uses
-1920×1080.
+Options after `--play` go to the launcher for that run; `--scaler`,
+`--resolution` and `--look` also set gamescope's filter and size for that
+run only. gamescope gets the size the game draws at: the resolution, else
+the look's (Steam Deck 1280×800, Coast to Coast your screen, Original 2006
+640×480), else the game's own 640×480 (`resolution = original` or `off`,
+or nothing set).
 
 The launcher sets the DLL overrides the game needs and copies DXVK into
 its private copy of the game, so the prefix needs no winetricks. Under

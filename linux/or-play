@@ -48,9 +48,10 @@ REA_RUN=${OR_RUN:-}
 REA_WAIT=${OR_WAIT:-}                 # set by the AppImage; every launch waits
 REA_CFG_APPDATA=OutRunLauncher        # AppData\Local\OutRunLauncher\launcher.cfg
 # "original" or "off" is the game's own 640x480 (the launcher reads both
-# that way); another value that isn't a size is 1080p.
+# that way), and so is an unset or unreadable resolution with no look.
 REA_ORIGINAL_SIZE=640x480
 REA_ORIGINAL_WORDS="original off"
+REA_DEFAULT_SIZE=640x480
 # A lock from or-play 0.1.0 held or-play's own pid: it counts as running,
 # but stop never signals it.
 REA_LEGACY_LOCK=keep
@@ -64,7 +65,38 @@ REA_LEGACY_LOCK=keep
 # `or-play --play --scaler fsr --resolution 1280x720`: the flags still go
 # to the launcher, and for that run the helper reads them over
 # launcher.cfg (gamescope's filter and size); the file is not written.
-REA_HELPER_KEYS="scaler resolution"
+REA_HELPER_KEYS="scaler resolution look"
+
+# The race size a look gives (form::look_settings): Steam Deck 1280x800,
+# Coast to Coast the screen (the launcher inside sees gamescope's screen),
+# Original the game's 640x480.
+or_look_size() {
+  case $1 in
+    steam_deck) echo 1280x800 ;;
+    coast_to_coast) rea_screen_size || echo 1920x1080 ;;
+    original) echo 640x480 ;;
+    *) return 1 ;;
+  esac
+}
+
+# As Settings::combine: launcher.cfg's look fills the resolution the file
+# leaves unset; a --look for this run wins over the file's resolution; a
+# --resolution wins over both. The size goes into this run's values, which
+# rea_game_size reads first.
+rea_hook_before_start() {
+  [ -n "$(REA_CFG=; rea_get_key resolution)" ] && return 0
+  _or_size=
+  _or_look=$(REA_CFG=; rea_get_value look)
+  if [ -n "$_or_look" ]; then
+    _or_size=$(or_look_size "$_or_look") || _or_size=
+  elif [ -n "$REA_CFG" ] && [ -z "$(rea_get_key resolution "$REA_CFG")" ]; then
+    _or_look=$(rea_get_value look "$REA_CFG")
+    [ -n "$_or_look" ] && { _or_size=$(or_look_size "$_or_look") || _or_size=; }
+  fi
+  [ -n "$_or_size" ] || return 0
+  REA_ONE_RUN="${REA_ONE_RUN:+$REA_ONE_RUN
+}resolution=$_or_size"
+}
 REA_FLAG_SWITCHES="--no-window --settings --linux --check --download-hd-pack --help"
 
 rea_init || exit 1
