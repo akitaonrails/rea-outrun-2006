@@ -49,6 +49,8 @@ All notable changes to this project. The format follows
 - The runtime-folder overlap check also works on drives Windows can't
   canonicalize (some RAM disks, `subst` drives, network shares): those
   paths are compared as text.
+- Saving settings on Windows retries for half a second when an antivirus
+  or OneDrive briefly holds `launcher.cfg`.
 
 ### Changed
 

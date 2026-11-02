@@ -309,12 +309,35 @@ pub fn write_atomic(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<()> {
         io::Write::write_all(&mut file, contents.as_ref())?;
         file.sync_all()?;
         drop(file);
-        fs::rename(&tmp, path)
+        // On Windows an antivirus or OneDrive can hold the file for a moment.
+        let attempts = if cfg!(windows) { 5 } else { 1 };
+        retry_denied(attempts, Duration::from_millis(100), || {
+            fs::rename(&tmp, path)
+        })
     })();
     if result.is_err() {
         let _ = fs::remove_file(&tmp);
     }
     result
+}
+
+/// Runs `op` up to `attempts` times while it fails with PermissionDenied,
+/// waiting `delay` in between; any other result is returned at once.
+fn retry_denied(
+    attempts: u32,
+    delay: Duration,
+    mut op: impl FnMut() -> io::Result<()>,
+) -> io::Result<()> {
+    let mut left = attempts.max(1);
+    loop {
+        match op() {
+            Err(e) if e.kind() == io::ErrorKind::PermissionDenied && left > 1 => {
+                left -= 1;
+                std::thread::sleep(delay);
+            }
+            other => return other,
+        }
+    }
 }
 
 fn make_writable(path: &Path) -> io::Result<()> {
@@ -840,5 +863,32 @@ mod tests {
         );
         let ordinary = Path::new(r"C:\Games\OutRun");
         assert_eq!(simplify_extended_length(ordinary), ordinary);
+    }
+
+    #[test]
+    fn denied_renames_are_retried_a_few_times() {
+        let denied = || io::Error::from(io::ErrorKind::PermissionDenied);
+        let mut calls = 0;
+        let ok = retry_denied(5, Duration::ZERO, || {
+            calls += 1;
+            if calls < 3 { Err(denied()) } else { Ok(()) }
+        });
+        assert!(ok.is_ok());
+        assert_eq!(calls, 3);
+        let mut calls = 0;
+        let gave_up = retry_denied(5, Duration::ZERO, || {
+            calls += 1;
+            Err(denied())
+        });
+        assert_eq!(gave_up.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(calls, 5);
+        // Other errors are not retried.
+        let mut calls = 0;
+        let other = retry_denied(5, Duration::ZERO, || {
+            calls += 1;
+            Err(io::Error::from(io::ErrorKind::NotFound))
+        });
+        assert!(other.is_err());
+        assert_eq!(calls, 1);
     }
 }
