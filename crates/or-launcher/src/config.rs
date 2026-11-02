@@ -222,6 +222,19 @@ impl Scaler {
 
 pub const FILE_NAME: &str = "launcher.cfg";
 
+/// Reads a settings file: `None` only when there is none (a first run).
+/// Text that isn't UTF-8 (a file saved as ANSI) is decoded with
+/// replacement characters rather than refused; any other error (no
+/// permission, a folder in its place) is returned, so the caller never
+/// mistakes an unreadable file for a missing one and writes over it.
+pub fn read_file(path: &Path) -> std::io::Result<Option<String>> {
+    match std::fs::read(path) {
+        Ok(bytes) => Ok(Some(String::from_utf8_lossy(&bytes).into_owned())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
 /// The file written on first run.
 pub const TEMPLATE: &str = r#"# OutRun 2006 launcher settings.
 #
@@ -1540,5 +1553,20 @@ mod tests {
         assert_eq!(s.saves, Some(PathBuf::from("/home/me/saves")));
         assert_eq!(s.hd_textures_folder, Some(PathBuf::from("/packs/hd")));
         assert_eq!(s.vsync, Some(Vsync::Off));
+    }
+
+    #[test]
+    fn only_a_missing_settings_file_reads_as_none() {
+        let dir = std::env::temp_dir().join(format!("or-launcher-cfg-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(read_file(&dir.join("launcher.cfg")).unwrap(), None);
+        // ANSI (Windows-1252) text: read, not taken for a first run.
+        std::fs::write(dir.join("ansi.cfg"), b"game = D:\\Jogos\\Corrida \xe9\n").unwrap();
+        let text = read_file(&dir.join("ansi.cfg")).unwrap().unwrap();
+        assert!(text.starts_with("game = D:\\Jogos\\Corrida "));
+        // Anything else is an error, not "no file".
+        assert!(read_file(&dir).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

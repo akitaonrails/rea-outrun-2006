@@ -98,6 +98,17 @@ mod app {
         ))
     }
 
+    /// launcher.cfg's text, `None` when there is none yet. An unreadable
+    /// file stops the launcher, which then never writes over it.
+    fn read_settings(path: &Path) -> Result<Option<String>, String> {
+        config::read_file(path).map_err(|error| {
+            format!(
+                "Can't read the settings in {}: {error}\n\nFix its permissions, or delete it to start over.",
+                path.display()
+            )
+        })
+    }
+
     /// `--settings` exit codes for or-play: closed without playing, or no
     /// window could be shown (play with the saved settings).
     const WINDOW_CLOSED: u32 = 3;
@@ -156,8 +167,7 @@ mod app {
             .map_err(|_| "the download stopped unexpectedly".to_string())?
         {
             Phase::Done(dir) => {
-                let text =
-                    fs::read_to_string(settings_path).unwrap_or_else(|_| config::TEMPLATE.into());
+                let text = read_settings(settings_path)?.unwrap_or_else(|| config::TEMPLATE.into());
                 let text = config::set_key(&text, "hd_textures", "on");
                 let text = config::set_key(&text, "hd_textures_folder", &dir.display().to_string());
                 if let Some(parent) = settings_path.parent() {
@@ -202,7 +212,7 @@ mod app {
                 }
             }
             // No launcher.cfg yet: the window opens on the recommended look.
-            let saved = fs::read_to_string(&settings_path).ok();
+            let saved = read_settings(&settings_path)?;
             match ui::show(&settings_path, &home(), saved.as_deref(), linux) {
                 Ok(ui::Outcome::Play) => {
                     log_line("settings window: play");
@@ -225,7 +235,7 @@ mod app {
             }
         }
 
-        let existing = fs::read_to_string(&settings_path).ok();
+        let existing = read_settings(&settings_path)?;
         let file_text = existing.as_deref().unwrap_or(config::TEMPLATE);
         let (saved, warnings) = Settings::parse_file(file_text);
         for warning in warnings {

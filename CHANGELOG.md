@@ -42,6 +42,10 @@ All notable changes to this project. The format follows
 - `launcher.cfg` and the runtime copy's manifest are written to a
   temporary file and renamed over the old one, so an interrupted write
   can't leave them half-written.
+- An unreadable `launcher.cfg` (no permission) stops the launcher with a
+  message instead of being taken for a first run and written over; a file
+  saved as ANSI is read (non-UTF-8 characters replaced) instead of being
+  ignored.
 
 ### Changed
 
