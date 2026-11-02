@@ -23,7 +23,9 @@ Without a saved resolution (the Original 2006 look), gamescope uses 1920×1080.
 
 The launcher sets the Wine DLL overrides the game needs (the mod's
 `dinput8.dll` and DXVK's `d3d9.dll` load as native) and copies DXVK into its
-private copy of the game, so the prefix needs no winetricks.
+private copy of the game, so the prefix needs no winetricks. Under Wine the
+mod reads pads through XInput by default (Wine's Windows.Gaming.Input loses
+the d-pad); the Controls tab offers the others.
 
 It needs `wine` and `gamescope`. Optional environment variables:
 

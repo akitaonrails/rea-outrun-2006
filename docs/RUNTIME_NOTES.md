@@ -3,13 +3,29 @@
 What was checked by running the game, newest first. Paths use
 `$OR2006_GAME_DIR` for the player's game folder.
 
+## 2026-11-02 — the owner's play-test before v0.1.0
+
+The owner played through `linux/or-play` (gaming distrobox, Wine 11.21,
+gamescope, 3840×2160, HD pack on, an Xbox-style pad):
+
+- `or-play` first failed to start the game twice: its inner script killed
+  Wine when `OR2006C2C.exe` wasn't up 3 s after start (Wine starting in a
+  fresh gamescope takes longer), and the backgrounded game then died with
+  the `distrobox enter` session. Fixed: or-play waits for the launcher, in
+  the foreground.
+- With Input API **XInput** the d-pad moves the menus; with
+  Windows.Gaming.Input (Wine's) it did nothing and only the stick worked.
+  XInput is now the default under Wine and Proton.
+- Racing, A/B in menus, the stick: fine. "Working fine now" on the final
+  build.
+
 ## 2026-11-01 — HD pack download, settings window, option audit
 
 **HD pack download under Wine (WinHTTP).** `OutRunLauncher.exe
 --download-hd-pack` in the `gaming` container's prefix (Wine 11.21)
 downloaded the pinned 326 MB release from GitHub over HTTPS (WinHTTP
 followed the redirect to GitHub's file servers), matched its SHA-256,
-unpacked 3.0 GB into `%LOCALAPPDATA%\OutRunLauncher\hd-pack\OR2-HD-GUI-v0.26.09a`,
+unpacked 3.2 GB (3,168,683,238 bytes) into `%LOCALAPPDATA%\OutRunLauncher\hd-pack\OR2-HD-GUI-v0.26.09a`,
 removed the zip and wrote `hd_textures = on` plus the folder into
 launcher.cfg. Not yet checked: the game drawing the pack's sprites in a
 race, and the download from the window's HD Pack tab (same code path).

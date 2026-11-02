@@ -35,7 +35,8 @@ Windows and on Linux (Proton/Wine). It is not a distribution of the game.
 - **Windows first, easy on Linux.** Ship Windows binaries that also run under
   Proton or Wine with no extra setup; an AppImage with a portable Wine for
   Linux users without Steam.
-- **Reuse open source.** OutRun2006Tweaks (GPL-3.0) is the engine of the
+- **Reuse open source.** OutRun2006Tweaks (MIT at the pinned build, GPL-3.0
+  from upstream commit `021e4bf5` on) is the engine of the
   fixes: we bundle its replacement EXE and `dinput8.dll`, generate its INI
   from our settings, and never reimplement what it already patches. DXVK
   serves D3D9 on Linux. xdelta3 applies the soundtrack fix. Check licences
