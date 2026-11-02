@@ -12,9 +12,9 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+use rea_launcher::fsx;
 use rea_launcher::runtime::{self as engine, Policy, Stamp, SyncReport};
 use rea_launcher::saves::{Deleted, FirstRun, Mirror, Moved};
-use rea_launcher::{fsx, paths};
 
 pub use rea_launcher::paths::check_separate;
 
@@ -84,8 +84,13 @@ pub fn remove_old_temps(files: &[&Path]) {
 /// The runtime folder's save folder, in whatever spelling it has; created
 /// as `SaveGame` when missing (Wine on Linux is case-sensitive on disk).
 pub fn save_dir(runtime: &Path) -> io::Result<PathBuf> {
-    if let Some(dir) = paths::find_ignoring_case(runtime, SAVE_DIR).filter(|d| d.is_dir()) {
-        return Ok(dir);
+    // Listed, not looked up: on Windows a lookup in our spelling succeeds
+    // and would hide the folder's own.
+    for entry in std::fs::read_dir(runtime)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() && entry.file_name().eq_ignore_ascii_case(SAVE_DIR) {
+            return Ok(entry.path());
+        }
     }
     let dir = runtime.join(SAVE_DIR);
     std::fs::create_dir(&dir)?;
