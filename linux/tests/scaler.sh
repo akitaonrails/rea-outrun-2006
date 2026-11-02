@@ -44,16 +44,17 @@ printf 'resolution = 1920x1080\n' > "$CFG"
 rea_start > /dev/null
 check "default is linear" "-F linear --"
 check "our prefix" "env WINEPREFIX=$OR_PREFIX "
-# A one-run --scaler wins over launcher.cfg (and reaches the launcher too).
+# One-run --scaler and --resolution win over launcher.cfg for that run
+# (and reach the launcher too); the next run is launcher.cfg's again.
 printf 'resolution = 1920x1080\nscaler = nearest\n' > "$CFG"
-rea_hook_command --play --scaler fsr
 rea_start --scaler fsr > /dev/null
 check "--scaler for one run" "-F fsr -- sh $HOME/.config/or-launcher/inner.sh $T/OutRunLauncher.exe --no-window --scaler fsr"
-REA_SCALER_KEY=scaler REA_DEFAULT_SCALER=linear
-rea_hook_command --play --scaler bicubic
+rea_start --resolution=1280x720 --no-window --scaler pixel > /dev/null
+check "--resolution for one run" "gamescope -W 1280 -H 720 -w 1280 -h 720 -f -S fit -F pixel --"
+rea_start --download-hd-pack --scaler fsr > /dev/null
+check "a switch is not a value" "-F fsr --"
 rea_start > /dev/null
-check "an unknown --scaler leaves launcher.cfg's" "-F nearest --"
-REA_SCALER_KEY=scaler REA_DEFAULT_SCALER=linear
+check "a plain run is launcher.cfg's again" "gamescope -W 1920 -H 1080 -w 1920 -h 1080 -f -S fit -F nearest --"
 # The race size from the resolution line.
 size_of() {
   printf '%b' "$1" > "$CFG"
@@ -61,6 +62,7 @@ size_of() {
   check "$4" "gamescope -W $2 -H $3 -w $2 -h $3 -f"
 }
 size_of 'resolution = original\n' 640 480 "original is 640x480"
+size_of 'resolution = OFF\n' 640 480 "off is 640x480 too"
 size_of 'resolution = 1920X1080\n' 1920 1080 "uppercase X"
 size_of 'resolution = 1280x800\r\n' 1280 800 "CRLF line"
 size_of 'resolution = big\n' 1920 1080 "garbage falls back"

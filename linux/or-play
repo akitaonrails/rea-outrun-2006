@@ -47,8 +47,10 @@ REA_PREFIX=${OR_PREFIX:-}
 REA_RUN=${OR_RUN:-}
 REA_WAIT=${OR_WAIT:-}                 # set by the AppImage; every launch waits
 REA_CFG_APPDATA=OutRunLauncher        # AppData\Local\OutRunLauncher\launcher.cfg
-# "original" is the game's own 640x480; no or another value is 1080p.
+# "original" or "off" is the game's own 640x480 (the launcher reads both
+# that way); another value that isn't a size is 1080p.
 REA_ORIGINAL_SIZE=640x480
+REA_ORIGINAL_WORDS="original off"
 # A lock from or-play 0.1.0 held or-play's own pid: it counts as running,
 # but stop never signals it.
 REA_LEGACY_LOCK=keep
@@ -59,20 +61,11 @@ REA_LEGACY_LOCK=keep
 # waiting for the game (no REA_GAME_PROCS: watching the game's process
 # raced Wine's start-up and killed the launcher).
 
-# A one-run --scaler (the launcher's flag, which it also checks) is
-# gamescope's filter for this run instead of launcher.cfg's scaler.
-rea_hook_command() {
-  _or_prev=
-  for _or_arg in "$@"; do
-    if [ "$_or_prev" = --scaler ]; then
-      case $_or_arg in
-        nearest|pixel|fsr|linear) REA_SCALER_KEY= REA_DEFAULT_SCALER=$_or_arg ;;
-      esac
-    fi
-    _or_prev=$_or_arg
-  done
-  return 127
-}
+# `or-play --play --scaler fsr --resolution 1280x720`: the flags still go
+# to the launcher, and for that run the helper reads them over
+# launcher.cfg (gamescope's filter and size); the file is not written.
+REA_HELPER_KEYS="scaler resolution"
+REA_FLAG_SWITCHES="--no-window --settings --linux --check --download-hd-pack --help"
 
 rea_init || exit 1
 # Tests load the configuration without running anything.

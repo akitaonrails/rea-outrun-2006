@@ -62,6 +62,10 @@ All notable changes to this project. The format follows
   existing runtime has converted on its next run. On Windows it is still
   taken out without bringing back a repack's SpecialK `d3d9.dll`; a
   `d3d9.dll` that isn't the launcher's is now left alone.
+- `or-play --play --resolution 1280x720` sizes gamescope for that run, as
+  `--scaler` already chose its filter (the SDK's one-run helper flags
+  replace or-play's own `--scaler` hook); `resolution = off` runs
+  gamescope at the game's 640×480, as the launcher reads it.
 - The frame rate, draw distance, anisotropy and deadzone rows are the
   SDK's option rows (Range steps as chips); they look and behave as
   before. The window's tests use the SDK's `harness_sized`.

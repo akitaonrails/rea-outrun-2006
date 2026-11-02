@@ -23,6 +23,16 @@ What was checked by running the game, newest first. Paths use
 - The HD pack drawn in a race (the download and unpack were checked).
 - `DX/FOG = 1` versus 0 (a side-by-side wasn't captured).
 
+## SDK v0.3.0 pass — to check by running the game
+
+- `or-play --play --scaler fsr --resolution 1280x720`: `play.log` shows
+  gamescope `-W 1280 -H 720 … -F fsr`; a plain `or-play --play` afterwards
+  is back to `launcher.cfg`'s size and scaler.
+- `resolution = off` under `or-play`: gamescope at 640×480, like the game.
+- A runtime used by v0.2.0 on Linux, then this version on Windows: DXVK's
+  `d3d9.dll` and `.or-dxvk` are gone and the game starts on the real
+  Direct3D 9 (unit-tested with fake files).
+
 ## SDK v0.2.0 pass — to check by running the game
 
 - `outrun2006.ini` now keeps the game's `LANGUAGE`, `DX/ADAPTER` and
