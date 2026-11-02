@@ -3,7 +3,23 @@
 //!
 //! `outrun2006.ini` has no sections; the plain `set_key` in `config` and
 //! this module's own key matching both accept `key = value`,
-//! `key=value` and indented lines.
+//! `key=value` and indented lines. Here lines starting with `#` or `;` are
+//! comments, and keys and sections match without regard to case (as the
+//! mod's INI reader does); a key we write keeps our spelling.
+
+/// The key of an active `key = value` line: not a comment (`#` or `;`),
+/// not a section header.
+fn active_key(line: &str) -> Option<&str> {
+    let t = line.trim();
+    if t.starts_with(['#', ';', '[']) {
+        return None;
+    }
+    t.split_once('=').map(|(k, _)| k.trim())
+}
+
+fn is_key(line: &str, key: &str) -> bool {
+    active_key(line).is_some_and(|k| k.eq_ignore_ascii_case(key))
+}
 
 /// Sets `key` inside `[section]`, replacing its line in place (keeping the
 /// surrounding comments), inserting it at the section's end when missing,
@@ -35,14 +51,8 @@ pub fn set_section_key(text: &str, section: &str, key: &str, value: &str) -> Str
         lines.push(format!("{key} = {value}"));
         return join(lines, text);
     };
-    let is_key = |line: &str| {
-        let t = line.trim();
-        !t.starts_with('#')
-            && !t.starts_with('[')
-            && t.split_once('=').is_some_and(|(k, _)| k.trim() == key)
-    };
     for line in &mut lines[start + 1..end] {
-        if is_key(line) {
+        if is_key(line, key) {
             *line = format!("{key} = {value}");
             return join(lines, text);
         }
@@ -68,10 +78,7 @@ pub fn remove_section_key(text: &str, section: &str, key: &str) -> String {
             lines.push(line.to_string());
             continue;
         }
-        let is_key = inside
-            && !t.starts_with('#')
-            && t.split_once('=').is_some_and(|(k, _)| k.trim() == key);
-        if !is_key {
+        if !(inside && is_key(line, key)) {
             lines.push(line.to_string());
         }
     }
@@ -86,10 +93,8 @@ pub fn section_keys(text: &str) -> Vec<(String, String)> {
         let t = line.trim();
         if t.starts_with('[') && t.ends_with(']') {
             section = Some(t[1..t.len() - 1].trim().to_string());
-        } else if !t.starts_with('#')
-            && let (Some(section), Some((key, _))) = (&section, t.split_once('='))
-        {
-            out.push((section.clone(), key.trim().to_string()));
+        } else if let (Some(section), Some(key)) = (&section, active_key(line)) {
+            out.push((section.clone(), key.to_string()));
         }
     }
     out
@@ -105,9 +110,8 @@ pub fn section_key(text: &str, section: &str, key: &str) -> Option<String> {
             continue;
         }
         if inside
-            && !t.starts_with('#')
-            && let Some((k, v)) = t.split_once('=')
-            && k.trim() == key
+            && is_key(line, key)
+            && let Some((_, v)) = t.split_once('=')
         {
             return Some(v.trim().to_string());
         }
@@ -215,5 +219,51 @@ mod tests {
         let out = set_section_key(no_newline, "Graphics", "DrawDistanceIncrease", "4");
         assert!(out.ends_with("or2ed1.ogg = ending"));
         assert!(!out.ends_with('\n'));
+    }
+
+    #[test]
+    fn semicolon_lines_are_comments() {
+        let text = "[S]\n; key = 1\n;other = 2\nkey = 3\n";
+        assert_eq!(section_key(text, "S", "key").as_deref(), Some("3"));
+        assert_eq!(section_keys(text), [("S".to_string(), "key".to_string())]);
+        let out = set_section_key(text, "S", "key", "9");
+        assert_eq!(out, "[S]\n; key = 1\n;other = 2\nkey = 9\n");
+        assert_eq!(
+            remove_section_key(text, "S", "key"),
+            "[S]\n; key = 1\n;other = 2\n"
+        );
+        // A commented-out key alone is not the key: it is added after it.
+        let out = set_section_key("[S]\n;key = 1\n", "S", "key", "2");
+        assert_eq!(out, "[S]\n;key = 1\nkey = 2\n");
+    }
+
+    #[test]
+    fn keys_match_without_regard_to_case() {
+        let text = "[performance]\nframeratelimit = 30\n";
+        assert_eq!(
+            section_key(text, "Performance", "FramerateLimit").as_deref(),
+            Some("30")
+        );
+        // Replaced in place, in our spelling, not added a second time.
+        assert_eq!(
+            set_section_key(text, "Performance", "FramerateLimit", "60"),
+            "[performance]\nFramerateLimit = 60\n"
+        );
+        assert_eq!(
+            remove_section_key(text, "Performance", "FRAMERATELIMIT"),
+            "[performance]\n"
+        );
+    }
+
+    #[test]
+    fn existing_files_are_written_as_before() {
+        // Exact-case keys and '#' comments: the output is unchanged.
+        let out = set_section_key(FILE, "Performance", "FramerateLimit", "0");
+        assert_eq!(
+            out,
+            FILE.replace("FramerateLimit = 60", "FramerateLimit = 0")
+        );
+        let out = set_section_key(FILE, "Controls", "VibrationMode", "1");
+        assert_eq!(out, FILE.replace("VibrationMode=0", "VibrationMode = 1"));
     }
 }

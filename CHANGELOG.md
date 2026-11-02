@@ -27,6 +27,10 @@ All notable changes to this project. The format follows
   dropped instead of competing with ours; their other rules are kept.
   Wine is also recognised from `WINEPREFIX`, `WINELOADER` or
   `STEAM_COMPAT_DATA_PATH` when a Wine build hides `wine_get_version`.
+- `OutRun2006Tweaks.ini`: lines starting with `;` are comments too, and
+  keys match without regard to case, so a key typed in another case is
+  replaced in place instead of added a second time. Files written by
+  earlier versions come out the same.
 
 ### Changed
 
