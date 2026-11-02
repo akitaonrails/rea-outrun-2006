@@ -233,10 +233,21 @@ fn ensure_save_dir(runtime: &Path) -> io::Result<()> {
     save_dir(runtime).map(|_| ())
 }
 
+/// Whether a copy whose destination looks like `dst` should be made from a
+/// source stamped `src`: never over a newer file (the game saved, then the
+/// launcher never got to copy it back), nor over an identical one.
+fn should_mirror(src: Stamp, dst: Option<Stamp>) -> bool {
+    match dst {
+        None => true,
+        Some(dst) => dst.mtime < src.mtime || (dst.mtime == src.mtime && dst.size != src.size),
+    }
+}
+
 /// Copies every file below `from` into `to` (creating folders), skipping
-/// files whose copy already has the same size and modification time.
-/// Returns how many files were copied. Used to keep the player's save
-/// folder (`saves` setting) and the runtime's `SaveGame` folder in step.
+/// files whose copy is newer or already has the same size and modification
+/// time (newer wins). Returns how many files were copied. Used to keep the
+/// player's save folder (`saves` setting) and the runtime's `SaveGame`
+/// folder in step.
 pub fn mirror(from: &Path, to: &Path) -> io::Result<usize> {
     if !from.is_dir() {
         return Ok(0);
@@ -245,10 +256,11 @@ pub fn mirror(from: &Path, to: &Path) -> io::Result<usize> {
     for (rel, stamp) in list(from)? {
         let src = native(from, &rel);
         let dst = native(to, &rel);
-        let same = fs::metadata(&dst)
-            .map(|m| m.len() == stamp.size && mtime_secs(&m) == stamp.mtime)
-            .unwrap_or(false);
-        if same {
+        let existing = fs::metadata(&dst).ok().map(|m| Stamp {
+            size: m.len(),
+            mtime: mtime_secs(&m),
+        });
+        if !should_mirror(stamp, existing) {
             continue;
         }
         if let Some(dir) = dst.parent() {
@@ -417,6 +429,45 @@ mod tests {
             "no source folder"
         );
         for d in [a, b] {
+            fs::remove_dir_all(d).unwrap();
+        }
+    }
+
+    #[test]
+    fn should_mirror_lets_the_newer_file_win() {
+        assert!(should_mirror(stamp(1, 5), None));
+        assert!(should_mirror(stamp(1, 5), Some(stamp(1, 4))));
+        assert!(should_mirror(stamp(2, 5), Some(stamp(1, 5))));
+        assert!(!should_mirror(stamp(1, 5), Some(stamp(1, 5))));
+        assert!(!should_mirror(stamp(1, 5), Some(stamp(1, 6))));
+        assert!(!should_mirror(stamp(9, 5), Some(stamp(1, 6))));
+    }
+
+    #[test]
+    fn mirror_never_overwrites_newer_progress() {
+        let saves = temp("mirror-newer-saves");
+        let rt = temp("mirror-newer-rt");
+        fs::create_dir_all(&saves).unwrap();
+        fs::write(saves.join("License.dat"), b"old").unwrap();
+        assert_eq!(mirror(&saves, &rt).unwrap(), 1);
+        // The game saved in the runtime, then the session ended before the
+        // launcher copied it back: the runtime copy is newer.
+        fs::write(rt.join("License.dat"), b"newer progress").unwrap();
+        fs::OpenOptions::new()
+            .write(true)
+            .open(rt.join("License.dat"))
+            .unwrap()
+            .set_modified(SystemTime::now() + Duration::from_secs(60))
+            .unwrap();
+        assert_eq!(mirror(&saves, &rt).unwrap(), 0);
+        assert_eq!(fs::read(rt.join("License.dat")).unwrap(), b"newer progress");
+        // Writing back afterwards brings the newer file to the saves folder.
+        assert_eq!(mirror(&rt, &saves).unwrap(), 1);
+        assert_eq!(
+            fs::read(saves.join("License.dat")).unwrap(),
+            b"newer progress"
+        );
+        for d in [saves, rt] {
             fs::remove_dir_all(d).unwrap();
         }
     }

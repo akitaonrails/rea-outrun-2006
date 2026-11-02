@@ -6,6 +6,12 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Saves: copying the saves folder into the runtime copy no longer overwrites
+  a newer save there (newer wins), so progress from a session that ended
+  before the write-back is kept.
+
 ## [0.1.0] - 2026-11-02
 
 The first release: a launcher that plays your own copy of OutRun 2006:
