@@ -10,6 +10,7 @@ picks a portrait monitor or switches your desktop's video mode.
 ```sh
 or-play          # the settings window, then the game
 or-play --play   # the game with the saved settings, no window
+or-play --play --look original --scaler nearest   # launcher options for one run
 or-play stop     # end the game session or-play started
 or-play status   # running or idle
 ```
@@ -19,6 +20,7 @@ through Wine before gamescope starts. On Linux it has one more choice, the
 scaler (how gamescope enlarges the picture): Smooth (`linear`, the default),
 Sharp (`nearest`), Even pixels (`pixel`) and FSR (`fsr`, smooth then
 sharpened). Everything is saved in `launcher.cfg` inside the Wine prefix.
+`--scaler <name>` after `--play` picks the scaler for one run.
 Without a saved resolution (the Original 2006 look), gamescope uses 1920×1080.
 
 The launcher sets the Wine DLL overrides the game needs (the mod's

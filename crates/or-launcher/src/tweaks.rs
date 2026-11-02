@@ -158,6 +158,54 @@ pub fn install(
     Ok(())
 }
 
+/// What `--check` finds missing beside the launcher: errors stop the game
+/// (the Tweaks files; DXVK under Wine), warnings don't (the VC++ runtime,
+/// the draw-distance list, the soundtrack fix).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Components {
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+/// Checks the folders the package ships next to OutRunLauncher.exe.
+pub fn check_components(launcher_dir: &Path, wine: bool) -> Components {
+    let mut found = Components::default();
+    let mut need = |rel: &str, required: bool, what: &str| {
+        let path = launcher_dir.join(rel);
+        if !path.is_file() {
+            let line = format!("{what} is missing: {}", path.display());
+            if required {
+                found.errors.push(line);
+            } else {
+                found.warnings.push(line);
+            }
+        }
+    };
+    need("tweaks/dinput8.dll", true, "OutRun2006Tweaks");
+    need(
+        "tweaks/OR2006C2C.exe",
+        true,
+        "OutRun2006Tweaks' replacement EXE",
+    );
+    need(
+        "tweaks/OutRun2006Tweaks.lods.ini",
+        false,
+        "the draw-distance exclusions",
+    );
+    for dll in VC_DLLS {
+        need(&format!("{VC_DIR}/{dll}"), false, "the VC++ runtime");
+    }
+    if wine {
+        need("linux/d3d9.dll", true, "DXVK");
+    }
+    need(
+        "soundtrack/14_Rush_a_Difficulty_1989.ogg.vcdiff",
+        false,
+        "the soundtrack fix",
+    );
+    found
+}
+
 /// DXVK serves the game's Direct3D 9 on Linux; on Windows the real D3D9
 /// does (a local d3d9.dll from an earlier Linux run is removed).
 fn install_dxvk(
@@ -538,6 +586,23 @@ mod tests {
             "TextureBaseFolder = {}",
             launcher_dir.join("textures-pack").display()
         )));
+        fs::remove_dir_all(&at).unwrap();
+    }
+
+    #[test]
+    fn check_names_what_the_package_lacks() {
+        let at = temp("check");
+        let dir = launcher(&at);
+        let ok = check_components(&dir, false);
+        assert!(ok.errors.is_empty(), "{ok:?}");
+        assert_eq!(ok.warnings.len(), 1, "only the soundtrack fix: {ok:?}");
+        let wine = check_components(&dir, true);
+        assert!(wine.errors[0].starts_with("DXVK is missing"), "{wine:?}");
+        fs::remove_file(dir.join(TWEAKS_DIR).join("dinput8.dll")).unwrap();
+        fs::remove_file(dir.join(VC_DIR).join("vcomp140.dll")).unwrap();
+        let broken = check_components(&dir, false);
+        assert!(broken.errors[0].starts_with("OutRun2006Tweaks is missing"));
+        assert!(broken.warnings.iter().any(|w| w.contains("vcomp140.dll")));
         fs::remove_dir_all(&at).unwrap();
     }
 

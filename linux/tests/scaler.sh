@@ -44,6 +44,16 @@ printf 'resolution = 1920x1080\n' > "$CFG"
 rea_start > /dev/null
 check "default is linear" "-F linear --"
 check "our prefix" "env WINEPREFIX=$OR_PREFIX "
+# A one-run --scaler wins over launcher.cfg (and reaches the launcher too).
+printf 'resolution = 1920x1080\nscaler = nearest\n' > "$CFG"
+rea_hook_command --play --scaler fsr
+rea_start --scaler fsr > /dev/null
+check "--scaler for one run" "-F fsr -- sh $HOME/.config/or-launcher/inner.sh $T/OutRunLauncher.exe --no-window --scaler fsr"
+REA_SCALER_KEY=scaler REA_DEFAULT_SCALER=linear
+rea_hook_command --play --scaler bicubic
+rea_start > /dev/null
+check "an unknown --scaler leaves launcher.cfg's" "-F nearest --"
+REA_SCALER_KEY=scaler REA_DEFAULT_SCALER=linear
 # The race size from the resolution line.
 size_of() {
   printf '%b' "$1" > "$CFG"

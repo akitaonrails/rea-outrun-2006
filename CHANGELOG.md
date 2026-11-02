@@ -6,6 +6,31 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- One option table (`config::OPTIONS`) declares every setting once: its
+  `launcher.cfg` key, flag, values, label and description. `--help`, the
+  commented `launcher.cfg` written on first run, the file and flag parsing
+  and the window's labels and notes all come from it, and a test fails
+  when the window and the command line differ.
+- `--look original|coast_to_coast|steam_deck` (and `look =` in
+  `launcher.cfg`) sets every value of a look at once; settings given on
+  their own win over it.
+- `--scaler` for one run (Linux): `or-play --play --scaler fsr` passes it
+  to gamescope and to the launcher.
+- An "Exclusive fullscreen" switch in the Picture tab (it was a
+  `launcher.cfg` setting only).
+- `--check` also checks the bundled `tweaks`, `vc`, `soundtrack` and (under
+  Wine) `linux/d3d9.dll` files, that the runtime folder is writable and
+  apart from the game, and lists `launcher.cfg` warnings; the report goes
+  to `launcher.log` and the terminal (a dialog only when started without
+  one). Exit code 1 when something would stop the game.
+- `--help` and error messages print to the terminal the launcher was
+  started from.
+- The settings window runs headless in tests on any host
+  (`egui_kittest`): every tab, label, description, disabled reason and
+  Play are tested, with hostile paths (`José/Jogos d'Ação`).
+
 ### Changed
 
 - Updated rea-launcher-sdk to v0.2.0. The settings window's look cards,
@@ -22,6 +47,24 @@ All notable changes to this project. The format follows
   resumes an interrupted download (the button was called "Resume download")
   and a failure stays on screen until the next try. The completion marker
   is now written before the folder is moved into place.
+- Every row in the window shows a one-line note of what it changes (before,
+  some help was only on mouse hover, out of reach of a pad). Controls that
+  can't be used now are shown greyed out with the reason instead of being
+  hidden (impulse triggers under Wine or with rumble off, shuffle without
+  the CD switcher, rumble strength with rumble off, the HD pack switch
+  without a pack). Vsync is a switch; rumble strength has its own row.
+- A value saved in `launcher.cfg` or given as a flag that the window
+  doesn't offer (e.g. `fps_limit = 75`, `anisotropy = 2`, `1600x900`) is
+  shown as an extra choice instead of no choice being lit.
+- `launcher.cfg` messages: on/off settings now say "needs on or off"
+  (`true`/`false` are still read), and a bad resolution says "needs
+  WIDTHxHEIGHT, original or off". A new `launcher.cfg` is written from the
+  option table, with the default of every setting in its `#key =` line.
+- An unknown `OR2006C2C.exe` message links to the bug report form, and the
+  window offers a "Report this version" button; the log records the EXE's
+  SHA-256 on every start. The game EXE is found in any spelling.
+- `--no-window` uses the HD pack downloaded earlier when `hd_textures` is
+  on without a folder, as the window does.
 
 - Built on the shared [rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk)
   v0.1.0: the runtime copy, saves mirror, INI and `launcher.cfg` editing,

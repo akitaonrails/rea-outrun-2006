@@ -320,7 +320,9 @@ impl Form {
     /// The settings file with this form's values written in; every other
     /// line (comments, keys the window doesn't show) is kept.
     pub fn save(&self, text: &str) -> String {
-        let mut t = text.to_string();
+        // The values below hold the whole look; a `look` line from the
+        // file would only shadow later edits.
+        let mut t = config::clear_key(text, "look");
         let mut put = |key: &str, value: Option<String>| {
             t = match &value {
                 Some(v) => config::set_key(&t, key, v),
@@ -397,6 +399,37 @@ impl Vsync {
     }
 }
 
+/// The `--look` / `look =` name of a look, `None` for Custom.
+pub fn look_key(look: Look) -> Option<&'static str> {
+    match look {
+        Look::Original => Some("original"),
+        Look::CoastToCoast => Some("coast_to_coast"),
+        Look::SteamDeck => Some("steam_deck"),
+        Look::Custom => None,
+    }
+}
+
+/// The settings a look sets (`--look`, `look =`): every picture, control
+/// and extra value; the folders, the HD pack, the scaler and the input API
+/// are not part of a look.
+pub fn look_settings(name: &str, screen: Option<(u32, u32)>, wine: bool) -> Settings {
+    let form = match name {
+        "original" => Form::original(wine),
+        "steam_deck" => Form {
+            wine,
+            ..Form::steam_deck()
+        },
+        _ => Form::coast_to_coast(screen, wine),
+    };
+    let mut s = Settings::parse_file(&form.save("")).0;
+    s.hd_textures = None;
+    s.scaler = None;
+    s.input_backend = None;
+    // Original's "unset" resolution is the game's own size, said out loud.
+    s.resolution = Some(form.resolution.unwrap_or(config::ORIGINAL));
+    s
+}
+
 /// The look to recommend on a screen: Steam Deck on a Deck, else Coast to
 /// Coast.
 pub fn recommended(screen: Option<(u32, u32)>) -> Look {
@@ -440,14 +473,14 @@ mod tests {
 
     #[test]
     fn the_look_is_worked_out_from_the_saved_values() {
-        let mut f = form(config::TEMPLATE);
+        let mut f = form(config::template().as_str());
         assert_eq!(
             f.look,
             Look::Custom,
             "the bare template is custom (no values)"
         );
         f.set_look(Look::CoastToCoast, SCREEN, false);
-        let saved = f.save(config::TEMPLATE);
+        let saved = f.save(config::template().as_str());
         assert_eq!(form(&saved).look, Look::CoastToCoast);
         // One value off the preset: custom.
         let tweaked = config::set_key(&saved, "draw_distance", "8");
@@ -465,11 +498,11 @@ mod tests {
         assert_eq!(Form::from_file(Some(" \r\n"), SCREEN, false), first);
         assert_eq!(first.look, Look::CoastToCoast);
         // A saved file that is the template word for word is the player's.
-        let kept = Form::from_file(Some(config::TEMPLATE), SCREEN, false);
-        assert_eq!(kept, form(config::TEMPLATE));
+        let kept = Form::from_file(Some(config::template().as_str()), SCREEN, false);
+        assert_eq!(kept, form(config::template().as_str()));
         assert_ne!(kept.look, Look::CoastToCoast);
         // A file with just the game folder (written by --game) too.
-        let with_game = config::set_key(config::TEMPLATE, "game", r"D:\OutRun");
+        let with_game = config::set_key(config::template().as_str(), "game", r"D:\OutRun");
         assert_eq!(
             Form::from_file(Some(&with_game), SCREEN, false),
             form(&with_game)
@@ -481,14 +514,20 @@ mod tests {
         let mut f = Form::first_run(SCREEN, false);
         assert_eq!(f.look, Look::CoastToCoast);
         assert_eq!(f.resolution, SCREEN);
-        assert_eq!(form(&f.save(config::TEMPLATE)).look, Look::CoastToCoast);
+        assert_eq!(
+            form(&f.save(config::template().as_str())).look,
+            Look::CoastToCoast
+        );
 
         f.set_look(Look::Original, SCREEN, false);
         assert_eq!(f.resolution, None);
         assert_eq!(f.draw_distance, 0);
         assert!(!f.sky_glow && !f.cd_switcher && !f.free_drive);
         assert_eq!(f.vibration, Feedback::Off);
-        assert_eq!(form(&f.save(config::TEMPLATE)).look, Look::Original);
+        assert_eq!(
+            form(&f.save(config::template().as_str())).look,
+            Look::Original
+        );
 
         // Original is borderless everywhere.
         assert!(!Form::original(true).fullscreen);
@@ -497,10 +536,13 @@ mod tests {
 
     #[test]
     fn the_steam_deck_look_and_its_recommendation() {
-        let mut f = form(config::TEMPLATE);
+        let mut f = form(config::template().as_str());
         f.set_look(Look::SteamDeck, SCREEN, false);
         assert_eq!(f.resolution, Some((1280, 800)));
-        assert_eq!(form(&f.save(config::TEMPLATE)).look, Look::SteamDeck);
+        assert_eq!(
+            form(&f.save(config::template().as_str())).look,
+            Look::SteamDeck
+        );
         assert_eq!(recommended(Some((1280, 800))), Look::SteamDeck);
         assert_eq!(recommended(Some((800, 1280))), Look::SteamDeck);
         assert_eq!(recommended(SCREEN), Look::CoastToCoast);
@@ -513,7 +555,7 @@ mod tests {
 
     #[test]
     fn saving_keeps_comments_and_round_trips_every_field() {
-        let mut f = form(config::TEMPLATE);
+        let mut f = form(config::template().as_str());
         f.game = r"D:\Games\OutRun 2006".into();
         f.saves = r"Z:\home\me\saves".into();
         f.resolution = Some((1920, 1080));
@@ -543,7 +585,7 @@ mod tests {
         f.show_miles = false;
         f.soundtrack_fix = false;
         f.scaler = Scaler::Fsr;
-        let saved = f.save(config::TEMPLATE);
+        let saved = f.save(config::template().as_str());
         assert!(saved.contains("# OutRun 2006 launcher settings."));
         let mut back = form(&saved);
         back.look = f.look;
@@ -561,10 +603,10 @@ mod tests {
 
     #[test]
     fn hd_textures_keep_their_folder() {
-        let mut f = form(config::TEMPLATE);
+        let mut f = form(config::template().as_str());
         f.hd_textures = true;
         f.hd_folder = r"D:\pack".into();
-        let saved = f.save(config::TEMPLATE);
+        let saved = f.save(config::template().as_str());
         assert!(saved.contains("hd_textures = on"));
         assert!(saved.contains("hd_textures_folder = D:\\pack"));
         assert_eq!(form(&saved).hd_folder, r"D:\pack");
@@ -587,26 +629,26 @@ mod tests {
     fn every_scaler_round_trips() {
         for (scaler, label, note) in SCALERS {
             assert!(!label.is_empty() && !note.is_empty());
-            let mut f = form(config::TEMPLATE);
+            let mut f = form(config::template().as_str());
             f.scaler = scaler;
-            let saved = f.save(config::TEMPLATE);
+            let saved = f.save(config::template().as_str());
             assert!(saved.contains(&format!("scaler = {}", scaler.key())));
             assert_eq!(Settings::parse_file(&saved).0.scaler, Some(scaler));
         }
 
         // The scaler is not part of a look.
         for look in [Look::Original, Look::CoastToCoast, Look::SteamDeck] {
-            let mut f = form(config::TEMPLATE);
+            let mut f = form(config::template().as_str());
             f.set_look(look, SCREEN, false);
             f.scaler = Scaler::Nearest;
             assert_eq!(Form::look_of(&f, SCREEN, false), look);
-            assert_eq!(form(&f.save(config::TEMPLATE)).look, look);
+            assert_eq!(form(&f.save(config::template().as_str())).look, look);
         }
     }
 
     #[test]
     fn a_look_keeps_the_hd_pack_switch() {
-        let mut f = form(config::TEMPLATE);
+        let mut f = form(config::template().as_str());
         f.hd_textures = true;
         f.set_look(Look::CoastToCoast, SCREEN, false);
         assert!(f.hd_textures);
@@ -625,23 +667,23 @@ mod tests {
     #[test]
     fn the_platform_default_input_api_is_not_pinned() {
         let wine = |text: &str| Form::new(&Settings::parse_file(text).0, SCREEN, true);
-        let f = wine(config::TEMPLATE);
+        let f = wine(config::template().as_str());
         assert_eq!(f.input_backend, Backend::XInput);
-        assert_eq!(input_line(&f.save(config::TEMPLATE)), None);
+        assert_eq!(input_line(&f.save(config::template().as_str())), None);
 
-        let mut f = wine(config::TEMPLATE);
+        let mut f = wine(config::template().as_str());
         f.input_backend = Backend::DirectInput;
-        let saved = f.save(config::TEMPLATE);
+        let saved = f.save(config::template().as_str());
         assert_eq!(input_line(&saved), Some("input_backend = dinput"));
         assert_eq!(wine(&saved).input_backend, Backend::DirectInput);
 
         // Off Wine the default is Windows.Gaming.Input.
-        let mut f = form(config::TEMPLATE);
+        let mut f = form(config::template().as_str());
         assert_eq!(f.input_backend, Backend::WindowsGaming);
-        assert_eq!(input_line(&f.save(config::TEMPLATE)), None);
+        assert_eq!(input_line(&f.save(config::template().as_str())), None);
         f.input_backend = Backend::XInput;
         assert_eq!(
-            input_line(&f.save(config::TEMPLATE)),
+            input_line(&f.save(config::template().as_str())),
             Some("input_backend = xinput")
         );
     }

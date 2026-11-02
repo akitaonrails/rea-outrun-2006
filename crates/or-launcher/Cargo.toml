@@ -13,7 +13,12 @@ path = "src/main.rs"
 [dependencies]
 # `zip`: the SDK's download unpacks the HD texture pack.
 rea-launcher = { workspace = true, features = ["zip"] }
+# The settings window (drawn and tested on any host).
+rea-launcher-ui.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 rea-launcher-win32.workspace = true
-rea-launcher-ui.workspace = true
+
+[dev-dependencies]
+# Headless window tests (egui_kittest, AccessKit queries).
+rea-launcher-ui = { workspace = true, features = ["testing"] }

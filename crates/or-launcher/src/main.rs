@@ -34,12 +34,13 @@ mod app {
     use std::process::Command;
 
     use or_launcher::config::{self, Settings};
-    use or_launcher::{edition, runtime, tweaks};
+    use or_launcher::window::{self, Outcome};
+    use or_launcher::{edition, form, hdpack, runtime, tweaks};
     use rea_launcher::fsx;
     use rea_launcher::log::Log;
     use rea_launcher_win32::dialog::{self, Icon};
     use rea_launcher_win32::http::WinHttp;
-    use rea_launcher_win32::{disk, gpu, wine, xinput};
+    use rea_launcher_win32::{console, disk, display, gpu, wine, xinput};
 
     use crate::ui;
 
@@ -113,10 +114,24 @@ mod app {
     const WINDOW_CLOSED: u32 = 3;
     const WINDOW_UNAVAILABLE: u32 = 4;
 
-    fn take_flag(args: &mut Vec<String>, flag: &str) -> bool {
-        let found = args.iter().any(|arg| arg == flag);
-        args.retain(|arg| arg != flag);
-        found
+    /// Text for the person who started the launcher: printed when there
+    /// is a terminal (or output is redirected), a dialog when a person
+    /// started it without one, nothing otherwise. Always logged.
+    fn tell(text: &str, error: bool, interactive: bool) {
+        for line in text.lines() {
+            log_line(line);
+        }
+        let attached = console::attach_parent();
+        match console::output(attached, console::stdout_usable(), interactive) {
+            console::Output::Terminal if error => eprintln!("{text}"),
+            console::Output::Terminal => println!("{text}"),
+            console::Output::Dialog => dialog::message(
+                "OutRun 2006 launcher",
+                text,
+                if error { Icon::Error } else { Icon::Info },
+            ),
+            console::Output::Nowhere => {}
+        }
     }
 
     fn launcher_dir() -> Option<PathBuf> {
@@ -170,7 +185,7 @@ mod app {
             .map_err(|_| "the download stopped unexpectedly".to_string())?
         {
             Phase::Done(dir) => {
-                let text = read_settings(settings_path)?.unwrap_or_else(|| config::TEMPLATE.into());
+                let text = read_settings(settings_path)?.unwrap_or_else(config::template);
                 let text = config::set_key(&text, "hd_textures", "on");
                 let text = config::set_key(&text, "hd_textures_folder", &dir.display().to_string());
                 if let Some(parent) = settings_path.parent() {
@@ -188,22 +203,79 @@ mod app {
         }
     }
 
+    /// `--check`: everything a launch needs, without launching. Exit code
+    /// 0 when it would play, 1 when something stops it.
+    fn check(
+        game: &Path,
+        detected: &edition::Edition,
+        runtime_dir: &Path,
+        wine: bool,
+        warnings: &[String],
+    ) -> u32 {
+        let mut lines = vec![
+            format!("Game folder: {}", game.display()),
+            format!("Version: {}", detected.name),
+        ];
+        let found = launcher_dir()
+            .map(|dir| tweaks::check_components(&dir, wine))
+            .unwrap_or_default();
+        let mut problems = found.errors.clone();
+        if let Err(e) = runtime::check_separate(game, runtime_dir) {
+            problems.push(e);
+        }
+        let probe = runtime_dir.join(".or-check");
+        match fs::create_dir_all(runtime_dir).and_then(|_| fsx::write_atomic(&probe, "")) {
+            Ok(()) => {
+                let _ = fs::remove_file(&probe);
+                lines.push(format!(
+                    "Runtime folder: {} (writable)",
+                    runtime_dir.display()
+                ));
+            }
+            Err(e) => problems.push(format!(
+                "cannot write to the runtime folder {}: {e}",
+                runtime_dir.display()
+            )),
+        }
+        lines.extend(found.warnings.iter().map(|w| format!("warning: {w}")));
+        lines.extend(warnings.iter().map(|w| format!("warning: {w}")));
+        lines.extend(problems.iter().map(|p| format!("problem: {p}")));
+        let ok = problems.is_empty();
+        lines.insert(
+            0,
+            if ok {
+                "Ready to play.".to_string()
+            } else {
+                "Not ready to play:".to_string()
+            },
+        );
+        tell(&lines.join("\n"), !ok, true);
+        u32::from(!ok)
+    }
+
     pub fn run() -> Result<u32, String> {
         log_line(concat!("OutRunLauncher ", env!("CARGO_PKG_VERSION")));
         let settings_path = settings_path();
-        let mut cli: Vec<String> = std::env::args().skip(1).collect();
-        // Non-short-circuiting, so all three spellings are removed.
-        let help =
-            take_flag(&mut cli, "--help") | take_flag(&mut cli, "-h") | take_flag(&mut cli, "/?");
-        if help {
-            dialog::message("OutRun 2006 launcher", config::USAGE, Icon::Info);
+        let cli: Vec<String> = std::env::args().skip(1).collect();
+        if cli
+            .iter()
+            .any(|a| matches!(a.as_str(), "--help" | "-h" | "/?"))
+        {
+            tell(&config::usage(), false, true);
             return Ok(0);
         }
-        let settings_only = take_flag(&mut cli, "--settings");
-        let linux = take_flag(&mut cli, "--linux");
-        let no_window = take_flag(&mut cli, "--no-window");
-        let check_only = take_flag(&mut cli, "--check");
-        if take_flag(&mut cli, "--download-hd-pack") {
+        let (args, switches) = match Settings::parse_args(cli.clone()) {
+            Ok(parsed) => parsed,
+            Err(message) => {
+                tell(&message, true, true);
+                return Ok(2);
+            }
+        };
+        let switch = |name: &str| switches.iter().any(|s| s == name);
+        let settings_only = switch("--settings");
+        let no_window = switch("--no-window");
+        let check_only = switch("--check");
+        if switch("--download-hd-pack") {
             return download_hd_pack(&settings_path);
         }
         if settings_only || (cli.is_empty() && !no_window && !check_only) {
@@ -216,14 +288,14 @@ mod app {
             }
             // No launcher.cfg yet: the window opens on the recommended look.
             let saved = read_settings(&settings_path)?;
-            match ui::show(&settings_path, &home(), saved.as_deref(), linux) {
-                Ok(ui::Outcome::Play) => {
+            match ui::show(&settings_path, &home(), saved.as_deref(), switch("--linux")) {
+                Ok(Outcome::Play) => {
                     log_line("settings window: play");
                     if settings_only {
                         return Ok(0);
                     }
                 }
-                Ok(ui::Outcome::Closed) => {
+                Ok(Outcome::Closed) => {
                     log_line("settings window: closed");
                     return Ok(if settings_only { WINDOW_CLOSED } else { 0 });
                 }
@@ -239,42 +311,47 @@ mod app {
         }
 
         let existing = read_settings(&settings_path)?;
-        let file_text = existing.as_deref().unwrap_or(config::TEMPLATE);
+        let template = config::template();
+        let file_text = existing.as_deref().unwrap_or(&template);
         let (saved, warnings) = Settings::parse_file(file_text);
-        for warning in warnings {
+        for warning in &warnings {
             log_line(&format!("warning: {warning}"));
         }
-        let settings = saved.clone().merged(Settings::parse_args(cli)?);
+        let wine = wine::is_wine();
+        let screen = display::screen_size();
+        let preset = |look: &str| form::look_settings(look, screen, wine);
+        let mut settings = Settings::combine(saved.clone(), args, &preset);
+        // The pack the window would offer: the one downloaded earlier.
+        if settings.hd_textures_folder.is_none() {
+            settings.hd_textures_folder = hdpack::installed(&home());
+        }
         let game = find_game(&settings)?;
-        let exe_path = game.join(EXE);
+        let exe_path =
+            rea_launcher::paths::find_ignoring_case(&game, EXE).unwrap_or_else(|| game.join(EXE));
         let exe_bytes = fs::read(&exe_path)
             .map_err(|error| format!("cannot read {}: {error}", exe_path.display()))?;
         let bundled =
             launcher_dir().and_then(|dir| fs::read(dir.join(tweaks::TWEAKS_DIR).join(EXE)).ok());
         let detected = edition::identify_with_bundled(&exe_bytes, bundled.as_deref()).map_err(|digest| {
             format!(
-                "This OR2006C2C.exe is a version the launcher doesn't know.\n\nSHA-256: {}\n\nPlease report it at https://github.com/akitaonrails/rea-outrun-2006/issues with where your copy comes from (Steam, DVD, which repack).",
-                edition::to_hex(&digest)
+                "This OR2006C2C.exe is a version the launcher doesn't know.\n\nSHA-256: {}\n\nPlease report it at {} with where your copy comes from (Steam, DVD, which repack) and your launcher.log.",
+                edition::to_hex(&digest),
+                window::REPORT_URL
             )
         })?;
-        log_line(&format!("game: {} ({})", game.display(), detected.name));
-        if check_only {
-            dialog::message(
-                "OutRun 2006 launcher",
-                &format!(
-                    "Ready to play.\n\nGame folder: {}\nVersion: {}",
-                    game.display(),
-                    detected.name
-                ),
-                Icon::Info,
-            );
-            return Ok(0);
-        }
-
+        log_line(&format!(
+            "game: {} ({}, SHA-256 {})",
+            game.display(),
+            detected.name,
+            edition::to_hex(&rea_launcher::identify::sha256(&exe_bytes))
+        ));
         let runtime_dir = settings
             .runtime
             .clone()
             .unwrap_or_else(|| home().join("OutRun2006"));
+        if check_only {
+            return Ok(check(&game, &detected, &runtime_dir, wine, &warnings));
+        }
         runtime::check_separate(&game, &runtime_dir)?;
         let saves_state = runtime_dir.join(runtime::SAVES_STATE);
         // Temp files left by launchers before the SDK (`name.tmp`).
@@ -317,7 +394,6 @@ mod app {
             if created { 0 } else { moved.to_saves.len() }
         ));
 
-        let wine = wine::is_wine();
         tweaks::install(
             &runtime_dir,
             &launcher_dir().unwrap_or_default(),

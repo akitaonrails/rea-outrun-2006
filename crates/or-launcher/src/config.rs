@@ -10,7 +10,8 @@
 
 use std::path::{Path, PathBuf};
 
-use rea_launcher::cfg::{self, Rejected};
+use rea_launcher::cfg::spec::{self, Kind, OptionSpec, Value};
+use rea_launcher::cfg::{self, KeyStyle, Rejected, Resolution};
 use rea_launcher::ini::Ini;
 
 pub use rea_launcher::cfg::{clear_key, read_file, set_key};
@@ -22,6 +23,8 @@ pub struct Settings {
     /// Where the player's saves live (the game's `SaveGame` folder,
     /// mirrored in before and back after play).
     pub saves: Option<PathBuf>,
+    /// A look's name (`LOOKS`): its values for every setting not given.
+    pub look: Option<&'static str>,
 
     // Picture
     /// Video resolution; `None` is the game's own 640x480.
@@ -114,10 +117,8 @@ impl Feedback {
         }
     }
 
-    fn parse(value: &str) -> Option<Feedback> {
-        Feedback::ALL
-            .into_iter()
-            .find(|f| f.key() == value.trim().to_ascii_lowercase())
+    fn from_key(value: &str) -> Option<Feedback> {
+        Feedback::ALL.into_iter().find(|f| f.key() == value)
     }
 
     /// The INI value: 0 disables, 1 enables, 2 swaps, 3 merges.
@@ -165,18 +166,6 @@ impl Backend {
         }
     }
 
-    /// `Some(None)` is `auto`: no choice, the platform default.
-    fn parse(value: &str) -> Option<Option<Backend>> {
-        let value = value.trim().to_ascii_lowercase();
-        if value == "auto" {
-            return Some(None);
-        }
-        Backend::ALL
-            .into_iter()
-            .find(|b| b.key() == value)
-            .map(Some)
-    }
-
     /// The INI value (0-3).
     pub fn ini(self) -> u32 {
         match self {
@@ -218,280 +207,374 @@ impl Scaler {
         }
     }
 
-    fn parse(value: &str) -> Option<Scaler> {
-        let value = value.trim().to_ascii_lowercase();
+    fn from_key(value: &str) -> Option<Scaler> {
         Scaler::ALL.into_iter().find(|s| s.key() == value)
     }
 }
 
 pub const FILE_NAME: &str = "launcher.cfg";
 
-/// The file written on first run.
-pub const TEMPLATE: &str = r#"# OutRun 2006 launcher settings.
-#
-# One setting per line as key = value; lines starting with # are comments.
-# Command-line options (--game, --resolution) override this file for one
-# run. A launcher.cfg next to OutRunLauncher.exe is used instead of this
-# one when it exists (for portable installs).
-#
-# Everything below is applied to the launcher's private copy of the game;
-# your game folder is never changed.
-
-# The folder with your installed OutRun 2006 (OR2006C2C.exe). Filled in by
-# --game; the game folder is only read, never changed.
-game =
-
-# Where the launcher keeps its private, writable copy of the game. Default:
-# %LOCALAPPDATA%\OutRunLauncher\OutRun2006
-#runtime =
-
-# Where your saves (License.dat, the SaveGame folder's contents) are kept.
-# They are copied into the game before it starts and back when it exits.
-# Default: %USERPROFILE%\Saved Games\OutRun 2006
-#saves =
-
-# Video resolution, e.g. 1920x1080 or 3840x2160. Unset, it is the game's own
-# 640x480 (the settings window picks your screen's size on first run). The
-# game runs as a borderless window at this size (see fullscreen).
-#resolution = 1920x1080
-
-# true switches to exclusive fullscreen (the borderless window is easier on
-# multi-monitor desktops and works the same under Wine). In exclusive
-# fullscreen the frame-rate cap is held at 60.
-#fullscreen = false
-
-# Anti-aliasing: 0 off, 2 the game's own multisampling (4x under DXVK). On
-# NVIDIA under Windows, trackside cloth and barriers are supersampled too.
-#antialiasing = 0
-
-# Frame-rate cap in frames per second. The game's driving runs at a fixed
-# 60 Hz; above 60 the mod interpolates the picture. unlimited (or 0) turns the
-# cap off entirely and leaves pacing to vsync or an external limiter.
-#fps_limit = 60
-
-# vsync: on waits for the screen's refresh, off doesn't.
-#vsync = on
-
-# How much further down the stage the world draws: 0 (the game's own) to 8;
-# the window offers 0, 4 and 8. Further out, scenery can pop in.
-#draw_distance = 4
-
-# Resolution of the car's reflections: original (128), 512, 1024 or 2048.
-#reflections = 2048
-
-# Anisotropic filtering, 1 to 16; 0 keeps the game's own.
-#anisotropy = 16
-
-# The console versions' glowing sky effect.
-#sky_glow = true
-
-# The Xbox releases' brighter picture.
-#xbox_brightness = false
-
-# The hi-def passenger models the PC release shipped unused.
-#hd_characters = true
-
-# The community HD texture pack (sharper menus, HUD and sprites). It is a
-# separate download: get it from
-# https://github.com/envido32/OR2006Sprites/releases, unzip it anywhere and
-# give its folder below (the one with textures\load inside). Without a
-# folder, a textures-pack folder next to OutRunLauncher.exe is used.
-#hd_textures = off
-#hd_textures_folder =
-
-# Steering deadzone in percent, 0 to 50 (the game's default is 20).
-#deadzone = 20
-
-# Gamepad rumble: off, on, swapped (left/right motors), or merged.
-#vibration = on
-
-# Rumble strength, 0 to 10.
-#vibration_strength = 7
-
-# Xbox Series impulse triggers: off, on, swapped (recommended), or merged.
-#impulse_triggers = swapped
-
-# Input API for the mod's controller system: wgi (Windows.Gaming.Input),
-# raw, dinput or xinput. Without a choice: wgi on Windows, xinput under
-# Wine and Proton (whose wgi loses the d-pad). Try another if a pad isn't
-# seen.
-#input_backend = wgi
-
-# Linux (or-play) only: how gamescope enlarges the picture: linear (smooth,
-# the default), nearest (sharp), pixel (even pixels) or fsr.
-#scaler = linear
-
-# Start races with the manual gearbox selected.
-#manual_gearbox = false
-
-# Change the music during a race (Back or X = next track, Z = previous).
-#cd_switcher = true
-
-# Shuffle the race music each launch.
-#music_shuffle = false
-
-# Skip the boot logos (the data still loads; a white screen for a moment).
-#skip_logos = true
-
-# Free drive: no countdown timer on the stages.
-#free_drive = true
-
-# The horn works outside the "beep the horn!" requests.
-#horn = true
-
-# Roadside animations can come from any game mode.
-#random_anims = true
-
-# Show OutRun miles next to the menu's sign-in text.
-#show_miles = true
-
-# Restore the first two seconds of "Rush a Difficulty" (applies a small
-# official patch to the launcher's copy of the song).
-#soundtrack_fix = true
-"#;
-
-pub const USAGE: &str = concat!(
-    "OutRunLauncher ",
-    env!("CARGO_PKG_VERSION"),
-    "\n\n",
-    "\
-OutRunLauncher [options]
-
-  --game <folder>           the folder with your installed OutRun 2006 (remembered)
-  --saves <folder>          where your saves are kept
-  --runtime <folder>        where the launcher keeps its private copy
-  --resolution <WxH>        video resolution, e.g. 1920x1080, or original
-  --fullscreen on|off       exclusive fullscreen instead of a borderless window
-  --antialiasing <0|2>      anti-aliasing
-  --fps-limit <n>|unlimited frame-rate cap, e.g. 60 or 120
-  --vsync on|off            wait for the screen's refresh
-  --draw-distance <0-8>     how much further the stage draws
-  --reflections <original|512|1024|2048>  car reflection resolution
-  --anisotropy <0-16>       anisotropic filtering
-  --sky-glow on|off         the console versions' glowing sky
-  --xbox-brightness on|off  the Xbox releases' brighter picture
-  --hd-characters on|off    hi-def passenger models
-  --hd-textures on|off      the community HD texture pack
-  --hd-textures-folder <folder>  where the unzipped pack is
-  --deadzone <0-50>         steering deadzone in percent
-  --vibration <mode>        rumble: off, on, swapped or merged
-  --vibration-strength <0-10>
-  --impulse-triggers <mode> Xbox One/Series impulse triggers (Windows): off, on, swapped or merged
-  --input-backend <name>    wgi, raw, dinput or xinput
-  --manual-gearbox on|off   start races with the manual gearbox
-  --cd-switcher on|off      change music mid-race
-  --music-shuffle on|off    shuffle the race music
-  --skip-logos on|off       skip the boot logos
-  --free-drive on|off       no countdown timer
-  --horn on|off             usable horn
-  --random-anims on|off     roadside animations from any mode
-  --show-miles on|off       OutRun miles in the menu
-  --soundtrack-fix on|off   restore Rush a Difficulty's first two seconds
-
-These override launcher.cfg for one run (only --game is remembered). Without
-options the settings window opens first.
-
-  --no-window               play with the saved settings, no window
-  --settings [--linux]      only the settings window (exit codes 0: play,
-                           3: closed, 4: no window could be shown;
-                           --linux adds the gamescope scaler, for or-play)
-
-OutRunLauncher --check [--game <folder>]
-  checks the game folder and tells you whether its OR2006C2C.exe is supported
-
-OutRunLauncher --download-hd-pack
-  downloads the community HD texture pack (progress in launcher.log) and
-  switches it on in launcher.cfg
-
-Other settings are in launcher.cfg (see the comments in it)."
-);
-
-/// `resolution` words: `original` and `off` are the game's own 640x480.
-fn parse_resolution(value: &str) -> Option<(u32, u32)> {
-    match cfg::parse_resolution(value, (640, 480), (7680, 4320), cfg::ORIGINAL_OR_OFF)? {
-        cfg::Resolution::Size(w, h) => Some((w, h)),
-        _ => Some(ORIGINAL),
-    }
-}
-
-/// 0 (unlimited) or 10 to 240 frames per second.
-fn valid_fps(n: &u32) -> bool {
-    *n == 0 || (10..=240).contains(n)
-}
-
 /// `resolution` value meaning the game's own 640x480.
 pub const ORIGINAL: (u32, u32) = (640, 480);
 
-/// `original` (0 or 128, the game's own) or a size Tweaks can render.
-fn parse_reflections(value: &str) -> Option<u32> {
-    let value = value.trim();
-    if value.eq_ignore_ascii_case("original") || value.eq_ignore_ascii_case("off") {
-        return Some(0);
-    }
-    match value.parse().ok()? {
-        0 | 128 => Some(0),
-        n @ (512 | 1024 | 2048) => Some(n),
-        _ => None,
-    }
-}
-
-/// `off`/`original` (0) or a number up to `max`.
-fn parse_count(value: &str, max: u32) -> Option<u32> {
-    let value = value.trim();
-    if value.eq_ignore_ascii_case("off") || value.eq_ignore_ascii_case("original") {
-        return Some(0);
-    }
-    cfg::parse_range(value, 0..=max)
-}
-
-/// Every key launcher.cfg and the command line take (`--fps-limit` is
-/// `fps_limit`). `scaler` is only set by the window and the file.
-const FLAG_KEYS: [&str; 30] = [
-    "game",
-    "runtime",
-    "saves",
-    "resolution",
-    "fullscreen",
-    "antialiasing",
-    "fps_limit",
-    "vsync",
-    "draw_distance",
-    "reflections",
-    "anisotropy",
-    "sky_glow",
-    "xbox_brightness",
-    "hd_characters",
-    "hd_textures",
-    "hd_textures_folder",
-    "deadzone",
-    "vibration",
-    "vibration_strength",
-    "impulse_triggers",
-    "input_backend",
-    "manual_gearbox",
-    "cd_switcher",
-    "music_shuffle",
-    "skip_logos",
-    "free_drive",
-    "horn",
-    "random_anims",
-    "show_miles",
-    "soundtrack_fix",
+/// The flags that take no value: the launcher's modes.
+pub const SWITCHES: [&str; 5] = [
+    "--no-window",
+    "--settings",
+    "--linux",
+    "--check",
+    "--download-hd-pack",
 ];
 
-/// Where a value comes from: the file is more forgiving (retired values)
-/// and words its messages for the file.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Source {
-    File,
-    Args,
+/// The looks, as `--look` and `look =` name them (the window's cards).
+pub const LOOKS: &[(&str, &str)] = &[
+    ("original", "Original 2006"),
+    ("coast_to_coast", "Coast to Coast"),
+    ("steam_deck", "Steam Deck"),
+];
+
+/// One row per setting: the `launcher.cfg` key, its `--flag`, the values
+/// it takes and the words the window, `--help` and the template show.
+/// The examples are the launcher's defaults (Coast to Coast), except the
+/// resolution's (unset, it is the game's own 640x480).
+pub const OPTIONS: &[OptionSpec] = &[
+    OptionSpec::new(
+        "game",
+        Kind::Path,
+        "Game folder",
+        "The folder with your installed OutRun 2006 (OR2006C2C.exe). It is only read, never changed.",
+    ),
+    OptionSpec::new(
+        "runtime",
+        Kind::Path,
+        "Runtime folder",
+        "Where the launcher keeps its private, writable copy of the game. Default: %LOCALAPPDATA%\\OutRunLauncher\\OutRun2006.",
+    )
+    .launcher_only(),
+    OptionSpec::new(
+        "saves",
+        Kind::Path,
+        "Saves",
+        "Where your saves (License.dat, your records) are kept: copied into the game before it starts and back when it ends. Default: Saved Games\\OutRun 2006.",
+    ),
+    OptionSpec::new(
+        "look",
+        Kind::Choice(LOOKS),
+        "Look",
+        "A preset for every picture, control and extra setting at once: the game as it shipped, the tuned Coast to Coast set for your screen, or the Steam Deck's. Settings given on their own win over it.",
+    ),
+    OptionSpec::new(
+        "resolution",
+        Kind::Size {
+            min: (640, 480),
+            max: (7680, 4320),
+            aliases: cfg::ORIGINAL_OR_OFF,
+        },
+        "Resolution",
+        "The size the game draws at. Unset or original: the game's own 640x480.",
+    )
+    .with_example("1920x1080"),
+    OptionSpec::new(
+        "fullscreen",
+        Kind::Toggle,
+        "Exclusive fullscreen",
+        "Takes over the screen instead of a borderless window. Holds the frame rate at 60.",
+    )
+    .with_example("off"),
+    OptionSpec::new(
+        "fps_limit",
+        Kind::Range { min: 0, max: 240 },
+        "Frame rate",
+        "Frames per second: 10 to 240, or 0 (unlimited). Above 60 the picture is interpolated between the game's 60 ticks a second (experimental).",
+    )
+    .with_example("60"),
+    OptionSpec::new(
+        "vsync",
+        Kind::Toggle,
+        "Vsync",
+        "Waits for the screen's refresh: no tearing, a little more delay.",
+    )
+    .with_example("on"),
+    OptionSpec::new(
+        "draw_distance",
+        Kind::Range { min: 0, max: 8 },
+        "Draw distance",
+        "How much further down the road the scenery is drawn (0 is the game's own). Far out, scenery can pop in.",
+    )
+    .with_example("4"),
+    OptionSpec::new(
+        "reflections",
+        Kind::Choice(&[
+            ("original", "Original"),
+            ("512", "512"),
+            ("1024", "1024"),
+            ("2048", "2048"),
+        ]),
+        "Reflections",
+        "How sharp the reflections on the car are, in pixels (original is 128).",
+    )
+    .with_example("2048"),
+    OptionSpec::new(
+        "anisotropy",
+        Kind::Range { min: 0, max: 16 },
+        "Anisotropy",
+        "Keeps the road's texture sharp into the distance (0 is the game's own filtering).",
+    )
+    .with_example("16"),
+    OptionSpec::new(
+        "antialiasing",
+        Kind::Choice(&[("0", "Off"), ("2", "4× MSAA")]),
+        "Anti-aliasing",
+        "Smooths jagged edges (the game's own multisampling; on NVIDIA under Windows, trackside cloth and barriers too).",
+    )
+    .with_example("0"),
+    OptionSpec::new(
+        "sky_glow",
+        Kind::Toggle,
+        "Sky glow",
+        "The console versions' glowing sky.",
+    )
+    .with_example("on"),
+    OptionSpec::new(
+        "xbox_brightness",
+        Kind::Toggle,
+        "Xbox brightness",
+        "The brighter picture of the Xbox release.",
+    )
+    .with_example("off"),
+    OptionSpec::new(
+        "hd_characters",
+        Kind::Toggle,
+        "Hi-def characters",
+        "The detailed driver and passenger models the PC release shipped but never used.",
+    )
+    .with_example("on"),
+    OptionSpec::new(
+        "scaler",
+        Kind::Choice(&[
+            ("nearest", "Sharp"),
+            ("pixel", "Even pixels"),
+            ("fsr", "FSR"),
+            ("linear", "Smooth"),
+        ]),
+        "Scaler",
+        "Linux: how the picture is enlarged to your screen: sharp blocks, even blocks, AMD FSR, or smooth.",
+    )
+    .with_example("linear")
+    .helper_owned(),
+    OptionSpec::new(
+        "hd_textures",
+        Kind::Toggle,
+        "Use the HD texture pack",
+        "The community's sharper menus, HUD, sprites and button prompts. Get it in the HD Pack tab or with --download-hd-pack.",
+    )
+    .with_example("off"),
+    OptionSpec::new(
+        "hd_textures_folder",
+        Kind::Path,
+        "Pack folder",
+        "Where the HD pack is (the folder it was unzipped into). Empty: the one the launcher downloaded, or textures-pack next to OutRunLauncher.exe.",
+    ),
+    OptionSpec::new(
+        "deadzone",
+        Kind::Range { min: 0, max: 50 },
+        "Deadzone",
+        "How far the stick moves before the car steers, in percent (the game's own is 20).",
+    )
+    .with_example("20"),
+    OptionSpec::new(
+        "vibration",
+        Kind::Choice(&[
+            ("off", "Off"),
+            ("on", "On"),
+            ("swapped", "Swapped"),
+            ("merged", "Merged"),
+        ]),
+        "Rumble",
+        "The pad shakes on shifts, drifts and crashes. Swapped trades the left and right motors; merged drives both together.",
+    )
+    .with_example("on"),
+    OptionSpec::new(
+        "vibration_strength",
+        Kind::Range { min: 0, max: 10 },
+        "Strength",
+        "How strongly the pad shakes, 0 to 10.",
+    )
+    .with_example("7"),
+    OptionSpec::new(
+        "impulse_triggers",
+        Kind::Choice(&[
+            ("off", "Off"),
+            ("on", "On"),
+            ("swapped", "Swapped"),
+            ("merged", "Merged"),
+        ]),
+        "Impulse triggers",
+        "Rumble in the triggers of Xbox One and Series pads, on Windows.",
+    )
+    .with_example("swapped"),
+    OptionSpec::new(
+        "input_backend",
+        Kind::Choice(&[
+            ("auto", "Automatic"),
+            ("wgi", "WGI"),
+            ("raw", "RawInput"),
+            ("dinput", "DInput"),
+            ("xinput", "XInput"),
+        ]),
+        "Input API",
+        "How the game reads pads; change it only if a pad isn't seen. Automatic: Windows.Gaming.Input (WGI) on Windows, XInput under Wine and Proton.",
+    )
+    .with_example("auto"),
+    OptionSpec::new(
+        "manual_gearbox",
+        Kind::Toggle,
+        "Manual gearbox",
+        "Races start with the manual gearbox selected.",
+    )
+    .with_example("off"),
+    OptionSpec::new(
+        "cd_switcher",
+        Kind::Toggle,
+        "CD switcher",
+        "Change the music during a race: Back or X for the next track, Z for the previous one.",
+    )
+    .with_example("on"),
+    OptionSpec::new(
+        "music_shuffle",
+        Kind::Toggle,
+        "Shuffle the music",
+        "The race music comes in a new order each time the game starts.",
+    )
+    .with_example("off"),
+    OptionSpec::new(
+        "skip_logos",
+        Kind::Toggle,
+        "Skip the boot logos",
+        "Straight to the title screen (a white screen shows for a moment while the game loads).",
+    )
+    .with_example("on"),
+    OptionSpec::new(
+        "free_drive",
+        Kind::Toggle,
+        "Free drive",
+        "No countdown timer: drive as long as you like.",
+    )
+    .with_example("on"),
+    OptionSpec::new(
+        "horn",
+        Kind::Toggle,
+        "Horn any time",
+        "The horn works all the time, not only when your passenger asks for it.",
+    )
+    .with_example("on"),
+    OptionSpec::new(
+        "random_anims",
+        Kind::Toggle,
+        "Roadside animations",
+        "Roadside animations from every game mode can appear on any stage.",
+    )
+    .with_example("on"),
+    OptionSpec::new(
+        "show_miles",
+        Kind::Toggle,
+        "OutRun miles",
+        "Shows your OutRun miles next to the menu's sign-in text.",
+    )
+    .with_example("on"),
+    OptionSpec::new(
+        "soundtrack_fix",
+        Kind::Toggle,
+        "Soundtrack fix",
+        "Restores the first two seconds of \"Rush a Difficulty\" (an official patch to the launcher's copy of the song).",
+    )
+    .with_example("on"),
+];
+
+/// The row for `key`.
+pub fn option(key: &str) -> &'static OptionSpec {
+    spec::find(OPTIONS, key).unwrap_or_else(|| panic!("no option row for {key}"))
 }
+
+/// The comment heading of `launcher.cfg`.
+const HEADING: &str = "OutRun 2006 launcher settings.
+
+One setting per line as key = value; lines starting with # are comments. Command-line options (--resolution 1920x1080) override this file for one run. A launcher.cfg next to OutRunLauncher.exe is used instead of this one when it exists (portable installs).
+
+Unset settings get the launcher's defaults (the Coast to Coast look), shown in each #key = line. Everything is applied to the launcher's private copy of the game; your game folder is never changed.";
+
+/// The file written on first run: every option commented out with its
+/// description, values and default.
+pub fn template() -> String {
+    spec::template(HEADING, OPTIONS)
+}
+
+/// `--help`.
+pub fn usage() -> String {
+    format!(
+        "OutRunLauncher {version}
+
+OutRunLauncher [options]
+  Without options the settings window opens first, then the game.
+
+{options}
+These override launcher.cfg for one run; only --game is remembered.
+
+  --no-window          play with the saved settings (and the options given)
+  --settings [--linux] only the settings window (exit codes 0: play,
+                       3: closed, 4: no window could be shown; --linux adds
+                       the gamescope scaler, for or-play)
+  --check              checks the game folder and the launcher's files
+                       without playing (report in launcher.log)
+  --download-hd-pack   downloads the community HD texture pack (progress in
+                       launcher.log) and switches it on in launcher.cfg
+  --help               this text
+
+Every option is described in launcher.cfg.
+",
+        version = env!("CARGO_PKG_VERSION"),
+        options = spec::usage(OPTIONS, KeyStyle::Underscore)
+    )
+}
+
+/// Spellings older launchers wrote or took that the table no longer
+/// lists, turned into the table's own (`unlimited` frames is 0).
+fn legacy_value<'a>(key: &str, value: &'a str) -> std::borrow::Cow<'a, str> {
+    let word = value.trim().to_ascii_lowercase();
+    let new = match (key, word.as_str()) {
+        ("fps_limit", "unlimited" | "none" | "off") => "0",
+        ("anisotropy", "off" | "original") => "0",
+        ("reflections", "0" | "128" | "off") => "original",
+        _ => return value.into(),
+    };
+    new.into()
+}
+
+/// What a frame-rate cap may be, for messages.
+const FPS_NEEDS: &str = "10 to 240 or unlimited (0)";
 
 impl Settings {
     /// Reads a settings file; the second value lists lines it could not use.
     pub fn parse_file(text: &str) -> (Settings, Vec<String>) {
         let mut s = Settings::default();
-        let mut warnings = cfg::parse(text, FILE_NAME, |k, v| s.apply(k, v, Source::File));
+        let mut warnings = cfg::parse(text, FILE_NAME, |key, value| match key {
+            // Options that were removed are ignored without a word.
+            "character_select" | "hot_plug" => Ok(()),
+            // Older files named the pack's folder in hd_textures itself.
+            "hd_textures" if cfg::parse_bool(value).is_none() => {
+                s.hd_textures = Some(true);
+                s.hd_textures_folder = Some(value.trim().into());
+                Ok(())
+            }
+            // Retired half-rate vsync: read as on (warned below).
+            "vsync" if value.trim().eq_ignore_ascii_case("half") => {
+                s.vsync = Some(Vsync::On);
+                Ok(())
+            }
+            _ => spec::dispatch(OPTIONS, key, &legacy_value(key, value), &mut |k, v| {
+                s.apply(k, v)
+            }),
+        });
         for e in cfg::entries(text) {
             if e.key == "vsync" && e.value.eq_ignore_ascii_case("half") {
                 warnings.push(format!(
@@ -503,122 +586,67 @@ impl Settings {
         (s, warnings)
     }
 
-    /// One setting, from the file or a `--flag value` pair.
-    fn apply(&mut self, key: &str, value: &str, from: Source) -> Result<(), Rejected> {
-        let boolean = |slot: &mut Option<bool>| -> Result<(), Rejected> {
-            let needs = match from {
-                Source::File => "true or false",
-                Source::Args => cfg::ON_OFF,
-            };
-            *slot = Some(cfg::need(cfg::parse_bool(value), needs)?);
-            Ok(())
-        };
-        match key {
-            "game" => self.game = Some(value.into()),
-            "runtime" => self.runtime = Some(value.into()),
-            "saves" => self.saves = Some(value.into()),
-            "resolution" => {
-                let needs = match from {
-                    Source::File => "WIDTHxHEIGHT (640x480 to 7680x4320) or original",
-                    Source::Args => "WIDTHxHEIGHT or original",
-                };
-                self.resolution = Some(cfg::need(parse_resolution(value), needs)?);
+    /// One checked value from the file or a flag.
+    fn apply(&mut self, key: &str, value: Value) -> Result<(), Rejected> {
+        let path = |text: &str| Some(text).filter(|t| !t.is_empty()).map(PathBuf::from);
+        match (key, value) {
+            ("game", Value::Text(t)) => self.game = path(t),
+            ("runtime", Value::Text(t)) => self.runtime = path(t),
+            ("saves", Value::Text(t)) => self.saves = path(t),
+            ("hd_textures_folder", Value::Text(t)) => self.hd_textures_folder = path(t),
+            ("look", Value::Choice(look)) => self.look = Some(look),
+            ("resolution", Value::Size(size)) => {
+                self.resolution = Some(match size {
+                    Resolution::Size(w, h) => (w, h),
+                    _ => ORIGINAL,
+                })
             }
-            "fullscreen" => return boolean(&mut self.fullscreen),
-            "antialiasing" => {
-                let aa = cfg::parse_range(value, 0..=2).filter(|n| *n != 1);
-                self.antialiasing = Some(cfg::need(aa, "0 or 2")?);
+            ("fps_limit", Value::Number(n)) => {
+                if (1..10).contains(&n) {
+                    return Err(Rejected::needs(FPS_NEEDS));
+                }
+                self.fps_limit = Some(n);
             }
-            "fps_limit" => {
-                let fps = match value.trim().to_ascii_lowercase().as_str() {
-                    "unlimited" | "none" | "off" => Some(0),
-                    _ => value.trim().parse().ok().filter(valid_fps),
-                };
-                self.fps_limit = Some(cfg::need(fps, "10 to 240 or unlimited")?);
+            ("vsync", Value::Toggle(on)) => {
+                self.vsync = Some(if on { Vsync::On } else { Vsync::Off })
             }
-            "vsync" => {
-                let vsync = match value.trim().to_ascii_lowercase().as_str() {
-                    "on" | "true" => Some(Vsync::On),
-                    "off" | "false" => Some(Vsync::Off),
-                    // Retired: read as on (parse_file says so).
-                    "half" if from == Source::File => Some(Vsync::On),
-                    _ => None,
-                };
-                self.vsync = Some(cfg::need(vsync, "on or off")?);
+            ("draw_distance", Value::Number(n)) => self.draw_distance = Some(n),
+            ("reflections", Value::Choice(r)) => self.reflections = Some(r.parse().unwrap_or(0)),
+            ("anisotropy", Value::Number(n)) => self.anisotropy = Some(n),
+            ("antialiasing", Value::Choice(aa)) => self.antialiasing = aa.parse().ok(),
+            ("scaler", Value::Choice(s)) => self.scaler = Scaler::from_key(s),
+            ("deadzone", Value::Number(n)) => self.deadzone = Some(n),
+            ("vibration", Value::Choice(f)) => self.vibration = Feedback::from_key(f),
+            ("vibration_strength", Value::Number(n)) => self.vibration_strength = Some(n),
+            ("impulse_triggers", Value::Choice(f)) => self.impulse_triggers = Feedback::from_key(f),
+            ("input_backend", Value::Choice(b)) => {
+                self.input_backend = Backend::ALL.into_iter().find(|x| x.key() == b)
             }
-            "draw_distance" => {
-                self.draw_distance = Some(cfg::need(cfg::parse_range(value, 0..=8), "0 to 8")?)
-            }
-            "reflections" => {
-                self.reflections = Some(cfg::need(
-                    parse_reflections(value),
-                    "original (128), 512, 1024 or 2048",
-                )?)
-            }
-            "anisotropy" => self.anisotropy = Some(cfg::need(parse_count(value, 16), "0 to 16")?),
-            "sky_glow" => return boolean(&mut self.sky_glow),
-            "xbox_brightness" => return boolean(&mut self.xbox_brightness),
-            "hd_characters" => return boolean(&mut self.hd_characters),
-            "hd_textures" => self.set_hd_textures(value),
-            "hd_textures_folder" => {
-                self.hd_textures_folder = Some(value.trim())
-                    .filter(|v| !v.is_empty())
-                    .map(PathBuf::from)
-            }
-            "deadzone" => {
-                self.deadzone = Some(cfg::need(cfg::parse_range(value, 0..=50), "0 to 50")?)
-            }
-            "vibration" => {
-                self.vibration = Some(cfg::need(
-                    Feedback::parse(value),
-                    "off, on, swapped or merged",
-                )?)
-            }
-            "vibration_strength" => {
-                self.vibration_strength =
-                    Some(cfg::need(cfg::parse_range(value, 0..=10), "0 to 10")?)
-            }
-            "impulse_triggers" => {
-                self.impulse_triggers = Some(cfg::need(
-                    Feedback::parse(value),
-                    "off, on, swapped or merged",
-                )?)
-            }
-            "input_backend" => {
-                self.input_backend = cfg::need(Backend::parse(value), "wgi, raw, dinput or xinput")?
-            }
-            "manual_gearbox" => return boolean(&mut self.manual_gearbox),
-            "cd_switcher" => return boolean(&mut self.cd_switcher),
-            "music_shuffle" => return boolean(&mut self.music_shuffle),
-            "skip_logos" => return boolean(&mut self.skip_logos),
-            "free_drive" => return boolean(&mut self.free_drive),
-            "horn" => return boolean(&mut self.horn),
-            "random_anims" => return boolean(&mut self.random_anims),
-            "show_miles" => return boolean(&mut self.show_miles),
-            "soundtrack_fix" => return boolean(&mut self.soundtrack_fix),
-            "scaler" if from == Source::File => {
-                self.scaler = Some(cfg::need(
-                    Scaler::parse(value),
-                    "nearest, pixel, fsr or linear",
-                )?)
-            }
-            // Options that were removed are ignored without a word.
-            "character_select" | "hot_plug" if from == Source::File => {}
+            (key, Value::Toggle(on)) => *self.toggle(key).ok_or(Rejected::Unknown)? = Some(on),
             _ => return Err(Rejected::Unknown),
         }
         Ok(())
     }
 
-    /// `hd_textures`: on or off, or (older files) the pack's folder, which
-    /// also turns it on.
-    fn set_hd_textures(&mut self, value: &str) {
-        match cfg::parse_bool(value) {
-            Some(on) => self.hd_textures = Some(on),
-            None => {
-                self.hd_textures = Some(true);
-                self.hd_textures_folder = Some(value.trim().into());
-            }
-        }
+    /// The on/off setting called `key`.
+    pub fn toggle(&mut self, key: &str) -> Option<&mut Option<bool>> {
+        Some(match key {
+            "fullscreen" => &mut self.fullscreen,
+            "sky_glow" => &mut self.sky_glow,
+            "xbox_brightness" => &mut self.xbox_brightness,
+            "hd_characters" => &mut self.hd_characters,
+            "hd_textures" => &mut self.hd_textures,
+            "manual_gearbox" => &mut self.manual_gearbox,
+            "cd_switcher" => &mut self.cd_switcher,
+            "music_shuffle" => &mut self.music_shuffle,
+            "skip_logos" => &mut self.skip_logos,
+            "free_drive" => &mut self.free_drive,
+            "horn" => &mut self.horn,
+            "random_anims" => &mut self.random_anims,
+            "show_miles" => &mut self.show_miles,
+            "soundtrack_fix" => &mut self.soundtrack_fix,
+            _ => return None,
+        })
     }
 
     /// Where the HD textures come from when they are on: the chosen folder,
@@ -645,6 +673,7 @@ impl Settings {
             game,
             runtime,
             saves,
+            look,
             resolution,
             fullscreen,
             antialiasing,
@@ -924,15 +953,48 @@ impl Settings {
         );
     }
 
-    /// Command-line values (`--fps-limit 120`); the launcher's own switches
-    /// (`--no-window`, ...) are taken out before.
-    pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Settings, String> {
-        let mut s = Settings::default();
-        match cfg::parse_args(args, &FLAG_KEYS, &[], |k, v| s.apply(k, v, Source::Args)) {
-            Ok(_) => Ok(s),
-            Err(cfg::ArgError::Help(_)) => Err(USAGE.into()),
-            Err(e) => Err(format!("{e}\n\n{USAGE}")),
+    /// Command-line values (`--fps-limit 120`), and the switches given
+    /// (`--no-window`, ...) in order. `Err` is the message to show: the
+    /// usage for `--help`, else what was wrong and the usage.
+    pub fn parse_args<I: IntoIterator<Item = String>>(
+        args: I,
+    ) -> Result<(Settings, Vec<String>), String> {
+        let mut args: Vec<String> = args.into_iter().collect();
+        let mut i = 0;
+        while i + 1 < args.len() {
+            match OPTIONS
+                .iter()
+                .find(|o| o.flag_name(KeyStyle::Underscore) == args[i])
+            {
+                Some(row) => {
+                    args[i + 1] = legacy_value(row.key, &args[i + 1]).into_owned();
+                    i += 2;
+                }
+                None => i += 1,
+            }
         }
+        let mut s = Settings::default();
+        match spec::parse_args(args, KeyStyle::Underscore, OPTIONS, &SWITCHES, |k, v| {
+            s.apply(k, v)
+        }) {
+            Ok(switches) => Ok((s, switches)),
+            Err(cfg::ArgError::Help(_)) => Err(usage()),
+            Err(e) => Err(format!("{e}\n\n{}", usage())),
+        }
+    }
+
+    /// The settings a run uses: the file's, over the look it names; then
+    /// a `--look` from the command line over those; then the other flags.
+    /// `preset` gives a look's settings (`form::look_settings`).
+    pub fn combine(file: Settings, args: Settings, preset: &dyn Fn(&str) -> Settings) -> Settings {
+        let mut base = match file.look {
+            Some(look) => preset(look).merged(file),
+            None => file,
+        };
+        if let Some(look) = args.look {
+            base = base.merged(preset(look));
+        }
+        base.merged(args)
     }
 }
 
@@ -941,12 +1003,12 @@ mod tests {
     use super::*;
 
     fn args(list: &[&str]) -> Result<Settings, String> {
-        Settings::parse_args(list.iter().map(|s| s.to_string()))
+        Settings::parse_args(list.iter().map(|s| s.to_string())).map(|(s, _)| s)
     }
 
     #[test]
     fn template_parses_to_the_defaults() {
-        let (s, warnings) = Settings::parse_file(TEMPLATE);
+        let (s, warnings) = Settings::parse_file(template().as_str());
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(s, Settings::default());
         assert_eq!(s.video_resolution(), None);
@@ -1109,15 +1171,17 @@ mod tests {
         assert!(args(&["--vsync", "half"]).is_err());
         assert!(args(&["--antialiasing", "4"]).is_err());
         assert!(args(&["--reflections", "256"]).is_err());
-        assert!(
-            args(&["--scaler", "fsr"]).is_err(),
-            "the window's setting only"
+        // The Linux helper's scaler is a flag too (or-play reads it).
+        assert_eq!(
+            args(&["--scaler", "fsr"]).unwrap().scaler,
+            Some(Scaler::Fsr)
         );
+        assert!(args(&["--scaler", "bicubic"]).is_err());
         assert!(args(&["--character-select", "on"]).is_err());
         // The messages name the flag and end with the usage.
         let bad = args(&["--resolution", "big"]).unwrap_err();
-        assert!(bad.starts_with("--resolution needs WIDTHxHEIGHT or original, not big\n\n"));
-        assert!(bad.ends_with(USAGE));
+        assert!(bad.starts_with("--resolution needs WIDTHxHEIGHT, original or off, not big\n\n"));
+        assert!(bad.ends_with(&usage()));
         let bad = args(&["--horn", "loud"]).unwrap_err();
         assert!(bad.starts_with("--horn needs on or off, not loud\n\n"));
         assert!(
@@ -1208,7 +1272,7 @@ mod tests {
         assert!(warnings[0].contains("line 2: unknown setting \"future\""));
         assert_eq!(
             warnings[1],
-            "launcher.cfg line 6: resolution needs WIDTHxHEIGHT (640x480 to 7680x4320) or original, not \"8000x100\""
+            "launcher.cfg line 6: resolution needs WIDTHxHEIGHT, original or off, not \"8000x100\""
         );
         assert_eq!(
             warnings[2],
@@ -1217,14 +1281,14 @@ mod tests {
         let (_, warnings) = Settings::parse_file("fullscreen = maybe\n");
         assert_eq!(
             warnings,
-            ["launcher.cfg line 1: fullscreen needs true or false, not \"maybe\""]
+            ["launcher.cfg line 1: fullscreen needs on or off, not \"maybe\""]
         );
     }
 
     #[test]
     fn set_key_keeps_the_rest_of_the_file() {
-        let filled = set_key(TEMPLATE, "game", r"D:\OutRun 2006");
-        assert_eq!(filled.lines().count(), TEMPLATE.lines().count());
+        let filled = set_key(template().as_str(), "game", r"D:\OutRun 2006");
+        assert_eq!(filled.lines().count(), template().as_str().lines().count());
         assert!(filled.contains("\ngame = D:\\OutRun 2006\n"));
         let (s, _) = Settings::parse_file(&filled);
         assert_eq!(s.game, Some(PathBuf::from(r"D:\OutRun 2006")));
@@ -1344,7 +1408,8 @@ mod tests {
     fn the_templates_examples_are_the_defaults() {
         // Every `#key = value` example, uncommented. Resolution is the one
         // example that differs from the default (the game's own 640x480).
-        let text: String = TEMPLATE
+        let text: String = template()
+            .as_str()
             .lines()
             .filter_map(|line| {
                 let rest = line.strip_prefix('#')?;

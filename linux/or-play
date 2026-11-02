@@ -2,7 +2,8 @@
 # Plays OutRun 2006: Coast 2 Coast on Linux through Wine and gamescope.
 #
 #   or-play           show the settings window, then start the game
-#   or-play --play    start the game with the saved settings (no window)
+#   or-play --play    start the game with the saved settings (no window);
+#                     launcher options follow, e.g. --play --scaler fsr
 #   or-play stop      end the game session or-play started, and its Wine
 #   or-play status    running or idle
 #
@@ -57,6 +58,21 @@ REA_LEGACY_LOCK=keep
 # the game and copies the saves back before it exits, so waiting for it is
 # waiting for the game (no REA_GAME_PROCS: watching the game's process
 # raced Wine's start-up and killed the launcher).
+
+# A one-run --scaler (the launcher's flag, which it also checks) is
+# gamescope's filter for this run instead of launcher.cfg's scaler.
+rea_hook_command() {
+  _or_prev=
+  for _or_arg in "$@"; do
+    if [ "$_or_prev" = --scaler ]; then
+      case $_or_arg in
+        nearest|pixel|fsr|linear) REA_SCALER_KEY= REA_DEFAULT_SCALER=$_or_arg ;;
+      esac
+    fi
+    _or_prev=$_or_arg
+  done
+  return 127
+}
 
 rea_init || exit 1
 # Tests load the configuration without running anything.
