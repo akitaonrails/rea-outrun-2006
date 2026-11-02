@@ -17,6 +17,7 @@ use crate::soundtrack;
 /// (`packaging/tweaks.txt`).
 pub const TWEAKS_DIR: &str = "tweaks";
 const VC_DIR: &str = "vc";
+const USER_INI: &str = "OutRun2006Tweaks.user.ini";
 const DXVK_MARKER: &str = ".or-dxvk";
 
 /// The x86 VC++ 2022 runtime DLLs the mod needs, deployed app-local (the
@@ -126,6 +127,7 @@ pub fn install(
     let tuned = texture_keys(&settings.apply_tweaks(&base), pack.as_deref());
     fs::write(&ini_path, &tuned)
         .map_err(|e| format!("cannot write {}: {e}", ini_path.display()))?;
+    reset_overlay_keys(&runtime.join(USER_INI), log)?;
 
     // The game's own settings, written whole (the mod deletes stale copies
     // older than three months; ours is fresh every run).
@@ -219,6 +221,36 @@ fn hd_texture_base(
     base
 }
 
+/// The (section, key) pairs the launcher writes to `OutRun2006Tweaks.ini`.
+fn owned_keys() -> Vec<(String, String)> {
+    ini::section_keys(&texture_keys(&Settings::default().apply_tweaks(""), None))
+}
+
+/// Tweaks reads `OutRun2006Tweaks.user.ini` over the main file (the F11
+/// overlay saves there), so the launcher's own keys are dropped from it
+/// and its settings win; the overlay's other choices stay.
+fn reset_overlay_keys(user_ini: &Path, log: &mut dyn FnMut(&str)) -> Result<(), String> {
+    let Ok(text) = fs::read_to_string(user_ini) else {
+        return Ok(());
+    };
+    let mut cleaned = text.clone();
+    let mut removed = 0;
+    for (section, key) in owned_keys() {
+        if ini::section_key(&cleaned, &section, &key).is_some() {
+            cleaned = ini::remove_section_key(&cleaned, &section, &key);
+            removed += 1;
+        }
+    }
+    if removed > 0 {
+        fs::write(user_ini, cleaned)
+            .map_err(|e| format!("cannot write {}: {e}", user_ini.display()))?;
+        log(&format!(
+            "tweaks: {removed} overlay settings the launcher owns were reset"
+        ));
+    }
+    Ok(())
+}
+
 /// Points Tweaks at the HD pack where it was unzipped (no copy), or at the
 /// game's own `textures` folder. The pack draws Clarissa as in the
 /// Japanese release, so she is restored with it.
@@ -287,7 +319,6 @@ mod tests {
         assert!(runtime.join("outrun2006.ini").is_file());
         let ini = fs::read_to_string(runtime.join("OutRun2006Tweaks.ini")).unwrap();
         assert!(ini.contains("FramerateLimit = 60"));
-        assert!(!ini.contains("Last_Wave.ogg"));
         assert!(ini.contains("01_Splash_wave.ogg"));
         assert!(
             ini.contains("[Bugfixes]"),
@@ -323,6 +354,42 @@ mod tests {
         assert!(ini.contains("FramerateInterpolation = true"));
         assert!(ini.contains("DrawDistanceIncrease = 8"));
 
+        fs::remove_dir_all(&at).unwrap();
+    }
+
+    #[test]
+    fn launcher_keys_win_over_the_overlay_file() {
+        let at = temp("overlay");
+        let launcher_dir = launcher(&at);
+        let runtime = at.join("runtime");
+        fs::create_dir_all(&runtime).unwrap();
+        let user = runtime.join(USER_INI);
+        fs::write(
+            &user,
+            "# overlay\n[Performance]\nFramerateLimit = 144\n\n[Overlay]\nEnabled = false\n\n[Graphics]\nSkyGlowFactor = 0\nUIScalingMode = 2\n",
+        )
+        .unwrap();
+        let mut lines = Vec::new();
+        let mut log = |line: &str| lines.push(line.to_string());
+        install(
+            &runtime,
+            &launcher_dir,
+            false,
+            &Settings::default(),
+            &mut log,
+        )
+        .unwrap();
+        let text = fs::read_to_string(&user).unwrap();
+        assert!(!text.contains("FramerateLimit"));
+        assert!(!text.contains("SkyGlowFactor"));
+        assert!(text.contains("# overlay"));
+        assert!(text.contains("Enabled = false"));
+        assert!(text.contains("UIScalingMode = 2"));
+        assert!(
+            lines
+                .iter()
+                .any(|l| l == "tweaks: 2 overlay settings the launcher owns were reset")
+        );
         fs::remove_dir_all(&at).unwrap();
     }
 
@@ -475,6 +542,5 @@ mod tests {
             assert!(tuned.contains(&format!("[{section}]")), "{section} missing");
         }
         assert!(tuned.contains("01_Splash_wave.ogg"));
-        assert!(!tuned.contains("Last_Wave.ogg"));
     }
 }

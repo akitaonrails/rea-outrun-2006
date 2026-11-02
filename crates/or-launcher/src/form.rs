@@ -73,7 +73,7 @@ pub struct Form {
     pub vibration_strength: u32,
     pub impulse_triggers: Feedback,
     pub input_backend: Backend,
-    pub hot_plug: bool,
+    pub manual_gearbox: bool,
 
     // Extras
     pub cd_switcher: bool,
@@ -82,7 +82,6 @@ pub struct Form {
     pub free_drive: bool,
     pub horn: bool,
     pub random_anims: bool,
-    pub character_select: bool,
     pub show_miles: bool,
     pub soundtrack_fix: bool,
 
@@ -103,13 +102,14 @@ fn landscape((a, b): (u32, u32)) -> Option<(u32, u32)> {
 }
 
 impl Form {
-    /// The original 2006 game: stock picture, stock extras. `wine` keeps
-    /// the borderless window (exclusive fullscreen is fragile there).
+    /// The original 2006 game: stock picture, stock extras, in a borderless
+    /// window (exclusive fullscreen is fragile and caps the frame rate).
     pub fn original(wine: bool) -> Form {
+        let _ = wine;
         Form {
             look: Look::Original,
             resolution: None,
-            fullscreen: !wine,
+            fullscreen: false,
             antialiasing: 0,
             fps_limit: 60,
             vsync: Vsync::On,
@@ -125,14 +125,13 @@ impl Form {
             vibration_strength: 7,
             impulse_triggers: Feedback::Off,
             input_backend: Backend::WindowsGaming,
-            hot_plug: true,
+            manual_gearbox: false,
             cd_switcher: false,
             music_shuffle: false,
             skip_logos: false,
             free_drive: false,
             horn: false,
             random_anims: false,
-            character_select: false,
             show_miles: false,
             soundtrack_fix: false,
             scaler: Scaler::Linear,
@@ -167,14 +166,13 @@ impl Form {
             vibration_strength: 7,
             impulse_triggers: Feedback::Swapped,
             input_backend: Backend::WindowsGaming,
-            hot_plug: true,
+            manual_gearbox: false,
             cd_switcher: true,
             music_shuffle: false,
             skip_logos: true,
             free_drive: true,
             horn: true,
             random_anims: true,
-            character_select: true,
             show_miles: true,
             soundtrack_fix: true,
             hd_folder: String::new(),
@@ -223,14 +221,13 @@ impl Form {
             vibration_strength: s.vibration_strength.unwrap_or(7),
             impulse_triggers: s.impulse_triggers.unwrap_or(Feedback::Swapped),
             input_backend: s.input_backend.unwrap_or(Backend::WindowsGaming),
-            hot_plug: s.hot_plug.unwrap_or(true),
+            manual_gearbox: s.manual_gearbox.unwrap_or(false),
             cd_switcher: s.cd_switcher.unwrap_or(true),
             music_shuffle: s.music_shuffle.unwrap_or(false),
             skip_logos: s.skip_logos.unwrap_or(true),
             free_drive: s.free_drive.unwrap_or(true),
             horn: s.horn.unwrap_or(true),
             random_anims: s.random_anims.unwrap_or(true),
-            character_select: s.character_select.unwrap_or(true),
             show_miles: s.show_miles.unwrap_or(true),
             soundtrack_fix: s.soundtrack_fix.unwrap_or(true),
             scaler: s.scaler.unwrap_or(Scaler::Linear),
@@ -344,14 +341,13 @@ impl Form {
         );
         put("impulse_triggers", Some(self.impulse_triggers.key().into()));
         put("input_backend", Some(self.input_backend.key().into()));
-        put("hot_plug", Some(self.hot_plug.to_string()));
+        put("manual_gearbox", Some(self.manual_gearbox.to_string()));
         put("cd_switcher", Some(self.cd_switcher.to_string()));
         put("music_shuffle", Some(self.music_shuffle.to_string()));
         put("skip_logos", Some(self.skip_logos.to_string()));
         put("free_drive", Some(self.free_drive.to_string()));
         put("horn", Some(self.horn.to_string()));
         put("random_anims", Some(self.random_anims.to_string()));
-        put("character_select", Some(self.character_select.to_string()));
         put("show_miles", Some(self.show_miles.to_string()));
         put("soundtrack_fix", Some(self.soundtrack_fix.to_string()));
         put("scaler", Some(self.scaler.key().into()));
@@ -364,7 +360,6 @@ impl Vsync {
         match self {
             Vsync::On => "on",
             Vsync::Off => "off",
-            Vsync::Half => "half",
         }
     }
 }
@@ -420,7 +415,7 @@ pub fn pad_actions(before: u16, now: u16) -> Vec<PadAction> {
 }
 
 /// The settings window's design size in points.
-pub const WINDOW: (f32, f32) = (880.0, 640.0);
+pub const WINDOW: (f32, f32) = (880.0, 760.0);
 
 /// How much larger to draw the window on a screen: 1x up to 1440 pixels on
 /// the shorter side, then in step with it (1.5x at 4K); never below the
@@ -442,11 +437,11 @@ pub fn window_zoom(screen: Option<(u32, u32)>, native: f32) -> f32 {
 /// listed), then common sizes.
 pub fn resolutions(screen: Option<(u32, u32)>) -> Vec<(Option<(u32, u32)>, String)> {
     let common = [(1920, 1080), (2560, 1440), (3840, 2160)];
-    let mut out = vec![(None, "Original 640×480".to_string())];
+    let mut out = vec![(None, "640×480".to_string())];
     if let Some(s) = screen.and_then(landscape)
         && !common.contains(&s)
     {
-        out.push((Some(s), format!("Screen {}×{}", s.0, s.1)));
+        out.push((Some(s), format!("{}×{}", s.0, s.1)));
     }
     for (w, h) in common {
         let label = match h {
@@ -502,10 +497,9 @@ mod tests {
         assert_eq!(f.vibration, Feedback::Off);
         assert_eq!(form(&f.save(config::TEMPLATE)).look, Look::Original);
 
-        // Under Wine, Original stays borderless.
-        let wine = Form::original(true);
-        assert!(!wine.fullscreen);
-        assert!(Form::original(false).fullscreen);
+        // Original is borderless everywhere.
+        assert!(!Form::original(true).fullscreen);
+        assert!(!Form::original(false).fullscreen);
     }
 
     #[test]
@@ -533,7 +527,7 @@ mod tests {
         f.fullscreen = true;
         f.antialiasing = 2;
         f.fps_limit = 0;
-        f.vsync = Vsync::Half;
+        f.vsync = Vsync::Off;
         f.draw_distance = 8;
         f.reflections = 1024;
         f.anisotropy = 8;
@@ -546,14 +540,13 @@ mod tests {
         f.vibration_strength = 5;
         f.impulse_triggers = Feedback::On;
         f.input_backend = Backend::XInput;
-        f.hot_plug = false;
+        f.manual_gearbox = true;
         f.cd_switcher = false;
         f.music_shuffle = true;
         f.skip_logos = false;
         f.free_drive = false;
         f.horn = false;
         f.random_anims = false;
-        f.character_select = false;
         f.show_miles = false;
         f.soundtrack_fix = false;
         f.scaler = Scaler::Fsr;
@@ -565,7 +558,7 @@ mod tests {
         let (s, warnings) = Settings::parse_file(&saved);
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(s.fps_cap(), 0);
-        assert_eq!(s.vsync, Some(Vsync::Half));
+        assert_eq!(s.vsync, Some(Vsync::Off));
         assert_eq!(s.feedback(), Feedback::Merged);
         assert_eq!(s.impulse(), Feedback::On);
         assert_eq!(s.backend(), Backend::XInput);

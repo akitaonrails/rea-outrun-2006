@@ -57,8 +57,7 @@ pub fn set_section_key(text: &str, section: &str, key: &str, value: &str) -> Str
     join(lines, text)
 }
 
-/// Removes every active `key = …` line inside `[section]` (used to prune
-/// the non-racing entries from `[CDTracks]`).
+/// Removes every active `key = …` line inside `[section]`.
 pub fn remove_section_key(text: &str, section: &str, key: &str) -> String {
     let mut lines: Vec<String> = Vec::new();
     let mut inside = false;
@@ -77,6 +76,23 @@ pub fn remove_section_key(text: &str, section: &str, key: &str) -> String {
         }
     }
     join(lines, text)
+}
+
+/// Every active `(section, key)` pair in the file.
+pub fn section_keys(text: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut section = None;
+    for line in text.lines() {
+        let t = line.trim();
+        if t.starts_with('[') && t.ends_with(']') {
+            section = Some(t[1..t.len() - 1].trim().to_string());
+        } else if !t.starts_with('#')
+            && let (Some(section), Some((key, _))) = (&section, t.split_once('='))
+        {
+            out.push((section.clone(), key.trim().to_string()));
+        }
+    }
+    out
 }
 
 /// Reads `key` from `[section]`.
@@ -168,6 +184,15 @@ mod tests {
         // A commented line is kept.
         let with_comment = "[S]\n# key = 1\nother = 2\n";
         assert_eq!(remove_section_key(with_comment, "S", "key"), with_comment);
+    }
+
+    #[test]
+    fn lists_section_and_key_pairs() {
+        let keys = section_keys(FILE);
+        assert!(keys.contains(&("Performance".into(), "FramerateLimit".into())));
+        assert!(keys.contains(&("Controls".into(), "VibrationMode".into())));
+        assert!(!keys.iter().any(|(_, k)| k.starts_with('#')));
+        assert_eq!(keys.len(), 7);
     }
 
     #[test]

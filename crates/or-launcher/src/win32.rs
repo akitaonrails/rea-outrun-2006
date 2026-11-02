@@ -295,3 +295,145 @@ pub fn prefer_fast_gpu(exe: &Path) -> Result<bool, String> {
     write_string(&key, &name, "GpuPreference=2;")?;
     Ok(true)
 }
+
+// Downloads (the HD texture pack), through WinHTTP: part of Windows and of
+// Wine, so no TLS stack of our own.
+
+struct Internet(*mut c_void);
+
+impl Drop for Internet {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe {
+                windows_sys::Win32::Networking::WinHttp::WinHttpCloseHandle(self.0);
+            }
+        }
+    }
+}
+
+fn last_error(what: &str) -> String {
+    let code = unsafe { windows_sys::Win32::Foundation::GetLastError() };
+    format!("{what} failed (error {code})")
+}
+
+/// HTTPS GETs with WinHTTP. Redirects (GitHub's release downloads go to
+/// its file servers) are followed by WinHTTP itself.
+pub struct WinHttp;
+
+impl or_launcher::hdpack::Fetch for WinHttp {
+    fn fetch(
+        &self,
+        url: &str,
+        from: u64,
+        start: &mut dyn FnMut(bool),
+        chunk: &mut dyn FnMut(&[u8]) -> bool,
+    ) -> Result<(), String> {
+        use windows_sys::Win32::Networking::WinHttp::*;
+        let rest = url
+            .strip_prefix("https://")
+            .ok_or_else(|| format!("not an https address: {url}"))?;
+        let (host, path) = rest.split_at(rest.find('/').unwrap_or(rest.len()));
+        let path = if path.is_empty() { "/" } else { path };
+        unsafe {
+            let session = Internet(WinHttpOpen(
+                wide(concat!("OutRunLauncher/", env!("CARGO_PKG_VERSION"))).as_ptr(),
+                WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                null(),
+                null(),
+                0,
+            ));
+            if session.0.is_null() {
+                return Err(last_error("WinHttpOpen"));
+            }
+            WinHttpSetTimeouts(session.0, 30_000, 30_000, 30_000, 60_000);
+            let connection = Internet(WinHttpConnect(
+                session.0,
+                wide(host).as_ptr(),
+                INTERNET_DEFAULT_HTTPS_PORT,
+                0,
+            ));
+            if connection.0.is_null() {
+                return Err(last_error("connecting"));
+            }
+            let request = Internet(WinHttpOpenRequest(
+                connection.0,
+                wide("GET").as_ptr(),
+                wide(path).as_ptr(),
+                null(),
+                null(),
+                null(),
+                WINHTTP_FLAG_SECURE,
+            ));
+            if request.0.is_null() {
+                return Err(last_error("WinHttpOpenRequest"));
+            }
+            let headers = if from > 0 {
+                wide(format!("Range: bytes={from}-"))
+            } else {
+                Vec::new()
+            };
+            let (header_ptr, header_len) = if headers.is_empty() {
+                (null(), 0)
+            } else {
+                (headers.as_ptr(), (headers.len() - 1) as u32)
+            };
+            if WinHttpSendRequest(request.0, header_ptr, header_len, null(), 0, 0, 0) == 0 {
+                return Err(last_error("sending the request"));
+            }
+            if WinHttpReceiveResponse(request.0, null_mut()) == 0 {
+                return Err(last_error("receiving the response"));
+            }
+            let mut status: u32 = 0;
+            let mut size = 4u32;
+            WinHttpQueryHeaders(
+                request.0,
+                WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                null(),
+                (&mut status as *mut u32).cast(),
+                &mut size,
+                null_mut(),
+            );
+            match status {
+                206 => start(true),
+                200 => start(from == 0),
+                code => return Err(format!("the server answered {code}")),
+            }
+            let mut buffer = vec![0u8; 256 * 1024];
+            loop {
+                let mut read = 0u32;
+                if WinHttpReadData(
+                    request.0,
+                    buffer.as_mut_ptr().cast(),
+                    buffer.len() as u32,
+                    &mut read,
+                ) == 0
+                {
+                    return Err(last_error("reading"));
+                }
+                if read == 0 {
+                    return Ok(());
+                }
+                if !chunk(&buffer[..read as usize]) {
+                    return Err("stopped".into());
+                }
+            }
+        }
+    }
+}
+
+/// Free bytes for this user on the drive holding `dir` (or its nearest
+/// existing parent).
+pub fn free_space(dir: &Path) -> Option<u64> {
+    use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+    let existing = dir.ancestors().find(|p| p.exists())?;
+    let mut free = 0u64;
+    let ok = unsafe {
+        GetDiskFreeSpaceExW(
+            wide(existing.as_os_str()).as_ptr(),
+            &mut free,
+            null_mut(),
+            null_mut(),
+        )
+    };
+    (ok != 0).then_some(free)
+}

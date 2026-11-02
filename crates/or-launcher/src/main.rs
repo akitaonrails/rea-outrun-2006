@@ -127,6 +127,60 @@ mod app {
         }
     }
 
+    /// `--download-hd-pack`: the HD Pack tab's download without the window,
+    /// logging progress every 10 percent; switches the pack on when done.
+    fn download_hd_pack(settings_path: &Path) -> Result<u32, String> {
+        use or_launcher::hdpack::{self, Pack, Phase};
+        let pack = Pack::pinned();
+        let home = home();
+        let job = std::sync::Arc::new(hdpack::Job::default());
+        let worker = job.clone();
+        let thread_pack = pack.clone();
+        let thread_home = home.clone();
+        let handle = std::thread::spawn(move || {
+            let free = win32::free_space(&thread_home);
+            hdpack::install(&thread_pack, &thread_home, free, &win32::WinHttp, &worker)
+        });
+        let mut logged = None;
+        while !handle.is_finished() {
+            let step = match job.phase() {
+                Phase::Downloading { done, total } => {
+                    Some(("downloading", done * 10 / total.max(1)))
+                }
+                Phase::Unpacking { done, total } => Some(("unpacking", done * 10 / total.max(1))),
+                _ => None,
+            };
+            if step.is_some() && step != logged {
+                let (what, tenth) = step.unwrap_or_default();
+                log_line(&format!("hd pack: {what} {}%", tenth * 10));
+                logged = step;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        match handle
+            .join()
+            .map_err(|_| "the download stopped unexpectedly".to_string())?
+        {
+            Phase::Done(dir) => {
+                let text =
+                    fs::read_to_string(settings_path).unwrap_or_else(|_| config::TEMPLATE.into());
+                let text = config::set_key(&text, "hd_textures", "on");
+                let text = config::set_key(&text, "hd_textures_folder", &dir.display().to_string());
+                if let Some(parent) = settings_path.parent() {
+                    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                }
+                fs::write(settings_path, text).map_err(|e| e.to_string())?;
+                log_line(&format!(
+                    "hd pack: installed in {} and switched on",
+                    dir.display()
+                ));
+                Ok(0)
+            }
+            Phase::Failed(e) => Err(e),
+            other => Err(format!("hd pack: {other:?}")),
+        }
+    }
+
     pub fn run() -> Result<u32, String> {
         log_line(concat!("OutRunLauncher ", env!("CARGO_PKG_VERSION")));
         let settings_path = settings_path();
@@ -139,6 +193,9 @@ mod app {
         let linux = take_flag(&mut cli, "--linux");
         let no_window = take_flag(&mut cli, "--no-window");
         let check_only = take_flag(&mut cli, "--check");
+        if take_flag(&mut cli, "--download-hd-pack") {
+            return download_hd_pack(&settings_path);
+        }
         if settings_only || (cli.is_empty() && !no_window && !check_only) {
             if win32::is_wine() {
                 match win32::prefer_gpu_opengl() {
@@ -149,7 +206,7 @@ mod app {
             }
             let text =
                 fs::read_to_string(&settings_path).unwrap_or_else(|_| config::TEMPLATE.into());
-            match ui::show(&settings_path, &text, linux) {
+            match ui::show(&settings_path, &home(), &text, linux) {
                 Ok(ui::Outcome::Play) => {
                     log_line("settings window: play");
                     if settings_only {

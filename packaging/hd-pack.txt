@@ -1,0 +1,7 @@
+# The community HD texture pack the launcher downloads when the player asks
+# (HD Pack tab): Envido32's compilation of the Sonic-TV OR2006Sprites
+# upscales. It has no licence, so it is never bundled; the launcher fetches
+# it from its own GitHub release. Compiled into OutRunLauncher.exe; to move
+# to a newer pack, see docs/HD_TEXTURES.md.
+# One line: URL SHA-256 zip-bytes unpacked-bytes.
+https://github.com/envido32/OR2006Sprites/releases/download/v0.26.09a/OR2-HD-GUI-v0.26.09a.zip 6bc9d6037b635d9e643f1a95cb82ccf98c90feb51da0193e0c51e6b700087878 325966152 3168683238

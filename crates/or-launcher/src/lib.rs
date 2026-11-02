@@ -5,6 +5,7 @@
 pub mod config;
 pub mod edition;
 pub mod form;
+pub mod hdpack;
 pub mod ini;
 pub mod runtime;
 pub mod soundtrack;

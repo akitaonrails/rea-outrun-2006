@@ -2,36 +2,45 @@
 //! through Wine by `or-play`). What it edits and saves is `form::Form`;
 //! this module only draws it.
 //!
-//! Look: the game's own — a coast at sunset. Deep dusk blue with one
-//! sunset-orange accent for whatever is chosen, a hot pink stripe beside
-//! it, and a condensed italic title like the arcade cabinet's. Four tabs
+//! Look: the car's colours. A black base with warm charcoal panels, rosso
+//! red for actions (Play, the tab underline), Modena yellow for whatever is
+//! chosen, a red and a yellow stripe in the corner, and a condensed italic
+//! title like the arcade cabinet's. Five tabs
 //! keep it short: Play (the game folder and one choice of look), Picture,
-//! Controls and Extras.
+//! HD Pack, Controls and Extras.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use eframe::egui::{
-    self, Align2, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Key, Mesh,
-    Rect, Sense, Shape, Stroke, StrokeKind, TextureHandle, Vec2, pos2, vec2,
+    self, Align, Align2, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Key,
+    Mesh, Rect, Sense, Shape, Stroke, StrokeKind, TextureHandle, Vec2, pos2, vec2,
 };
 
 use or_launcher::config::{self, Settings};
 use or_launcher::config::{Backend, Feedback, Vsync};
 use or_launcher::form::{self, Form, Look, PadAction};
-use or_launcher::{edition, tweaks};
+use or_launcher::{edition, hdpack, tweaks};
 
 use crate::win32;
 
-const DUSK: Color32 = Color32::from_rgb(0x0b, 0x16, 0x36);
-const PANEL: Color32 = Color32::from_rgb(0x16, 0x26, 0x4e);
-const LINE: Color32 = Color32::from_rgb(0x2a, 0x42, 0x7c);
-const SUN: Color32 = Color32::from_rgb(0xff, 0x9e, 0x2c);
-const SUN_BRIGHT: Color32 = Color32::from_rgb(0xff, 0xc1, 0x4d);
-const PINK: Color32 = Color32::from_rgb(0xff, 0x5e, 0x8a);
-const INK: Color32 = Color32::from_rgb(0xf5, 0xf8, 0xff);
-const MUTED: Color32 = Color32::from_rgb(0xa9, 0xb7, 0xd9);
-const ON_SUN: Color32 = Color32::from_rgb(0x2a, 0x15, 0x03);
-const ERROR: Color32 = Color32::from_rgb(0xff, 0x8a, 0x80);
+// Rosso, Modena yellow and black: the colours of OutRun's car.
+const BASE: Color32 = Color32::from_rgb(0x0f, 0x0c, 0x0b);
+const PANEL: Color32 = Color32::from_rgb(0x21, 0x1b, 0x18);
+const LINE: Color32 = Color32::from_rgb(0x3d, 0x34, 0x30);
+/// The action colour: Play, primary buttons, the tab underline. Never text
+/// on the dark base (3.5:1); white on it is 5.5:1.
+const RED: Color32 = Color32::from_rgb(0xd4, 0x00, 0x00);
+const RED_BRIGHT: Color32 = Color32::from_rgb(0xe8, 0x16, 0x0e);
+/// Chosen and good: selected chips, switches on, highlighted text.
+const YELLOW: Color32 = Color32::from_rgb(0xff, 0xd4, 0x00);
+const INK: Color32 = Color32::from_rgb(0xf6, 0xf1, 0xea);
+const MUTED: Color32 = Color32::from_rgb(0xab, 0x9f, 0x96);
+const ON_RED: Color32 = Color32::WHITE;
+const ON_YELLOW: Color32 = Color32::from_rgb(0x1a, 0x13, 0x00);
+/// Light coral: errors are text, and red is never text, so the two don't
+/// meet.
+const ERROR: Color32 = Color32::from_rgb(0xff, 0x95, 0x80);
 
 const SIZE: Vec2 = vec2(form::WINDOW.0, form::WINDOW.1);
 const PHOTO_W: f32 = 300.0;
@@ -48,7 +57,7 @@ pub enum Outcome {
 /// Shows the window over `settings_path` (its text, or the template for a
 /// first run). `linux` adds the gamescope scaler choice. Errors when no
 /// window can be made (no OpenGL); the caller then goes on without it.
-pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, String> {
+pub fn show(settings_path: &Path, home: &Path, text: &str, linux: bool) -> Result<Outcome, String> {
     let mut outcome = Outcome::Closed;
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -64,6 +73,7 @@ pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, St
         ..Default::default()
     };
     let path = settings_path.to_path_buf();
+    let home = home.to_path_buf();
     let text = text.to_string();
     eframe::run_native(
         "OutRun 2006",
@@ -73,6 +83,7 @@ pub fn show(settings_path: &Path, text: &str, linux: bool) -> Result<Outcome, St
             Ok(Box::new(Window::new(
                 &cc.egui_ctx,
                 path,
+                home,
                 text,
                 linux,
                 &mut outcome,
@@ -124,13 +135,13 @@ fn set_style(ctx: &egui::Context) {
     ctx.all_styles_mut(|style| {
         let v = &mut style.visuals;
         *v = egui::Visuals::dark();
-        v.panel_fill = DUSK;
+        v.panel_fill = BASE;
         v.extreme_bg_color = PANEL;
         v.text_edit_bg_color = Some(PANEL);
         v.override_text_color = Some(INK);
-        v.selection.bg_fill = SUN.gamma_multiply(0.5);
-        v.selection.stroke = Stroke::new(1.0, SUN);
-        v.text_cursor.stroke = Stroke::new(2.0, SUN);
+        v.selection.bg_fill = RED.gamma_multiply(0.6);
+        v.selection.stroke = Stroke::new(1.0, YELLOW);
+        v.text_cursor.stroke = Stroke::new(2.0, YELLOW);
         for w in [
             &mut v.widgets.inactive,
             &mut v.widgets.hovered,
@@ -141,7 +152,7 @@ fn set_style(ctx: &egui::Context) {
             w.corner_radius = CornerRadius::same(6);
         }
         v.widgets.hovered.bg_stroke = Stroke::new(1.0, MUTED);
-        v.widgets.active.bg_stroke = Stroke::new(1.0, SUN);
+        v.widgets.active.bg_stroke = Stroke::new(1.0, RED);
         style.spacing.item_spacing = vec2(8.0, 8.0);
     });
 }
@@ -154,16 +165,23 @@ fn named(name: &str, size: f32) -> FontId {
     FontId::new(size, FontFamily::Name(name.into()))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Tab {
     Play,
     Picture,
+    HdPack,
     Controls,
     Extras,
 }
 
 impl Tab {
-    const ALL: [Tab; 4] = [Tab::Play, Tab::Picture, Tab::Controls, Tab::Extras];
+    const ALL: [Tab; 5] = [
+        Tab::Play,
+        Tab::Picture,
+        Tab::HdPack,
+        Tab::Controls,
+        Tab::Extras,
+    ];
 
     /// The tab `by` places along (wrapping), for LB and RB.
     fn step(self, by: isize) -> Tab {
@@ -240,13 +258,50 @@ struct Window<'a> {
     /// asks of this frame.
     pad_held: u16,
     pad_actions: Vec<PadAction>,
+    /// The launcher's home folder, where the HD pack is downloaded.
+    home: PathBuf,
+    pack: hdpack::Pack,
+    /// The HD pack download in progress, its speed, and how the last one
+    /// ended.
+    hd_job: Option<Arc<hdpack::Job>>,
+    hd_rate: Rate,
+    hd_result: Option<(String, Color32)>,
     outcome: &'a mut Outcome,
+}
+
+/// Download speed, smoothed over the last seconds.
+#[derive(Default)]
+struct Rate {
+    sample: Option<(std::time::Instant, u64)>,
+    bytes_per_second: f64,
+}
+
+impl Rate {
+    fn update(&mut self, done: u64) -> f64 {
+        let now = std::time::Instant::now();
+        match self.sample {
+            Some((at, before)) if now.duration_since(at).as_secs_f64() >= 1.0 => {
+                let rate =
+                    done.saturating_sub(before) as f64 / now.duration_since(at).as_secs_f64();
+                self.bytes_per_second = if self.bytes_per_second == 0.0 {
+                    rate
+                } else {
+                    0.7 * self.bytes_per_second + 0.3 * rate
+                };
+                self.sample = Some((now, done));
+            }
+            None => self.sample = Some((now, done)),
+            _ => {}
+        }
+        self.bytes_per_second
+    }
 }
 
 impl<'a> Window<'a> {
     fn new(
         ctx: &egui::Context,
         path: PathBuf,
+        home: PathBuf,
         text: String,
         linux: bool,
         outcome: &'a mut Outcome,
@@ -258,6 +313,15 @@ impl<'a> Window<'a> {
         } else {
             Form::new(&Settings::parse_file(&text).0, screen, wine)
         };
+        let mut form = form;
+        let pack = hdpack::Pack::pinned();
+        // A pack downloaded earlier is offered even if its settings weren't
+        // saved.
+        if form.hd_folder.trim().is_empty()
+            && let Some(dir) = hdpack::installed(&pack, &home)
+        {
+            form.hd_folder = dir.display().to_string();
+        }
         let check = check_game(&form.game);
         Window {
             checked: form.game.clone(),
@@ -277,6 +341,11 @@ impl<'a> Window<'a> {
             rumble_test: None,
             pad_held: 0,
             pad_actions: Vec::new(),
+            home,
+            pack,
+            hd_job: None,
+            hd_rate: Rate::default(),
+            hd_result: None,
             outcome,
         }
     }
@@ -310,7 +379,7 @@ impl<'a> Window<'a> {
     }
 
     fn ready(&self) -> bool {
-        matches!(self.check, Check::Found(_))
+        matches!(self.check, Check::Found(_)) && self.hd_job.is_none()
     }
 
     fn play(&mut self, ctx: &egui::Context) {
@@ -379,7 +448,7 @@ impl eframe::App for Window<'_> {
             self.fit_screen(&ctx);
         }
         let full = ui.max_rect();
-        ui.painter().rect_filled(full, 0.0, DUSK);
+        ui.painter().rect_filled(full, 0.0, BASE);
         self.draw_photo(ui, full);
         draw_decal(ui, full);
 
@@ -402,25 +471,32 @@ impl eframe::App for Window<'_> {
             ui.label(
                 egui::RichText::new("COAST 2 COAST")
                     .font(named("condensed", 17.0))
-                    .color(SUN),
+                    .color(YELLOW),
             );
             ui.add_space(4.0);
             self.status(ui);
             ui.add_space(4.0);
             self.tabs(ui);
             ui.add_space(14.0);
-            match self.tab {
-                Tab::Play => self.play_tab(ui),
-                Tab::Picture => self.picture_tab(ui),
-                Tab::Controls => self.controls_tab(ui),
-                Tab::Extras => self.extras_tab(ui),
-            }
+            // Long tabs scroll inside the body instead of running under
+            // the footer.
+            egui::ScrollArea::vertical()
+                .id_salt(self.tab)
+                .auto_shrink([false, false])
+                .show(ui, |ui| match self.tab {
+                    Tab::Play => self.play_tab(ui),
+                    Tab::Picture => self.picture_tab(ui),
+                    Tab::HdPack => self.hd_tab(ui),
+                    Tab::Controls => self.controls_tab(ui),
+                    Tab::Extras => self.extras_tab(ui),
+                });
         });
         let footer = Rect::from_min_max(
             pos2(content.left(), content.bottom() - footer_h),
             content.max,
         );
         self.footer(ui, footer, &ctx);
+        self.poll_download();
 
         if ctx.input(|i| i.key_pressed(Key::Enter)) && !ctx.egui_wants_keyboard_input() {
             self.play(&ctx);
@@ -461,14 +537,9 @@ impl Window<'_> {
                 Color32::WHITE,
             );
         } else {
-            // Without the artwork: the sunset itself.
+            // Without the artwork: a black-to-red-to-yellow sky.
             let mut mesh = Mesh::default();
-            let colors = [
-                DUSK,
-                PINK.gamma_multiply(0.55),
-                SUN.gamma_multiply(0.8),
-                SUN,
-            ];
+            let colors = [BASE, RED.gamma_multiply(0.45), RED, YELLOW];
             let n = colors.len() as f32;
             for (i, &color) in colors.iter().enumerate() {
                 let y0 = rect.top() + rect.height() * i as f32 / n;
@@ -485,7 +556,7 @@ impl Window<'_> {
                 let _ = &mut mesh;
             }
         }
-        // Blue fades join the photo to the page.
+        // Fades to black join the photo to the page.
         gradient(
             p,
             Rect::from_min_max(
@@ -527,6 +598,10 @@ impl Window<'_> {
     fn status(&self, ui: &mut egui::Ui) {
         let (text, color) = match (&self.error, &self.check) {
             (Some(e), _) => (e.clone(), ERROR),
+            (None, Check::Found(_)) if self.hd_job.is_some() => (
+                "Downloading the HD pack; Play waits until it's done.".to_string(),
+                MUTED,
+            ),
             (None, Check::Found(_)) => ("Ready. Press Play or Enter.".to_string(), MUTED),
             (None, _) => (
                 "First, show the launcher where the game is.".to_string(),
@@ -542,6 +617,7 @@ impl Window<'_> {
             for (tab, name) in [
                 (Tab::Play, "Play"),
                 (Tab::Picture, "Picture"),
+                (Tab::HdPack, "HD Pack"),
                 (Tab::Controls, "Controls"),
                 (Tab::Extras, "Extras"),
             ] {
@@ -560,7 +636,7 @@ impl Window<'_> {
                         pos2(rect.left(), rect.bottom() - 3.0),
                         vec2(rect.width(), 3.0),
                     );
-                    ui.painter().rect_filled(bar, 0.0, SUN);
+                    ui.painter().rect_filled(bar, 0.0, RED);
                 }
                 if resp
                     .on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -599,7 +675,7 @@ impl Window<'_> {
                 "The game folder is only read, never changed.".to_string(),
                 MUTED,
             ),
-            Check::Found(name) => (format!("Found: {name}"), SUN),
+            Check::Found(name) => (format!("Found: {name}"), YELLOW),
             Check::Problem(p) => (p.clone(), ERROR),
         };
         ui.label(egui::RichText::new(note).font(font(13.0)).color(color));
@@ -686,7 +762,7 @@ impl Window<'_> {
             chips(ui, &FRAME_RATES, &mut f.fps_limit);
             if f.fps_limit > 60 || f.fps_limit == 0 {
                 ui.label(
-                    egui::RichText::new("Above 60 the picture is interpolated between the game's 60 ticks (experimental).")
+                    egui::RichText::new("Above 60 the picture is interpolated (experimental).")
                         .font(font(13.0))
                         .color(MUTED),
                 );
@@ -708,49 +784,24 @@ impl Window<'_> {
             chips(ui, &ANTIALIASING, &mut f.antialiasing);
             if f.antialiasing > 0 {
                 ui.label(
-                    egui::RichText::new("4x supersampling: much sharper trackside cloth and barriers; pairs best with an NVIDIA card.")
+                    egui::RichText::new("Smooths edges. On NVIDIA under Windows, trackside cloth and barriers are supersampled too.")
                         .font(font(13.0))
                         .color(MUTED),
                 );
             }
         });
         row(ui, "", &mut |ui| {
-            toggle(
-                ui,
-                &mut f.sky_glow,
-                "Glowing sky (the console versions' bloom)",
-            );
-            toggle(
-                ui,
-                &mut f.xbox_brightness,
-                "Brighter picture (the Xbox releases)",
-            );
-            toggle(ui, &mut f.hd_characters, "Hi-def passenger models");
-            toggle(
-                ui,
-                &mut f.hd_textures,
-                "HD texture pack (the community's redrawn menus, HUD and sprites)",
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 18.0;
+                toggle(ui, &mut f.sky_glow, "Sky glow")
+                    .on_hover_text("The console versions' glowing sky (bloom)");
+                toggle(ui, &mut f.xbox_brightness, "Xbox brightness")
+                    .on_hover_text("The Xbox releases' brighter picture");
+            });
+            toggle(ui, &mut f.hd_characters, "Hi-def characters").on_hover_text(
+                "The hi-def driver and passenger models the PC release shipped unused",
             );
         });
-        if f.hd_textures {
-            row(ui, "HD pack", &mut |ui| {
-                ui.vertical(|ui| {
-                    folder_field(
-                        ui,
-                        &mut f.hd_folder,
-                        "The folder you unzipped the pack into",
-                        "Choose the folder you unzipped the HD texture pack into",
-                    );
-                    ui.horizontal(|ui| {
-                        if outline_button(ui, "Get it…").clicked() {
-                            win32::open_url(config::HD_PACK_PAGE);
-                        }
-                        let (note, color) = hd_pack_note(&f.hd_folder);
-                        ui.label(egui::RichText::new(note).font(font(13.0)).color(color));
-                    });
-                });
-            });
-        }
         if self.linux {
             row(ui, "Scaler", &mut |ui| {
                 let options: Vec<_> = form::SCALERS.iter().map(|s| (s.0, s.1)).collect();
@@ -765,6 +816,209 @@ impl Window<'_> {
         if self.form != before {
             self.form.look = Form::look_of(&self.form, self.screen, self.wine);
         }
+    }
+
+    fn hd_tab(&mut self, ui: &mut egui::Ui) {
+        heading(ui, "HD texture pack");
+        ui.label(
+            egui::RichText::new(
+                "The community's redrawn menus, HUD, sprites and button prompts at high resolution \
+                 (Envido32's compilation of the Sonic-TV OR2006Sprites project). An optional download \
+                 from its own GitHub release, never bundled with the launcher.",
+            )
+            .font(font(13.5))
+            .color(MUTED),
+        );
+        if ui
+            .link(
+                egui::RichText::new("The pack's page and credits")
+                    .font(font(13.0))
+                    .color(YELLOW),
+            )
+            .clicked()
+        {
+            win32::open_url(config::HD_PACK_PAGE);
+        }
+        ui.add_space(12.0);
+
+        if let Some(job) = self.hd_job.clone() {
+            self.download_progress(ui, &job);
+        } else if tweaks::texture_base(Path::new(self.form.hd_folder.trim())).is_some() {
+            self.pack_ready(ui);
+        } else {
+            self.pack_offer(ui);
+        }
+        if let Some((text, color)) = &self.hd_result {
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new(text).font(font(13.5)).color(*color));
+        }
+
+        ui.add_space(18.0);
+        heading(ui, "Already have it?");
+        let before = self.form.hd_folder.clone();
+        folder_field(
+            ui,
+            &mut self.form.hd_folder,
+            "The folder you unzipped the pack into",
+            "Choose the folder you unzipped the HD texture pack into",
+        );
+        if self.form.hd_folder != before {
+            self.hd_result = None;
+        }
+        let (note, color) = hd_pack_note(&self.form.hd_folder);
+        ui.label(egui::RichText::new(note).font(font(13.0)).color(color));
+    }
+
+    /// No pack yet: the download offer (or its resumption).
+    fn pack_offer(&mut self, ui: &mut egui::Ui) {
+        let partial = hdpack::partial(&self.pack, &self.home);
+        let label = if partial > 0 {
+            "Resume download"
+        } else {
+            "Download"
+        };
+        ui.horizontal(|ui| {
+            if primary_button(ui, label).clicked() {
+                self.start_download(ui.ctx());
+            }
+            ui.add_space(10.0);
+            let detail = if partial > 0 {
+                format!(
+                    "{:.0} of {:.0} MB already here.",
+                    hdpack::mb(partial),
+                    hdpack::mb(self.pack.size)
+                )
+            } else {
+                format!(
+                    "{:.0} MB, {:.1} GB once unpacked. The launcher downloads, checks and unpacks it for you.",
+                    hdpack::mb(self.pack.size),
+                    hdpack::gb(self.pack.unpacked)
+                )
+            };
+            ui.label(egui::RichText::new(detail).font(font(13.0)).color(MUTED));
+        });
+    }
+
+    /// A pack is in place: switch it on or off, or remove the download.
+    fn pack_ready(&mut self, ui: &mut egui::Ui) {
+        let downloaded = hdpack::installed(&self.pack, &self.home);
+        let ours = downloaded
+            .as_ref()
+            .is_some_and(|dir| Path::new(self.form.hd_folder.trim()) == dir.as_path());
+        toggle(ui, &mut self.form.hd_textures, "Use the HD texture pack");
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            let what = if ours {
+                format!("Downloaded: {}", self.pack.name())
+            } else {
+                "Your own copy of the pack".to_string()
+            };
+            ui.label(egui::RichText::new(what).font(font(13.5)).color(YELLOW));
+            if ours {
+                ui.add_space(10.0);
+                if outline_button(ui, "Remove").clicked() {
+                    match hdpack::remove(&self.pack, &self.home) {
+                        Ok(()) => {
+                            self.form.hd_textures = false;
+                            self.form.hd_folder.clear();
+                            self.hd_result = Some((
+                                format!("Removed; {:.1} GB freed.", hdpack::gb(self.pack.unpacked)),
+                                MUTED,
+                            ));
+                        }
+                        Err(e) => self.hd_result = Some((e, ERROR)),
+                    }
+                }
+            }
+        });
+        ui.label(
+            egui::RichText::new(
+                "With the pack on, Clarissa looks as in the Japanese release, which its sprites are drawn for.",
+            )
+            .font(font(13.0))
+            .color(MUTED),
+        );
+    }
+
+    fn download_progress(&mut self, ui: &mut egui::Ui, job: &hdpack::Job) {
+        let (fraction, text) = match job.phase() {
+            hdpack::Phase::Downloading { done, total } => {
+                let rate = self.hd_rate.update(done);
+                let speed = if rate > 0.0 {
+                    let left = total.saturating_sub(done) as f64 / rate;
+                    format!(" · {:.1} MB/s · {}", rate / 1_000_000.0, time_left(left))
+                } else {
+                    String::new()
+                };
+                (
+                    done as f32 / total.max(1) as f32,
+                    format!(
+                        "Downloading {:.0} of {:.0} MB{speed}",
+                        hdpack::mb(done),
+                        hdpack::mb(total)
+                    ),
+                )
+            }
+            hdpack::Phase::Verifying => (1.0, "Checking the download…".to_string()),
+            hdpack::Phase::Unpacking { done, total } => (
+                done as f32 / total.max(1) as f32,
+                format!(
+                    "Unpacking {:.1} of {:.1} GB",
+                    hdpack::gb(done),
+                    hdpack::gb(total)
+                ),
+            ),
+            _ => (0.0, "Connecting…".to_string()),
+        };
+        progress_bar(ui, fraction);
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(text).font(font(13.5)).color(INK));
+            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                if outline_button(ui, "Cancel").clicked() {
+                    job.cancel();
+                }
+            });
+        });
+    }
+
+    fn start_download(&mut self, ctx: &egui::Context) {
+        let job = Arc::new(hdpack::Job::default());
+        let worker = job.clone();
+        let (pack, home, ctx) = (self.pack.clone(), self.home.clone(), ctx.clone());
+        std::thread::spawn(move || {
+            let free = win32::free_space(&home);
+            hdpack::install(&pack, &home, free, &win32::WinHttp, &worker);
+            ctx.request_repaint();
+        });
+        self.hd_job = Some(job);
+        self.hd_rate = Rate::default();
+        self.hd_result = None;
+    }
+
+    /// Picks up how a finished download ended.
+    fn poll_download(&mut self) {
+        let Some(job) = &self.hd_job else {
+            return;
+        };
+        let phase = job.phase();
+        if phase.running() {
+            return;
+        }
+        self.hd_job = None;
+        self.hd_result = match phase {
+            hdpack::Phase::Done(dir) => {
+                self.form.hd_folder = dir.display().to_string();
+                self.form.hd_textures = true;
+                Some(("Installed and switched on.".to_string(), YELLOW))
+            }
+            hdpack::Phase::Cancelled => Some((
+                "Stopped. Press Resume download to carry on later.".to_string(),
+                MUTED,
+            )),
+            hdpack::Phase::Failed(e) => Some((e, ERROR)),
+            _ => None,
+        };
     }
 
     fn controls_tab(&mut self, ui: &mut egui::Ui) {
@@ -800,16 +1054,18 @@ impl Window<'_> {
             }
         });
         if let Some(result) = &self.rumble_test {
-            ui.label(egui::RichText::new(result).font(font(13.0)).color(SUN));
+            ui.label(egui::RichText::new(result).font(font(13.0)).color(YELLOW));
         }
-        row(ui, "Impulse triggers", &mut |ui| {
-            chips(ui, &FEEDBACK, &mut f.impulse_triggers);
-            ui.label(
-                egui::RichText::new("Xbox Series pads: the triggers themselves buzz.")
-                    .font(font(13.0))
-                    .color(MUTED),
-            );
-        });
+        if !self.wine && f.vibration != Feedback::Off {
+            row(ui, "Impulse triggers", &mut |ui| {
+                chips(ui, &FEEDBACK, &mut f.impulse_triggers);
+                ui.label(
+                    egui::RichText::new("Xbox One/Series pads on Windows.")
+                        .font(font(13.0))
+                        .color(MUTED),
+                );
+            });
+        }
         row(ui, "Input API", &mut |ui| {
             chips(ui, &BACKENDS, &mut f.input_backend);
             ui.label(
@@ -820,13 +1076,9 @@ impl Window<'_> {
                 .color(MUTED),
             );
         });
-        toggle(
-            ui,
-            &mut f.hot_plug,
-            "Pads plugged in after launch are picked up",
-        );
+        toggle(ui, &mut f.manual_gearbox, "Manual gearbox by default");
         let pads = match self.pads {
-            0 => "Rumble needs an Xbox-style (XInput) pad; none is connected now. On 8BitDo pads use X-input mode.".to_string(),
+            0 => "The Test button checks Xbox-style (XInput) pads; in the game, PlayStation and Switch pads rumble too.".to_string(),
             1 => "One Xbox-style pad connected.".to_string(),
             n => format!("{n} Xbox-style pads connected."),
         };
@@ -842,13 +1094,15 @@ impl Window<'_> {
         toggle(
             ui,
             &mut f.cd_switcher,
-            "Change the music during a race (Back = next, RS+Back = previous)",
+            "Change the music during a race (Back or X = next track, Z = previous)",
         );
-        toggle(
-            ui,
-            &mut f.music_shuffle,
-            "Shuffle the race music each launch",
-        );
+        if f.cd_switcher {
+            toggle(
+                ui,
+                &mut f.music_shuffle,
+                "Shuffle the race music each launch",
+            );
+        }
         toggle(ui, &mut f.skip_logos, "Skip the boot logos");
         toggle(
             ui,
@@ -864,11 +1118,6 @@ impl Window<'_> {
             ui,
             &mut f.random_anims,
             "Roadside animations from any game mode",
-        );
-        toggle(
-            ui,
-            &mut f.character_select,
-            "Change character on the Edit License screen (quirky models)",
         );
         toggle(
             ui,
@@ -913,8 +1162,8 @@ impl Window<'_> {
         let ready = self.ready();
         let fill = match (ready, resp.hovered()) {
             (false, _) => LINE,
-            (true, true) => SUN_BRIGHT,
-            (true, false) => SUN,
+            (true, true) => RED_BRIGHT,
+            (true, false) => RED,
         };
         // A slanted plate, like the stripes.
         let s = 10.0;
@@ -931,7 +1180,7 @@ impl Window<'_> {
             Align2::CENTER_CENTER,
             "Play",
             named("decal", 30.0),
-            if ready { ON_SUN } else { MUTED },
+            if ready { ON_RED } else { MUTED },
         );
         if resp
             .on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -950,27 +1199,16 @@ pub const FRAME_RATES: [(u32, &str); 5] = [
     (144, "144"),
     (0, "Unlimited"),
 ];
-pub const VSYNCS: [(Vsync, &str); 3] = [
-    (Vsync::On, "On"),
-    (Vsync::Off, "Off"),
-    (Vsync::Half, "Half rate"),
-];
-pub const DISTANCES: [(u32, &str); 6] = [
-    (0, "Game's own"),
-    (2, "2"),
-    (4, "4"),
-    (6, "6"),
-    (7, "7"),
-    (8, "8"),
-];
+pub const VSYNCS: [(Vsync, &str); 2] = [(Vsync::On, "On"), (Vsync::Off, "Off")];
+pub const DISTANCES: [(u32, &str); 3] = [(0, "Game's own"), (4, "4"), (8, "8")];
 pub const REFLECTIONS: [(u32, &str); 4] = [
     (0, "Original"),
     (512, "512"),
     (1024, "1024"),
     (2048, "2048"),
 ];
-pub const ANISOTROPY: [(u32, &str); 4] = [(0, "Off"), (4, "4×"), (8, "8×"), (16, "16×")];
-pub const ANTIALIASING: [(u32, &str); 2] = [(0, "Off"), (2, "4× SSAA")];
+pub const ANISOTROPY: [(u32, &str); 4] = [(0, "Game's own"), (4, "4×"), (8, "8×"), (16, "16×")];
+pub const ANTIALIASING: [(u32, &str); 2] = [(0, "Off"), (2, "4× MSAA")];
 pub const DEADZONES: [(u32, &str); 5] = [
     (0, "0%"),
     (10, "10%"),
@@ -978,7 +1216,8 @@ pub const DEADZONES: [(u32, &str); 5] = [
     (30, "30%"),
     (40, "40%"),
 ];
-pub const STRENGTHS: [(u32, &str); 4] = [(3, "Light"), (5, "Soft"), (7, "Normal"), (10, "Strong")];
+pub const STRENGTHS: [(u32, &str); 4] =
+    [(3, "Light"), (5, "Medium"), (7, "Normal"), (10, "Strong")];
 pub const FEEDBACK: [(Feedback, &str); 4] = [
     (Feedback::Off, "Off"),
     (Feedback::On, "On"),
@@ -992,15 +1231,15 @@ pub const BACKENDS: [(Backend, &str); 4] = [
     (Backend::XInput, "XInput"),
 ];
 
-/// Fades `rect` from clear to dusk blue: to the right when `horizontal`,
+/// Fades `rect` from clear to the black base: to the right when `horizontal`,
 /// else downwards.
 fn gradient(p: &egui::Painter, rect: Rect, horizontal: bool) {
     let mut mesh = Mesh::default();
-    let clear = Color32::from_rgba_unmultiplied(DUSK.r(), DUSK.g(), DUSK.b(), 0);
+    let clear = Color32::from_rgba_unmultiplied(BASE.r(), BASE.g(), BASE.b(), 0);
     let (a, b, c, d) = if horizontal {
-        (clear, DUSK, DUSK, clear)
+        (clear, BASE, BASE, clear)
     } else {
-        (clear, clear, DUSK, DUSK)
+        (clear, clear, BASE, BASE)
     };
     mesh.colored_vertex(rect.left_top(), a);
     mesh.colored_vertex(rect.right_top(), b);
@@ -1011,8 +1250,8 @@ fn gradient(p: &egui::Painter, rect: Rect, horizontal: bool) {
     p.add(Shape::mesh(mesh));
 }
 
-/// Two slanted stripes in the top right corner: sunset orange with a hot
-/// pink one beside it, like the sun stripes on the car's hood.
+/// Two slanted stripes in the top right corner: rosso red with a thinner
+/// yellow one beside it, like racing stripes on a hood.
 fn draw_decal(ui: &egui::Ui, full: Rect) {
     let p = ui.painter().with_clip_rect(full);
     for (i, (w, alpha)) in [(30.0, 1.0f32), (16.0, 0.9)].into_iter().enumerate() {
@@ -1024,7 +1263,7 @@ fn draw_decal(ui: &egui::Ui, full: Rect) {
             pos2(x + w - slant, full.top() + 112.0),
             pos2(x - slant, full.top() + 112.0),
         ];
-        let color = if i == 0 { SUN } else { PINK };
+        let color = if i == 0 { RED } else { YELLOW };
         p.add(Shape::convex_polygon(
             pts,
             color.gamma_multiply(alpha),
@@ -1055,6 +1294,41 @@ fn field(ui: &mut egui::Ui, text: &str) {
 }
 
 /// A text field with a Browse button; true when it changed.
+/// A thin bar on the panel colour, filled from the left.
+fn progress_bar(ui: &mut egui::Ui, fraction: f32) {
+    let width = ui.available_width();
+    let (rect, _) = ui.allocate_exact_size(vec2(width, 10.0), Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(rect, CornerRadius::same(5), LINE);
+    let fill = Rect::from_min_size(
+        rect.min,
+        vec2(width * fraction.clamp(0.0, 1.0), rect.height()),
+    );
+    painter.rect_filled(fill, CornerRadius::same(5), RED);
+}
+
+/// The tab's main action: a filled plate, like Play.
+fn primary_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    let galley =
+        ui.painter()
+            .layout_no_wrap(text.to_string(), named("barlow-semibold", 15.0), ON_RED);
+    let size = vec2(galley.size().x + 36.0, 34.0);
+    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+    let fill = if resp.hovered() { RED_BRIGHT } else { RED };
+    ui.painter().rect_filled(rect, CornerRadius::same(6), fill);
+    ui.painter()
+        .galley(rect.center() - galley.size() / 2.0, galley, ON_RED);
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// "about 3 min left".
+fn time_left(seconds: f64) -> String {
+    match seconds as u64 {
+        0..=59 => "under a minute left".to_string(),
+        s => format!("about {} min left", s.div_ceil(60)),
+    }
+}
+
 /// Whether the chosen HD pack folder holds textures, for the note under it.
 fn hd_pack_note(folder: &str) -> (String, Color32) {
     let folder = folder.trim();
@@ -1067,7 +1341,7 @@ fn hd_pack_note(folder: &str) -> (String, Color32) {
     match tweaks::texture_base(std::path::Path::new(folder)) {
         Some(_) => (
             "Pack found. It's read from there; nothing is copied.".to_string(),
-            SUN,
+            YELLOW,
         ),
         None => (
             "No textures\\load folder here: choose the folder the zip was unzipped into."
@@ -1104,7 +1378,7 @@ fn outline_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
         rect,
         CornerRadius::same(6),
         if hover { LINE } else { Color32::TRANSPARENT },
-        Stroke::new(1.5, SUN),
+        Stroke::new(1.5, RED),
         StrokeKind::Inside,
     );
     ui.painter().text(
@@ -1112,12 +1386,12 @@ fn outline_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
         Align2::CENTER_CENTER,
         text,
         named("barlow-semibold", 15.0),
-        SUN,
+        INK,
     );
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
-/// A row of choices; the chosen one is on the sunset plate.
+/// A row of choices; the chosen one is on the yellow plate.
 fn chips<T: PartialEq + Copy, S: AsRef<str>>(
     ui: &mut egui::Ui,
     options: &[(T, S)],
@@ -1134,12 +1408,12 @@ fn chips<T: PartialEq + Copy, S: AsRef<str>>(
                 } else {
                     font(14.0)
                 },
-                if on { ON_SUN } else { INK },
+                if on { ON_YELLOW } else { INK },
             );
             let size = vec2(galley.size().x + 24.0, 30.0);
             let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
             let fill = if on {
-                SUN
+                YELLOW
             } else if resp.hovered() {
                 LINE
             } else {
@@ -1149,7 +1423,7 @@ fn chips<T: PartialEq + Copy, S: AsRef<str>>(
                 rect,
                 CornerRadius::same(6),
                 fill,
-                Stroke::new(1.0, if on { SUN } else { LINE }),
+                Stroke::new(1.0, if on { YELLOW } else { LINE }),
                 StrokeKind::Inside,
             );
             let at = rect.center() - galley.size() / 2.0;
@@ -1164,9 +1438,9 @@ fn chips<T: PartialEq + Copy, S: AsRef<str>>(
     });
 }
 
-/// A switch: knob left and outlined is off, knob right on the sunset plate
+/// A switch: knob left and outlined is off, knob right on the yellow plate
 /// is on.
-fn toggle(ui: &mut egui::Ui, on: &mut bool, text: &str) {
+fn toggle(ui: &mut egui::Ui, on: &mut bool, text: &str) -> egui::Response {
     let galley = ui
         .painter()
         .layout_no_wrap(text.to_string(), font(15.0), INK);
@@ -1181,15 +1455,15 @@ fn toggle(ui: &mut egui::Ui, on: &mut bool, text: &str) {
     p.rect(
         track,
         CornerRadius::same(13),
-        if *on { SUN } else { Color32::TRANSPARENT },
-        Stroke::new(1.5, if *on { SUN } else { MUTED }),
+        if *on { YELLOW } else { Color32::TRANSPARENT },
+        Stroke::new(1.5, if *on { YELLOW } else { MUTED }),
         StrokeKind::Inside,
     );
     let x = egui::lerp(track.left() + 13.0..=track.right() - 13.0, t);
     p.circle_filled(
         pos2(x, track.center().y),
         9.0,
-        if *on { ON_SUN } else { MUTED },
+        if *on { ON_YELLOW } else { MUTED },
     );
     p.galley(
         pos2(
@@ -1199,7 +1473,7 @@ fn toggle(ui: &mut egui::Ui, on: &mut bool, text: &str) {
         galley,
         INK,
     );
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
 /// One of the looks; true when clicked.
@@ -1225,7 +1499,7 @@ fn look_card(
         rect,
         CornerRadius::same(8),
         fill,
-        Stroke::new(if on { 2.0 } else { 1.0 }, if on { SUN } else { LINE }),
+        Stroke::new(if on { 2.0 } else { 1.0 }, if on { YELLOW } else { LINE }),
         StrokeKind::Inside,
     );
     let pad = 14.0;
@@ -1234,11 +1508,11 @@ fn look_card(
         Align2::LEFT_TOP,
         title,
         named("condensed", 22.0),
-        if on { SUN } else { INK },
+        if on { YELLOW } else { INK },
     );
     if recommended {
-        // A small sunset tab on the card's top edge.
-        let galley = p.layout_no_wrap("Recommended".into(), named("barlow-semibold", 12.0), ON_SUN);
+        // A small red tab on the card's top edge.
+        let galley = p.layout_no_wrap("Recommended".into(), named("barlow-semibold", 12.0), ON_RED);
         let tab = Rect::from_min_size(
             pos2(
                 rect.right() - pad - galley.size().x - 12.0,
@@ -1246,8 +1520,8 @@ fn look_card(
             ),
             galley.size() + vec2(12.0, 2.0),
         );
-        p.rect_filled(tab, CornerRadius::same(4), SUN);
-        p.galley(tab.min + vec2(6.0, 1.0), galley, ON_SUN);
+        p.rect_filled(tab, CornerRadius::same(4), RED);
+        p.galley(tab.min + vec2(6.0, 1.0), galley, ON_RED);
     }
     let galley = p.layout(note.to_string(), font(13.5), MUTED, w - 2.0 * pad);
     p.galley(rect.left_top() + vec2(pad, pad + 32.0), galley, MUTED);

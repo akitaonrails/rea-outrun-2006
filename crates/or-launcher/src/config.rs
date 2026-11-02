@@ -24,8 +24,7 @@ pub struct Settings {
     pub resolution: Option<(u32, u32)>,
     /// Exclusive fullscreen instead of a borderless window.
     pub fullscreen: Option<bool>,
-    /// `DX/ANTIALIASING`: 0 off, 2 pairs with Tweaks' transparency
-    /// supersampling.
+    /// `DX/ANTIALIASING`: 0 off, 2 the game's own MSAA (4x under DXVK).
     pub antialiasing: Option<u32>,
     /// Frame-rate cap; `0` is unlimited (with Tweaks' interpolation).
     pub fps_limit: Option<u32>,
@@ -56,11 +55,11 @@ pub struct Settings {
     pub vibration_strength: Option<u32>,
     pub impulse_triggers: Option<Feedback>,
     pub input_backend: Option<Backend>,
-    /// Detect controllers plugged in after launch.
-    pub hot_plug: Option<bool>,
+    /// Start races with the manual gearbox selected.
+    pub manual_gearbox: Option<bool>,
 
     // Extras
-    /// Change music mid-race (Back / RS+Back).
+    /// Change music mid-race (Back or X = next, Z = previous).
     pub cd_switcher: Option<bool>,
     pub music_shuffle: Option<bool>,
     pub skip_logos: Option<bool>,
@@ -70,8 +69,6 @@ pub struct Settings {
     pub horn: Option<bool>,
     /// Roadside animations from any game mode.
     pub random_anims: Option<bool>,
-    /// Character model choice on the Edit License screen.
-    pub character_select: Option<bool>,
     /// OutRun miles under the menu's sign-in text.
     pub show_miles: Option<bool>,
     /// Restore the first two seconds of "Rush a Difficulty".
@@ -80,12 +77,11 @@ pub struct Settings {
     pub scaler: Option<Scaler>,
 }
 
-/// `vsync`: on, off, or every second refresh.
+/// `vsync`: wait for the screen's refresh or not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Vsync {
     On,
     Off,
-    Half,
 }
 
 /// A rumble mode as the Tweaks INI numbers it.
@@ -244,11 +240,12 @@ game =
 #resolution = 1920x1080
 
 # true switches to exclusive fullscreen (the borderless window is easier on
-# multi-monitor desktops and works the same under Wine).
+# multi-monitor desktops and works the same under Wine). In exclusive
+# fullscreen the frame-rate cap is held at 60.
 #fullscreen = false
 
-# Anti-aliasing: 0 off, 2 multisampled (pairs with the mod's transparency
-# supersampling, which sharpens trackside cloth and barriers).
+# Anti-aliasing: 0 off, 2 the game's own multisampling (4x under DXVK). On
+# NVIDIA under Windows, trackside cloth and barriers are supersampled too.
 #antialiasing = 0
 
 # Frame-rate cap in frames per second. The game's driving runs at a fixed
@@ -256,18 +253,17 @@ game =
 # cap off entirely and leaves pacing to vsync or an external limiter.
 #fps_limit = 60
 
-# vsync: on waits for the screen's refresh, off doesn't, half waits for
-# every second refresh.
+# vsync: on waits for the screen's refresh, off doesn't.
 #vsync = on
 
-# How much further down the stage the world draws, 0 to 8. The mod
-# recommends 4-8: further out, scenery can pop in as its low-detail model.
+# How much further down the stage the world draws: 0 (the game's own), 4 or
+# 8; further out scenery can pop in.
 #draw_distance = 4
 
-# Resolution of the car's reflections: original (128), 1024 or 2048.
+# Resolution of the car's reflections: original (128), 512, 1024 or 2048.
 #reflections = 2048
 
-# Anisotropic filtering, 1 to 16, or off for the game's own.
+# Anisotropic filtering, 1 to 16; 0 keeps the game's own.
 #anisotropy = 16
 
 # The console versions' glowing sky effect.
@@ -303,10 +299,10 @@ game =
 # the default), raw, dinput or xinput. Try another if a pad isn't seen.
 #input_backend = wgi
 
-# Detect controllers plugged in after the game starts.
-#hot_plug = true
+# Start races with the manual gearbox selected.
+#manual_gearbox = false
 
-# Change the music during a race (Back = next track, RS+Back = previous).
+# Change the music during a race (Back or X = next track, Z = previous).
 #cd_switcher = true
 
 # Shuffle the race music each launch.
@@ -323,10 +319,6 @@ game =
 
 # Roadside animations can come from any game mode.
 #random_anims = true
-
-# Change character model on the Edit License screen (alternate models have
-# quirks; back up your License.dat first).
-#character_select = true
 
 # Show OutRun miles next to the menu's sign-in text.
 #show_miles = true
@@ -350,9 +342,9 @@ OutRunLauncher [options]
   --fullscreen on|off       exclusive fullscreen instead of a borderless window
   --antialiasing <0|2>      anti-aliasing
   --fps-limit <n>|unlimited frame-rate cap, e.g. 60 or 120
-  --vsync on|off|half       wait for the screen's refresh
+  --vsync on|off            wait for the screen's refresh
   --draw-distance <0-8>     how much further the stage draws
-  --reflections <0|1024|2048>  car reflection resolution
+  --reflections <original|512|1024|2048>  car reflection resolution
   --anisotropy <0-16>       anisotropic filtering
   --sky-glow on|off         the console versions' glowing sky
   --xbox-brightness on|off  the Xbox releases' brighter picture
@@ -364,14 +356,13 @@ OutRunLauncher [options]
   --vibration-strength <0-10>
   --impulse-triggers <mode> Xbox Series impulse triggers
   --input-backend <name>    wgi, raw, dinput or xinput
-  --hot-plug on|off         detect pads plugged in after launch
+  --manual-gearbox on|off   start races with the manual gearbox
   --cd-switcher on|off      change music mid-race
   --music-shuffle on|off    shuffle the race music
   --skip-logos on|off       skip the boot logos
   --free-drive on|off       no countdown timer
   --horn on|off             usable horn
   --random-anims on|off     roadside animations from any mode
-  --character-select on|off character model on the license screen
   --show-miles on|off       OutRun miles in the menu
   --soundtrack-fix on|off   restore Rush a Difficulty's first two seconds
 
@@ -384,6 +375,10 @@ options the settings window opens first.
 
 OutRunLauncher --check [--game <folder>]
   checks the game folder and tells you whether its OR2006C2C.exe is supported
+
+OutRunLauncher --download-hd-pack
+  downloads the community HD texture pack (progress in launcher.log) and
+  switches it on in launcher.cfg
 
 Other settings are in launcher.cfg (see the comments in it)."
 );
@@ -419,6 +414,19 @@ fn entry(line: &str) -> Option<(&str, &str)> {
     let (key, value) = line.split_once('=')?;
     let value = value.trim();
     (!value.is_empty()).then_some((key.trim(), value))
+}
+
+/// `original` (0 or 128, the game's own) or a size Tweaks can render.
+fn parse_reflections(value: &str) -> Option<u32> {
+    let value = value.trim();
+    if value.eq_ignore_ascii_case("original") || value.eq_ignore_ascii_case("off") {
+        return Some(0);
+    }
+    match value.parse().ok()? {
+        0 | 128 => Some(0),
+        n @ (512 | 1024 | 2048) => Some(n),
+        _ => None,
+    }
 }
 
 /// `off`/`original` (0) or a number up to `max`.
@@ -457,7 +465,7 @@ impl Settings {
                     }
                 },
                 "fullscreen" => boolean(&mut s.fullscreen, "fullscreen"),
-                "antialiasing" => match value.parse().ok().filter(|n| *n <= 4) {
+                "antialiasing" => match value.parse().ok().filter(|n| [0, 2].contains(n)) {
                     Some(n) => s.antialiasing = Some(n),
                     None => bad("antialiasing needs 0 or 2, not"),
                 },
@@ -471,16 +479,22 @@ impl Settings {
                 "vsync" => match value.trim().to_ascii_lowercase().as_str() {
                     "on" | "true" => s.vsync = Some(Vsync::On),
                     "off" | "false" => s.vsync = Some(Vsync::Off),
-                    "half" => s.vsync = Some(Vsync::Half),
-                    _ => bad("vsync needs on, off or half, not"),
+                    "half" => {
+                        s.vsync = Some(Vsync::On);
+                        warnings.push(format!(
+                            "{FILE_NAME} line {}: vsync half is no longer offered; using on",
+                            n + 1
+                        ));
+                    }
+                    _ => bad("vsync needs on or off, not"),
                 },
                 "draw_distance" => match value.parse().ok().filter(|n| *n <= 8) {
                     Some(n) => s.draw_distance = Some(n),
                     None => bad("draw_distance needs 0 to 8, not"),
                 },
-                "reflections" => match parse_count(value, 2048) {
+                "reflections" => match parse_reflections(value) {
                     Some(r) => s.reflections = Some(r),
-                    None => bad("reflections needs original, 1024 or 2048, not"),
+                    None => bad("reflections needs original (128), 512, 1024 or 2048, not"),
                 },
                 "anisotropy" => match parse_count(value, 16) {
                     Some(a) => s.anisotropy = Some(a),
@@ -515,14 +529,13 @@ impl Settings {
                     Some(b) => s.input_backend = Some(b),
                     None => bad("input_backend needs wgi, raw, dinput or xinput, not"),
                 },
-                "hot_plug" => boolean(&mut s.hot_plug, "hot_plug"),
+                "manual_gearbox" => boolean(&mut s.manual_gearbox, "manual_gearbox"),
                 "cd_switcher" => boolean(&mut s.cd_switcher, "cd_switcher"),
                 "music_shuffle" => boolean(&mut s.music_shuffle, "music_shuffle"),
                 "skip_logos" => boolean(&mut s.skip_logos, "skip_logos"),
                 "free_drive" => boolean(&mut s.free_drive, "free_drive"),
                 "horn" => boolean(&mut s.horn, "horn"),
                 "random_anims" => boolean(&mut s.random_anims, "random_anims"),
-                "character_select" => boolean(&mut s.character_select, "character_select"),
                 "show_miles" => boolean(&mut s.show_miles, "show_miles"),
                 "soundtrack_fix" => boolean(&mut s.soundtrack_fix, "soundtrack_fix"),
                 "scaler" => match Scaler::parse(value) {
@@ -589,14 +602,13 @@ impl Settings {
             vibration_strength,
             impulse_triggers,
             input_backend,
-            hot_plug,
+            manual_gearbox,
             cd_switcher,
             music_shuffle,
             skip_logos,
             free_drive,
             horn,
             random_anims,
-            character_select,
             show_miles,
             soundtrack_fix,
             scaler,
@@ -646,7 +658,7 @@ impl Settings {
              DX/RES/WIDTH = {w}\n\
              DX/RES/HEIGHT = {h}\n\
              DX/ANTIALIASING = {aa}\n\
-             DX/FOG = 0\n\
+             DX/FOG = 1\n\
              LANGUAGE = 0\n\
              DX/WINDOWED = {windowed}\n"
         )
@@ -659,7 +671,12 @@ impl Settings {
             ini::set_section_key(t, section, key, value)
         };
         let mut t = ini.to_string();
-        let cap = self.fps_cap();
+        // Exclusive fullscreen turns the cap into a refresh-rate request.
+        let cap = match self.fps_cap() {
+            0 => 0,
+            _ if self.fullscreen.unwrap_or(false) => 60,
+            n => n,
+        };
         let interp = cap == 0 || cap > 60;
         t = put(&t, "Performance", "FramerateLimit", &cap.to_string());
         t = put(
@@ -675,7 +692,6 @@ impl Settings {
             &match self.vsync.unwrap_or(Vsync::On) {
                 Vsync::On => 1,
                 Vsync::Off => 0,
-                Vsync::Half => 2,
             }
             .to_string(),
         );
@@ -693,11 +709,12 @@ impl Settings {
             "SteeringDeadZone",
             &format!("{:.2}", f64::from(self.deadzone_percent()) / 100.0),
         );
+        t = put(&t, "Controls", "ControllerHotPlug", "false");
         t = put(
             &t,
             "Controls",
-            "ControllerHotPlug",
-            if self.on(&self.hot_plug) {
+            "DefaultManualTransmission",
+            if self.manual_gearbox.unwrap_or(false) {
                 "true"
             } else {
                 "false"
@@ -844,16 +861,7 @@ impl Settings {
                 "false"
             },
         );
-        t = put(
-            &t,
-            "Misc",
-            "AllowCharacterSelection",
-            if self.on(&self.character_select) {
-                "true"
-            } else {
-                "false"
-            },
-        );
+        t = put(&t, "Misc", "AllowCharacterSelection", "false");
         t = put(
             &t,
             "Misc",
@@ -864,12 +872,6 @@ impl Settings {
                 "false"
             },
         );
-
-        // The track list ships stingers and jingles that stop the music
-        // mid-cycle; keep the 28 racing tracks only.
-        for name in NON_RACING_TRACKS {
-            t = ini::remove_section_key(&t, "CDTracks", name);
-        }
         t
     }
 
@@ -893,9 +895,14 @@ impl Settings {
                 }
                 "--antialiasing" => {
                     let v = value("--antialiasing")?;
-                    s.antialiasing = Some(v.parse().ok().filter(|n| *n <= 4).ok_or_else(|| {
-                        format!("--antialiasing needs 0 or 2, not {v}\n\n{USAGE}")
-                    })?);
+                    s.antialiasing = Some(
+                        v.parse()
+                            .ok()
+                            .filter(|n| [0, 2].contains(n))
+                            .ok_or_else(|| {
+                                format!("--antialiasing needs 0 or 2, not {v}\n\n{USAGE}")
+                            })?,
+                    );
                 }
                 "--fps-limit" => {
                     let v = value("--fps-limit")?;
@@ -918,8 +925,8 @@ impl Settings {
                 }
                 "--reflections" => {
                     let v = value("--reflections")?;
-                    s.reflections = Some(parse_count(&v, 2048).ok_or_else(|| {
-                        format!("--reflections needs original, 1024 or 2048, not {v}\n\n{USAGE}")
+                    s.reflections = Some(parse_reflections(&v).ok_or_else(|| {
+                        format!("--reflections needs original (128), 512, 1024 or 2048, not {v}\n\n{USAGE}")
                     })?);
                 }
                 "--anisotropy" => {
@@ -973,17 +980,14 @@ impl Settings {
                     s.vsync = Some(match v.trim().to_ascii_lowercase().as_str() {
                         "on" | "true" => Vsync::On,
                         "off" | "false" => Vsync::Off,
-                        "half" => Vsync::Half,
                         _ => {
-                            return Err(format!(
-                                "--vsync needs on, off or half, not {v}\n\n{USAGE}"
-                            ));
+                            return Err(format!("--vsync needs on or off, not {v}\n\n{USAGE}"));
                         }
                     });
                 }
                 flag @ ("--fullscreen" | "--sky-glow" | "--xbox-brightness" | "--hd-characters"
-                | "--hot-plug" | "--cd-switcher" | "--music-shuffle" | "--skip-logos"
-                | "--free-drive" | "--horn" | "--random-anims" | "--character-select"
+                | "--manual-gearbox" | "--cd-switcher" | "--music-shuffle"
+                | "--skip-logos" | "--free-drive" | "--horn" | "--random-anims"
                 | "--show-miles" | "--soundtrack-fix") => {
                     let v = value(flag)?;
                     let b = parse_bool(&v)
@@ -993,14 +997,13 @@ impl Settings {
                         "--sky-glow" => s.sky_glow = Some(b),
                         "--xbox-brightness" => s.xbox_brightness = Some(b),
                         "--hd-characters" => s.hd_characters = Some(b),
-                        "--hot-plug" => s.hot_plug = Some(b),
+                        "--manual-gearbox" => s.manual_gearbox = Some(b),
                         "--cd-switcher" => s.cd_switcher = Some(b),
                         "--music-shuffle" => s.music_shuffle = Some(b),
                         "--skip-logos" => s.skip_logos = Some(b),
                         "--free-drive" => s.free_drive = Some(b),
                         "--horn" => s.horn = Some(b),
                         "--random-anims" => s.random_anims = Some(b),
-                        "--character-select" => s.character_select = Some(b),
                         "--show-miles" => s.show_miles = Some(b),
                         _ => s.soundtrack_fix = Some(b),
                     }
@@ -1012,23 +1015,6 @@ impl Settings {
         Ok(s)
     }
 }
-
-/// Entries of the shipped `[CDTracks]` list that are not racing music
-/// (jingles, stingers and ambience), removed so the mid-race CD switcher
-/// only lands on songs.
-pub const NON_RACING_TRACKS: [&str; 11] = [
-    "Last_Wave.ogg",
-    "SEGA441.ogg",
-    "Beach_wave.ogg",
-    "title_pattern1.ogg",
-    "title_01.ogg",
-    "or2ed1.ogg",
-    "or2ed2.ogg",
-    "or2ed3a.ogg",
-    "or2ed3b.ogg",
-    "or2ed4.ogg",
-    "or2ed5.ogg",
-];
 
 /// Sets `key` in a settings file, keeping every other line (and comments)
 /// as it was: replaces the first active or empty `key =` line, else appends.
@@ -1093,13 +1079,13 @@ mod tests {
         let s = Settings::default();
         assert_eq!(
             s.outrun2006_ini(),
-            "DX/ADAPTER = 0\nDX/RES/WIDTH = 640\nDX/RES/HEIGHT = 480\nDX/ANTIALIASING = 0\nDX/FOG = 0\nLANGUAGE = 0\nDX/WINDOWED = 1\n"
+            "DX/ADAPTER = 0\nDX/RES/WIDTH = 640\nDX/RES/HEIGHT = 480\nDX/ANTIALIASING = 0\nDX/FOG = 1\nLANGUAGE = 0\nDX/WINDOWED = 1\n"
         );
         let s =
             Settings::parse_file("resolution = 3840x2160\nfullscreen = true\nantialiasing = 2\n").0;
         assert_eq!(
             s.outrun2006_ini(),
-            "DX/ADAPTER = 0\nDX/RES/WIDTH = 3840\nDX/RES/HEIGHT = 2160\nDX/ANTIALIASING = 2\nDX/FOG = 0\nLANGUAGE = 0\nDX/WINDOWED = 0\n"
+            "DX/ADAPTER = 0\nDX/RES/WIDTH = 3840\nDX/RES/HEIGHT = 2160\nDX/ANTIALIASING = 2\nDX/FOG = 1\nLANGUAGE = 0\nDX/WINDOWED = 0\n"
         );
     }
 
@@ -1133,8 +1119,10 @@ mod tests {
         assert!(out.contains("AutoDetectResolution = false"));
         assert!(out.contains("DisableCountdownTimer = true"));
         assert!(out.contains("01_Splash_wave.ogg = Splash Wave"));
-        assert!(!out.contains("Last_Wave.ogg"));
-        assert!(!out.contains("SEGA441.ogg"));
+        assert!(out.contains("Last_Wave.ogg"));
+        assert!(out.contains("ControllerHotPlug = false"));
+        assert!(out.contains("DefaultManualTransmission = false"));
+        assert!(in_section(&out, "Misc", "AllowCharacterSelection = false"));
 
         // Keys the base file lacked are added inside their sections.
         assert!(out.find("[Controls]\n").is_some_and(|at| {
@@ -1148,8 +1136,26 @@ mod tests {
                 .contains("FramerateInterpolation = true")
         );
 
+        // Exclusive fullscreen holds the cap at 60.
+        let full = Settings::parse_file("fullscreen = true\nfps_limit = 144\n").0;
+        let held = full.apply_tweaks(base);
+        assert!(held.contains("FramerateLimit = 60"));
+        assert!(held.contains("FramerateInterpolation = false"));
+        let borderless = Settings::parse_file("fps_limit = 144\n")
+            .0
+            .apply_tweaks(base);
+        assert!(borderless.contains("FramerateLimit = 144"));
+
+        // The manual gearbox is opt in.
+        let manual = Settings::parse_file("manual_gearbox = true\n").0;
+        assert!(
+            manual
+                .apply_tweaks(base)
+                .contains("DefaultManualTransmission = true")
+        );
+
         // Everything off: the faithful picture.
-        let off = "sky_glow = false\nhd_characters = false\ncd_switcher = false\nskip_logos = false\nfree_drive = false\nhorn = false\nrandom_anims = false\ncharacter_select = false\nshow_miles = false\nsoundtrack_fix = false\nvibration = off\ndraw_distance = 0\nreflections = original\n";
+        let off = "sky_glow = false\nhd_characters = false\ncd_switcher = false\nskip_logos = false\nfree_drive = false\nhorn = false\nrandom_anims = false\nshow_miles = false\nsoundtrack_fix = false\nvibration = off\ndraw_distance = 0\nreflections = original\n";
         let stock = Settings::parse_file(off).0.apply_tweaks(base);
         assert!(stock.contains("SkyGlowFactor = 0"));
         assert!(stock.contains("UseHiDefCharacters = false"));
@@ -1158,7 +1164,6 @@ mod tests {
         assert!(stock.contains("DisableCountdownTimer = false"));
         assert!(in_section(&stock, "Audio", "AllowHorn = false"));
         assert!(stock.contains("RandomHighwayAnimSets = false"));
-        assert!(stock.contains("AllowCharacterSelection = false"));
         assert!(stock.contains("ShowOutRunMilesOnMenu = false"));
         assert!(stock.contains("VibrationMode = 0"));
         assert!(stock.contains("DrawDistanceIncrease = 0"));
@@ -1193,6 +1198,53 @@ mod tests {
         assert!(args(&["--draw-distance", "9"]).is_err());
         assert!(args(&["--deadzone", "60"]).is_err());
         assert!(args(&["--vibration", "loud"]).is_err());
+        assert!(args(&["--vsync", "half"]).is_err());
+        assert!(args(&["--antialiasing", "4"]).is_err());
+        assert!(args(&["--reflections", "256"]).is_err());
+    }
+
+    #[test]
+    fn retired_and_narrowed_values() {
+        // Options that were removed are ignored without a word.
+        let (s, warnings) = Settings::parse_file("character_select = true\nhot_plug = false\n");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(s, Settings::default());
+        let tuned = s.apply_tweaks("");
+        assert!(tuned.contains("AllowCharacterSelection = false"));
+        assert!(tuned.contains("ControllerHotPlug = false"));
+
+        // Half-rate vsync reads as on, with a warning.
+        let (s, warnings) = Settings::parse_file("vsync = half\n");
+        assert_eq!(s.vsync, Some(Vsync::On));
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("vsync half is no longer offered; using on"));
+
+        // Anti-aliasing is 0 or 2; reflections are 128 (original), 512, 1024, 2048.
+        assert_eq!(
+            Settings::parse_file("antialiasing = 2\n").0.antialiasing,
+            Some(2)
+        );
+        assert_eq!(Settings::parse_file("antialiasing = 4\n").1.len(), 1);
+        assert_eq!(Settings::parse_file("antialiasing = 1\n").1.len(), 1);
+        for (text, want) in [
+            ("original", 0),
+            ("0", 0),
+            ("128", 0),
+            ("512", 512),
+            ("2048", 2048),
+        ] {
+            let (s, w) = Settings::parse_file(&format!("reflections = {text}\n"));
+            assert!(w.is_empty(), "{text}");
+            assert_eq!(s.reflections, Some(want));
+        }
+        assert_eq!(Settings::parse_file("reflections = 256\n").1.len(), 1);
+        assert_eq!(Settings::parse_file("reflections = 4096\n").1.len(), 1);
+
+        // Older files with other draw distances still load.
+        assert_eq!(
+            Settings::parse_file("draw_distance = 6\n").0.draw_distance,
+            Some(6)
+        );
     }
 
     #[test]
@@ -1276,8 +1328,8 @@ mod tests {
             "on",
             "--hd-characters",
             "off",
-            "--hot-plug",
-            "off",
+            "--manual-gearbox",
+            "on",
             "--cd-switcher",
             "off",
             "--music-shuffle",
@@ -1289,8 +1341,6 @@ mod tests {
             "--horn",
             "off",
             "--random-anims",
-            "off",
-            "--character-select",
             "off",
             "--show-miles",
             "off",
@@ -1316,14 +1366,13 @@ mod tests {
         assert_eq!(s.sky_glow, Some(false));
         assert_eq!(s.xbox_brightness, Some(true));
         assert_eq!(s.hd_characters, Some(false));
-        assert_eq!(s.hot_plug, Some(false));
+        assert_eq!(s.manual_gearbox, Some(true));
         assert_eq!(s.cd_switcher, Some(false));
         assert_eq!(s.music_shuffle, Some(true));
         assert_eq!(s.skip_logos, Some(false));
         assert_eq!(s.free_drive, Some(false));
         assert_eq!(s.horn, Some(false));
         assert_eq!(s.random_anims, Some(false));
-        assert_eq!(s.character_select, Some(false));
         assert_eq!(s.show_miles, Some(false));
         assert_eq!(s.soundtrack_fix, Some(false));
         assert_eq!(s.impulse_triggers, Some(Feedback::Off));
