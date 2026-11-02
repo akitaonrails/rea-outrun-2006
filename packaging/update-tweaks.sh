@@ -110,11 +110,19 @@ if [ -z "$PUBLISH" ]; then
 fi
 
 TAG=tweaks-$SHORT
-curl -fsSL "https://github.com/$UPSTREAM/archive/$SHA.tar.gz" -o "$WORK/OutRun2006Tweaks-$SHORT-source.tar.gz"
-gh release create "$TAG" --repo "$REPO" --title "OutRun2006Tweaks $SHORT" \
-  --notes-file "$WORK/zip/SOURCE.txt" --latest=false \
-  "$ZIP" "$WORK/OutRun2006Tweaks-$SHORT-source.tar.gz"
 URL=https://github.com/$REPO/releases/download/$TAG/OutRun2006Tweaks-$SHORT.zip
+if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+  # Published releases are never replaced (older commits may pin them):
+  # pin the zip already there.
+  curl -fsSL "$URL" -o "$WORK/published.zip"
+  DIGEST=$(sha256sum "$WORK/published.zip" | cut -d' ' -f1)
+  echo "release $TAG already exists; pinning its zip ($DIGEST)"
+else
+  curl -fsSL "https://github.com/$UPSTREAM/archive/$SHA.tar.gz" -o "$WORK/OutRun2006Tweaks-$SHORT-source.tar.gz"
+  gh release create "$TAG" --repo "$REPO" --title "OutRun2006Tweaks $SHORT" \
+    --notes-file "$WORK/zip/SOURCE.txt" --latest=false \
+    "$ZIP" "$WORK/OutRun2006Tweaks-$SHORT-source.tar.gz"
+fi
 cat > "$ROOT/packaging/tweaks.txt" <<EOF
 # OutRun2006Tweaks (emoose), the engine of the fixes: tweaks/ gets
 # dinput8.dll, OR2006C2C.exe, the two INI files, LICENSE.md and SOURCE.txt.

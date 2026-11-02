@@ -34,9 +34,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           OR_REPO: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run }}
         run: |
+          case "$RUN_ID" in *[!0-9]*) echo "run id must be a number"; exit 1 ;; esac
           args=""
-          [ -n "${{ inputs.run }}" ] && args="--run ${{ inputs.run }}"
+          [ -n "$RUN_ID" ] && args="--run $RUN_ID"
           packaging/update-tweaks.sh $args | tee check.log
           grep -q '^changed=yes' check.log && echo "changed=yes" >> "$GITHUB_OUTPUT" || true
           short=$(sed -n 's/^upstream: run [0-9]*, commit \([0-9a-f]*\).*/\1/p' check.log)
@@ -47,8 +49,9 @@ jobs:
         if: steps.check.outputs.changed == 'yes'
         env:
           GH_TOKEN: ${{ github.token }}
+          SHORT: ${{ steps.check.outputs.short }}
         run: |
-          n=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "tweaks/${{ steps.check.outputs.short }}" --state open --json number --jq length)
+          n=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "tweaks/$SHORT" --state open --json number --jq length)
           echo "exists=$([ "$n" -gt 0 ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
 
       - name: Publish the build and open a pull request
@@ -56,14 +59,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           OR_REPO: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run }}
+          SHORT: ${{ steps.check.outputs.short }}
         run: |
-          short=${{ steps.check.outputs.short }}
-          if gh release view "tweaks-$short" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "release tweaks-$short exists; repinning to it"
-            gh release delete "tweaks-$short" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
-          fi
+          short=$SHORT
           args="--publish"
-          [ -n "${{ inputs.run }}" ] && args="$args --run ${{ inputs.run }}"
+          [ -n "$RUN_ID" ] && args="$args --run $RUN_ID"
           packaging/update-tweaks.sh $args
           branch=tweaks/$short
           git config user.name "github-actions[bot]"

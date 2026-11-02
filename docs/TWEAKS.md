@@ -74,4 +74,5 @@ move the pin from nightly.link onto this repository).
 4. Merge. The next build and release use the new pin.
 
 To go back to an earlier build, point `packaging/tweaks.txt` at its
-`tweaks-<commit>` release again (each release stays published).
+`tweaks-<commit>` release again. Releases are never replaced or deleted:
+an update for a build that already has one pins the zip that's there.
