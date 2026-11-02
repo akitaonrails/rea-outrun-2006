@@ -1637,9 +1637,6 @@ dependencies = [
  "rea-launcher",
  "rea-launcher-ui",
  "rea-launcher-win32",
- "sha2",
- "windows-sys 0.61.2",
- "zip",
 ]
 
 [[package]]
@@ -1882,6 +1879,7 @@ version = "0.2.0"
 source = "git+https://github.com/akitaonrails/rea-launcher-sdk?tag=v0.2.0#d324843d2b1bbe061be0610c759532090ac8535c"
 dependencies = [
  "sha2",
+ "zip",
 ]
 
 [[package]]

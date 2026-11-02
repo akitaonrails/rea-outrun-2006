@@ -2,8 +2,6 @@
 
 #[cfg(windows)]
 mod ui;
-#[cfg(windows)]
-mod win32;
 
 #[cfg(windows)]
 use rea_launcher_win32::dialog::{self, Icon};
@@ -40,9 +38,10 @@ mod app {
     use rea_launcher::fsx;
     use rea_launcher::log::Log;
     use rea_launcher_win32::dialog::{self, Icon};
+    use rea_launcher_win32::http::WinHttp;
     use rea_launcher_win32::{disk, gpu, wine, xinput};
 
-    use crate::{ui, win32};
+    use crate::ui;
 
     const EXE: &str = edition::EXE;
 
@@ -132,29 +131,33 @@ mod app {
         tweaks::wine_overrides(std::env::var("WINEDLLOVERRIDES").ok().as_deref())
     }
 
+    /// The HTTPS client for downloads the player asks for.
+    pub fn http() -> WinHttp {
+        WinHttp::new(concat!("OutRunLauncher/", env!("CARGO_PKG_VERSION")))
+    }
+
     /// `--download-hd-pack`: the HD Pack tab's download without the window,
     /// logging progress every 10 percent; switches the pack on when done.
     fn download_hd_pack(settings_path: &Path) -> Result<u32, String> {
-        use or_launcher::hdpack::{self, Pack, Phase};
-        let pack = Pack::pinned();
-        let home = home();
-        let job = std::sync::Arc::new(hdpack::Job::default());
+        use or_launcher::hdpack;
+        use rea_launcher::download::{self, Job, Phase};
+        let pin = hdpack::pin();
+        let root = hdpack::root(&home());
+        let job = std::sync::Arc::new(Job::default());
         let worker = job.clone();
-        let thread_pack = pack.clone();
-        let thread_home = home.clone();
         let handle = std::thread::spawn(move || {
-            let free = disk::free_space(&thread_home);
-            hdpack::install(&thread_pack, &thread_home, free, &win32::WinHttp, &worker)
+            let free = |dir: &Path| disk::free_space(dir);
+            download::install(&pin, &root, &free, &http(), &worker)
         });
         let mut logged = None;
         while !handle.is_finished() {
-            let step = match job.phase() {
-                Phase::Downloading { done, total } => {
-                    Some(("downloading", done * 10 / total.max(1)))
-                }
-                Phase::Unpacking { done, total } => Some(("unpacking", done * 10 / total.max(1))),
+            let phase = job.phase();
+            let what = match phase {
+                Phase::Downloading { .. } => Some("downloading"),
+                Phase::Unpacking { .. } => Some("unpacking"),
                 _ => None,
             };
+            let step = what.zip(phase.fraction().map(|f| (f * 10.0) as u32));
             if step.is_some() && step != logged {
                 let (what, tenth) = step.unwrap_or_default();
                 log_line(&format!("hd pack: {what} {}%", tenth * 10));

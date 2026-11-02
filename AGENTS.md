@@ -55,8 +55,8 @@ Windows and on Linux (Proton/Wine). It is not a distribution of the game.
   INI files (`outrun2006.ini`, `OutRun2006Tweaks.ini`) → the game. INI
   writing preserves every comment and unmanaged key the user may have
   edited; the launcher re-applies only the keys it owns, every run.
-- Rust for our own code. Win32 calls go through `rea-launcher-win32`; the
-  launcher's own `unsafe` and FFI (the WinHTTP download) stay in `win32.rs`.
+- Rust for our own code. Win32 calls go through `rea-launcher-win32`
+  (WinHTTP downloads included); the launcher has no `unsafe` of its own.
 - Unit-test the logic that can run on the host (edition detection, INI
   writing, configuration, runtime planning, manifest sync) before each
   milestone commit; record what was checked by running the game in

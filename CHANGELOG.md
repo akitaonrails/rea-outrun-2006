@@ -15,6 +15,13 @@ All notable changes to this project. The format follows
   the SDK's `REA_FUNCTIONS_ONLY`/`REA_PLAY_HERE` convention
   (`OR_PLAY_FUNCTIONS_ONLY` is gone). CI also runs the Windows-target
   tests under Wine.
+- The HD texture pack download runs on the SDK's download module, WinHTTP
+  client and download row (same folder, pin, file names and `.complete`
+  marker, so a pack downloaded or half-downloaded by an earlier version is
+  found and resumed). The HD Pack tab's row says how far it got; **Download**
+  resumes an interrupted download (the button was called "Resume download")
+  and a failure stays on screen until the next try. The completion marker
+  is now written before the folder is moved into place.
 
 - Built on the shared [rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk)
   v0.1.0: the runtime copy, saves mirror, INI and `launcher.cfg` editing,

@@ -18,8 +18,8 @@ Open the launcher's **HD Pack** tab and press **Download**. The launcher:
 
 1. checks there is room (about 3.6 GB free),
 2. downloads the pinned release over HTTPS, showing progress, speed and time
-   left; **Cancel** stops it and **Resume download** carries on from where
-   it stopped, also after closing the launcher,
+   left; **Cancel** stops it and **Download** carries on from where it
+   stopped, also after closing the launcher,
 3. checks the download's SHA-256 against the pin, and throws a damaged one
    away,
 4. unpacks it into `%LOCALAPPDATA%\OutRunLauncher\hd-pack\<release>`

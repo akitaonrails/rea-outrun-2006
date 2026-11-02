@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use rea_launcher_ui::eframe;
 use rea_launcher_ui::egui::{
-    self, Align, Align2, Color32, Key, Mesh, Rect, Shape, TextureHandle, Vec2, pos2, vec2,
+    self, Align2, Color32, Key, Mesh, Rect, Shape, TextureHandle, Vec2, pos2, vec2,
 };
 use rea_launcher_ui::pad::{self, Nav, PadNav};
 use rea_launcher_ui::theme::{
@@ -28,9 +28,9 @@ use or_launcher::config;
 use or_launcher::config::{Backend, Feedback, Vsync};
 use or_launcher::form::{self, Form, Look};
 use or_launcher::{edition, hdpack, tweaks};
+use rea_launcher::download::{self, Job, Phase, Pin};
 use rea_launcher::fsx;
-
-use crate::win32;
+use rea_launcher_ui::download::{Download, DownloadAction, DownloadState, download_row};
 
 // Rosso, Modena yellow and black: the colours of OutRun's car.
 const fn rgb(hex: u32) -> Color32 {
@@ -238,10 +238,10 @@ struct Window<'a> {
     pending: Vec<Nav>,
     /// The launcher's home folder, where the HD pack is downloaded.
     home: PathBuf,
-    pack: hdpack::Pack,
-    /// The HD pack download in progress, its speed, and how the last one
-    /// ended.
-    hd_job: Option<Arc<hdpack::Job>>,
+    pin: Pin,
+    /// The HD pack download (running, or failed), its speed, and how the
+    /// last one ended.
+    hd_job: Option<Arc<Job>>,
     hd_rate: Rate,
     hd_result: Option<(String, Color32)>,
     outcome: &'a mut Outcome,
@@ -289,11 +289,11 @@ impl<'a> Window<'a> {
         let wine = wine::is_wine();
         let mut form = Form::from_file(saved.as_deref(), screen, wine);
         let text = saved.unwrap_or_else(|| config::TEMPLATE.to_string());
-        let pack = hdpack::Pack::pinned();
+        let pin = hdpack::pin();
         // A pack downloaded earlier is offered even if its settings weren't
         // saved.
         if form.hd_folder.trim().is_empty()
-            && let Some(dir) = hdpack::installed(&pack, &home)
+            && let Some(dir) = hdpack::installed(&home)
         {
             form.hd_folder = dir.display().to_string();
         }
@@ -317,7 +317,7 @@ impl<'a> Window<'a> {
             pad: PadNav::default(),
             pending: Vec::new(),
             home,
-            pack,
+            pin,
             hd_job: None,
             hd_rate: Rate::default(),
             hd_result: None,
@@ -326,7 +326,7 @@ impl<'a> Window<'a> {
     }
 
     fn ready(&self) -> bool {
-        matches!(self.check, Check::Found(_)) && self.hd_job.is_none()
+        matches!(self.check, Check::Found(_)) && !self.hd_running()
     }
 
     fn play(&mut self, ctx: &egui::Context) {
@@ -474,7 +474,7 @@ impl Window<'_> {
     fn status(&self, ui: &mut egui::Ui) {
         let (text, color) = match (&self.error, &self.check) {
             (Some(e), _) => (e.clone(), ERROR),
-            (None, Check::Found(_)) if self.hd_job.is_some() => (
+            (None, Check::Found(_)) if self.hd_running() => (
                 "Downloading the HD pack; Play waits until it's done.".to_string(),
                 MUTED,
             ),
@@ -678,12 +678,45 @@ impl Window<'_> {
         }
         ui.add_space(12.0);
 
-        if let Some(job) = self.hd_job.clone() {
-            self.download_progress(ui, &job);
-        } else if tweaks::texture_base(Path::new(self.form.hd_folder.trim())).is_some() {
-            self.pack_ready(ui);
+        let root = hdpack::root(&self.home);
+        let downloaded = download::installed(&self.pin, &root);
+        let folder = PathBuf::from(self.form.hd_folder.trim());
+        let has_pack = tweaks::texture_base(&folder).is_some();
+        let own_copy =
+            has_pack && downloaded.as_deref() != Some(folder.as_path()) && !self.hd_running();
+        if own_copy {
+            // A copy the player unzipped: nothing to download or remove.
+            widgets::toggle(
+                ui,
+                &mut self.form.hd_textures,
+                "Use the HD texture pack",
+                None,
+            );
+            ui.label(
+                egui::RichText::new("Your own copy of the pack")
+                    .font(font(13.5))
+                    .color(YELLOW),
+            );
         } else {
-            self.pack_offer(ui);
+            if downloaded.is_some() && !self.hd_running() {
+                widgets::toggle(
+                    ui,
+                    &mut self.form.hd_textures,
+                    "Use the HD texture pack",
+                    None,
+                );
+                ui.add_space(4.0);
+            }
+            self.download_row(ui, &root);
+        }
+        if has_pack {
+            ui.label(
+                egui::RichText::new(
+                    "With the pack on, Clarissa looks as in the Japanese release, which its sprites are drawn for.",
+                )
+                .font(font(13.0))
+                .color(MUTED),
+            );
         }
         if let Some((text, color)) = &self.hd_result {
             ui.add_space(6.0);
@@ -706,130 +739,74 @@ impl Window<'_> {
         ui.label(egui::RichText::new(note).font(font(13.0)).color(color));
     }
 
-    /// No pack yet: the download offer (or its resumption).
-    fn pack_offer(&mut self, ui: &mut egui::Ui) {
-        let partial = hdpack::partial(&self.pack, &self.home);
-        let label = if partial > 0 {
-            "Resume download"
-        } else {
-            "Download"
-        };
-        if widgets::primary_button(ui, label).clicked() {
-            self.start_download(ui.ctx());
-        }
-        ui.add_space(6.0);
-        // On its own line, so it wraps instead of widening the tab.
-        let detail = if partial > 0 {
-            format!(
-                "{:.0} of {:.0} MB already here.",
-                hdpack::mb(partial),
-                hdpack::mb(self.pack.size)
-            )
-        } else {
-            format!(
-                "{:.0} MB, {:.1} GB once unpacked. The launcher downloads, checks and unpacks it for you.",
-                hdpack::mb(self.pack.size),
-                hdpack::gb(self.pack.unpacked)
-            )
-        };
-        ui.label(egui::RichText::new(detail).font(font(13.0)).color(MUTED));
-    }
-
-    /// A pack is in place: switch it on or off, or remove the download.
-    fn pack_ready(&mut self, ui: &mut egui::Ui) {
-        let downloaded = hdpack::installed(&self.pack, &self.home);
-        let ours = downloaded
+    fn hd_running(&self) -> bool {
+        self.hd_job
             .as_ref()
-            .is_some_and(|dir| Path::new(self.form.hd_folder.trim()) == dir.as_path());
-        widgets::toggle(
-            ui,
-            &mut self.form.hd_textures,
-            "Use the HD texture pack",
-            None,
-        );
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            let what = if ours {
-                format!("Downloaded: {}", self.pack.name())
-            } else {
-                "Your own copy of the pack".to_string()
-            };
-            ui.label(egui::RichText::new(what).font(font(13.5)).color(YELLOW));
-            if ours {
-                ui.add_space(10.0);
-                if widgets::outline_button(ui, "Remove").clicked() {
-                    match hdpack::remove(&self.pack, &self.home) {
-                        Ok(()) => {
-                            self.form.hd_textures = false;
-                            self.form.hd_folder.clear();
-                            self.hd_result = Some((
-                                format!("Removed; {:.1} GB freed.", hdpack::gb(self.pack.unpacked)),
-                                MUTED,
-                            ));
-                        }
-                        Err(e) => self.hd_result = Some((e, ERROR)),
-                    }
-                }
-            }
-        });
-        ui.label(
-            egui::RichText::new(
-                "With the pack on, Clarissa looks as in the Japanese release, which its sprites are drawn for.",
-            )
-            .font(font(13.0))
-            .color(MUTED),
-        );
+            .is_some_and(|job| job.phase().running())
     }
 
-    fn download_progress(&mut self, ui: &mut egui::Ui, job: &hdpack::Job) {
-        let (fraction, text) = match job.phase() {
-            hdpack::Phase::Downloading { done, total } => {
-                let rate = self.hd_rate.update(done);
-                let speed = if rate > 0.0 {
-                    let left = total.saturating_sub(done) as f64 / rate;
-                    format!(" · {:.1} MB/s · {}", rate / 1_000_000.0, time_left(left))
-                } else {
-                    String::new()
-                };
-                (
-                    done as f32 / total.max(1) as f32,
-                    format!(
-                        "Downloading {:.0} of {:.0} MB{speed}",
-                        hdpack::mb(done),
-                        hdpack::mb(total)
-                    ),
-                )
-            }
-            hdpack::Phase::Verifying => (1.0, "Checking the download…".to_string()),
-            hdpack::Phase::Unpacking { done, total } => (
-                done as f32 / total.max(1) as f32,
-                format!(
-                    "Unpacking {:.1} of {:.1} GB",
-                    hdpack::gb(done),
-                    hdpack::gb(total)
-                ),
-            ),
-            _ => (0.0, "Connecting…".to_string()),
+    /// The SDK's download row for the pinned pack: Download (or resume),
+    /// progress with Cancel, or Remove once it is in.
+    fn download_row(&mut self, ui: &mut egui::Ui, root: &Path) {
+        let phase = self.hd_job.as_ref().map(|job| job.phase());
+        let rate = match &phase {
+            Some(Phase::Downloading { done, .. }) => Some(self.hd_rate.update(*done)),
+            _ => None,
         };
-        widgets::progress_bar(ui, fraction);
-        ui.add_space(6.0);
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(text).font(font(13.5)).color(INK));
-            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                if widgets::outline_button(ui, "Cancel").clicked() {
+        let state = DownloadState::from_phase(
+            phase.as_ref(),
+            download::installed(&self.pin, root).is_some(),
+            download::partial(&self.pin, root),
+        )
+        .with_rate(rate);
+        let row = Download {
+            label: hdpack::LABEL,
+            size: self.pin.size,
+            state,
+        };
+        match download_row(ui, &row) {
+            Some(DownloadAction::Start) => self.start_download(ui.ctx()),
+            Some(DownloadAction::Cancel) => {
+                if let Some(job) = &self.hd_job {
                     job.cancel();
                 }
-            });
-        });
+            }
+            Some(DownloadAction::Remove) => match download::remove(&self.pin, root) {
+                Ok(()) => {
+                    self.hd_job = None;
+                    self.form.hd_textures = false;
+                    self.form.hd_folder.clear();
+                    self.hd_result = Some((
+                        format!(
+                            "Removed; {} freed.",
+                            rea_launcher_ui::download::size_text(self.pin.unpacked_size)
+                        ),
+                        MUTED,
+                    ));
+                }
+                Err(e) => self.hd_result = Some((e.to_string(), ERROR)),
+            },
+            None => {}
+        }
+        if matches!(state, DownloadState::Missing { partial: 0 }) {
+            ui.label(
+                egui::RichText::new(format!(
+                    "{} once unpacked. The launcher downloads, checks and unpacks it for you.",
+                    rea_launcher_ui::download::size_text(self.pin.unpacked_size)
+                ))
+                .font(font(13.0))
+                .color(MUTED),
+            );
+        }
     }
 
     fn start_download(&mut self, ctx: &egui::Context) {
-        let job = Arc::new(hdpack::Job::default());
+        let job = Arc::new(Job::default());
         let worker = job.clone();
-        let (pack, home, ctx) = (self.pack.clone(), self.home.clone(), ctx.clone());
+        let (pin, root, ctx) = (self.pin.clone(), hdpack::root(&self.home), ctx.clone());
         std::thread::spawn(move || {
-            let free = disk::free_space(&home);
-            hdpack::install(&pack, &home, free, &win32::WinHttp, &worker);
+            let free = |dir: &Path| disk::free_space(dir);
+            download::install(&pin, &root, &free, &crate::app::http(), &worker);
             ctx.request_repaint();
         });
         self.hd_job = Some(job);
@@ -837,29 +814,28 @@ impl Window<'_> {
         self.hd_result = None;
     }
 
-    /// Picks up how a finished download ended.
+    /// Picks up how a finished download ended: done switches the pack on;
+    /// a failure stays in the row until the next attempt.
     fn poll_download(&mut self) {
         let Some(job) = &self.hd_job else {
             return;
         };
-        let phase = job.phase();
-        if phase.running() {
-            return;
-        }
-        self.hd_job = None;
-        self.hd_result = match phase {
-            hdpack::Phase::Done(dir) => {
+        match job.phase() {
+            Phase::Done(dir) => {
+                self.hd_job = None;
                 self.form.hd_folder = dir.display().to_string();
                 self.form.hd_textures = true;
-                Some(("Installed and switched on.".to_string(), YELLOW))
+                self.hd_result = Some(("Installed and switched on.".to_string(), YELLOW));
             }
-            hdpack::Phase::Cancelled => Some((
-                "Stopped. Press Resume download to carry on later.".to_string(),
-                MUTED,
-            )),
-            hdpack::Phase::Failed(e) => Some((e, ERROR)),
-            _ => None,
-        };
+            Phase::Cancelled => {
+                self.hd_job = None;
+                self.hd_result = Some((
+                    "Stopped. Press Download to carry on from there later.".to_string(),
+                    MUTED,
+                ));
+            }
+            _ => {}
+        }
     }
 
     fn controls_tab(&mut self, ui: &mut egui::Ui) {
@@ -1045,14 +1021,6 @@ pub const BACKENDS: [(Backend, &str); 4] = [
     (Backend::DirectInput, "DInput"),
     (Backend::XInput, "XInput"),
 ];
-
-/// "about 3 min left".
-fn time_left(seconds: f64) -> String {
-    match seconds as u64 {
-        0..=59 => "under a minute left".to_string(),
-        s => format!("about {} min left", s.div_ceil(60)),
-    }
-}
 
 /// Whether the chosen HD pack folder holds textures, for the note under it.
 fn hd_pack_note(folder: &str) -> (String, Color32) {

@@ -82,8 +82,8 @@ with its own catch:
 The community HD texture pack redraws the menus, HUD, sprites and button
 prompts (Envido32's compilation of the Sonic-TV OR2006Sprites project).
 **Download** fetches it from the pack's own GitHub release (326 MB) with
-progress, speed and time left; **Cancel** and **Resume download** carry on
-later. The launcher checks its SHA-256 and free space, unpacks it (3.2 GB),
+progress, speed and time left; **Cancel** stops it and **Download** carries
+on later from where it stopped. The launcher checks its SHA-256 and free space, unpacks it (3.2 GB),
 and switches it on; **Remove** deletes it. Or choose a copy you already
 unzipped. Details: [docs/HD_TEXTURES.md](docs/HD_TEXTURES.md).
 
