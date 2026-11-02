@@ -1,0 +1,51 @@
+OutRunLauncher 0.1.0
+
+OutRunLauncher [options]
+  Without options the settings window opens first, then the game.
+
+  --game <folder>                             Game folder
+  --runtime <folder>                          Runtime folder
+  --saves <folder>                            Saves
+  --look original|coast_to_coast|steam_deck   Look
+  --resolution <WxH>                          Resolution
+  --fullscreen on|off                         Exclusive fullscreen
+  --fps-limit <0-240>                         Frame rate
+  --vsync on|off                              Vsync
+  --draw-distance <0-8>                       Draw distance
+  --reflections original|512|1024|2048        Reflections
+  --anisotropy <0-16>                         Anisotropy
+  --antialiasing 0|2                          Anti-aliasing
+  --sky-glow on|off                           Sky glow
+  --xbox-brightness on|off                    Xbox brightness
+  --hd-characters on|off                      Hi-def characters
+  --scaler nearest|pixel|fsr|linear           Scaler (Linux helper)
+  --hd-textures on|off                        Use the HD texture pack
+  --hd-textures-folder <folder>               Pack folder
+  --deadzone <0-50>                           Deadzone
+  --vibration off|on|swapped|merged           Rumble
+  --vibration-strength <0-10>                 Strength
+  --impulse-triggers off|on|swapped|merged    Impulse triggers
+  --input-backend auto|wgi|raw|dinput|xinput  Input API
+  --manual-gearbox on|off                     Manual gearbox
+  --cd-switcher on|off                        CD switcher
+  --music-shuffle on|off                      Shuffle the music
+  --skip-logos on|off                         Skip the boot logos
+  --free-drive on|off                         Free drive
+  --horn on|off                               Horn any time
+  --random-anims on|off                       Roadside animations
+  --show-miles on|off                         OutRun miles
+  --soundtrack-fix on|off                     Soundtrack fix
+
+These override launcher.cfg for one run; only --game is remembered.
+
+  --no-window          play with the saved settings (and the options given)
+  --settings [--linux] only the settings window (exit codes 0: play,
+                       3: closed, 4: no window could be shown; --linux adds
+                       the gamescope scaler, for or-play)
+  --check              checks the game folder and the launcher's files
+                       without playing (report in launcher.log)
+  --download-hd-pack   downloads the community HD texture pack (progress in
+                       launcher.log) and switches it on in launcher.cfg
+  --help               this text
+
+Every option is described in launcher.cfg.

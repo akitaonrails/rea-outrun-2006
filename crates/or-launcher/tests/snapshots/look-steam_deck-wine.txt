@@ -1,0 +1,165 @@
+## outrun2006.ini
+DX/ADAPTER = 0
+DX/RES/WIDTH = 1280
+DX/RES/HEIGHT = 800
+DX/ANTIALIASING = 0
+DX/FOG = 1
+LANGUAGE = 0
+DX/WINDOWED = 1
+
+## environment
+WINEDLLOVERRIDES=dinput8=n,b;d3d9=n,b;mscoree,mshtml=d
+WINEDEBUG=-all
+
+## registry (winebus, Wine only, where absent)
+DisableHidraw = dword:1
+DisableInput = dword:1
+Enable SDL = dword:1
+Map Controllers = dword:0
+
+## runtime components
+OR2006C2C.exe <- tweaks/OR2006C2C.exe (OutRun2006Tweaks, DRM-free)
+dinput8.dll <- tweaks/dinput8.dll (OutRun2006Tweaks)
+OutRun2006Tweaks.lods.ini <- tweaks/
+msvcp140.dll <- vc/
+vcruntime140.dll <- vc/
+vcomp140.dll <- vc/
+d3d9.dll <- linux/d3d9.dll (DXVK)
+Sound/14_Rush_a_Difficulty_1989.ogg patched <- soundtrack/ (xdelta3)
+
+## command line
+OR2006C2C.exe
+
+## gamescope (Linux helper)
+-F linear
+
+## OutRun2006Tweaks.ini
+# OutRun2006Tweaks - https://github.com/emoose/OutRun2006Tweaks
+# Managed by OutRunLauncher; keys it owns are rewritten each run.
+
+[Performance]
+FramerateLimit = 60
+FramerateLimitMode = 0
+FramerateFastLoad = 3
+FramerateInterpolation = false
+VSync = 1
+
+[Controls]
+UseNewInput = true
+InputBackend = 3
+SteeringDeadZone = 0.20
+BypassGameSensitivity = false
+ControllerHotPlug = false
+DefaultManualTransmission = false
+VibrationMode = 1
+VibrationControllerId = 0
+VibrationStrength = 7
+ImpulseVibrationMode = 2
+ImpulseVibrationLeftMultiplier = 0.20
+ImpulseVibrationRightMultiplier = 0.20
+
+[Graphics]
+UIScalingMode = 1
+UILetterboxing = 1
+RestoreXboxBrightness = false
+SkyGlowFactor = 4
+SkyGlowTwoStep = true
+AnisotropicFiltering = 16
+ReflectionResolution = 1024
+ReflectionUpdateRate = 0.5
+UseHiDefCharacters = true
+TransparencySupersampling = true
+ScreenEdgeCullFix = true
+DisableVehicleLODs = true
+DisableStageCulling = true
+FixZBufferPrecision = true
+CarBaseShadowOpacity = 1.0
+DrawDistanceIncrease = 4
+DrawDistanceBehind = 0
+TextureBaseFolder = textures
+SceneTextureReplacement = true
+UITextureReplacement = true
+SceneTextureExtract = false
+UITextureExtract = false
+EnableTextureCache = true
+UseNewTextureAllocator = true
+
+[Audio]
+AllowHorn = true
+AllowWAV = true
+AllowFLAC = true
+
+[CDSwitcher]
+SwitcherEnable = true
+SwitcherDisplayTitle = true
+SwitcherTitleFont = 2
+SwitcherTitleFontSizeX = 0.3
+SwitcherTitleFontSizeY = 0.5
+SwitcherTitlePositionX = 375
+SwitcherTitlePositionY = 450
+SwitcherShuffleTracks = false
+
+[Window]
+WindowedBorderless = true
+WindowPositionX = 0
+WindowPositionY = 0
+WindowedHideMouseCursor = true
+DisableDPIScaling = true
+AutoDetectResolution = false
+
+[Misc]
+EnableHollyCourse2 = 3
+SkipIntroLogos = true
+DisableCountdownTimer = true
+EnableLevelSelect = false
+RestoreJPClarissa = false
+ShowOutRunMilesOnMenu = true
+AllowCharacterSelection = false
+RandomHighwayAnimSets = true
+DemonwareServerOverride = clarissa.port0.org
+ProtectLoginData = true
+
+[Overlay]
+Enabled = true
+
+[Bugfixes]
+FixPegasusClopping = true
+FixRightSideBunkiAnimations = true
+FixC2CRankings = true
+PreventDESTSaveCorruption = true
+FixLensFlarePath = true
+FixIncorrectShading = true
+FixParticleRendering = true
+FixFullPedalChecks = true
+HideOnlineSigninText = false
+
+[CDTracks]
+01_Splash_wave.ogg = Splash Wave
+02_Magical_Sound_Shower.ogg = Magical Sound Shower
+03_Passing_Breeze.ogg = Passing Breeze
+04_Risky_Ride.ogg = Risky Ride
+05_Shiny_World.ogg = Shiny World
+06_Night_Flight.ogg = Night Flight
+07_Life_was_a_Bore.ogg = Life was a Bore
+08_Radiation.ogg = Radiation
+09_Night_Bird.ogg = Night Bird
+10_Splash_wave_1986.ogg = Splash Wave (1986)
+11_Magical_Sound_Shower_1986.ogg = Magical Sound Shower (1986)
+12_Passing_Breeze_1986.ogg = Passing Breeze (1986)
+13_Shake_the_Street_1989.ogg = Shake the Street (1989)
+14_Rush_a_Difficulty_1989.ogg = Rush a Difficulty (1989)
+15_Who_are_You_1989.ogg = Who are You (1989)
+16_Keep_Your_Heart_1989.ogg = Keep Your Heart (1989)
+17_Splash_Wave_EuroMix.ogg = Splash Wave (EuroMix)
+18_Magical_Sound_Shower_EuroMix.ogg = Magical Sound Shower (EuroMix)
+19_Passing_Breeze_EuroMix.ogg = Passing Breeze (EuroMix)
+20_Risky_Ride_Guitar_Mix.ogg = Risky Ride (Guitar Mix)
+21_Shake_the_Street_ARRANGED.ogg = Shake the Street (ARRANGED)
+22_Who_are_you_ARRANGED.ogg = Who are You (ARRANGED)
+23_Rush_a_difficulty_ARRANGED.ogg = Rush a Difficulty (ARRANGED)
+24_Keep_your_Heart_ ARRANGED.ogg = Keep your Heart (ARRANGED)
+25_Shiny_World_prototype.ogg = Shiny World (Prototype)
+26_Night_Flight_prototype.ogg = Night Flight (Prototype)
+27_Life_was_a_Bore_Instrumental.ogg = Life was a Bore (Instrumental)
+28_Night_Flight_Instrumental.ogg = Night Flight (Instrumental)
+

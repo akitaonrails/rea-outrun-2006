@@ -30,6 +30,10 @@ All notable changes to this project. The format follows
 - The settings window runs headless in tests on any host
   (`egui_kittest`): every tab, label, description, disabled reason and
   Play are tested, with hostile paths (`José/Jogos d'Ação`).
+- Golden snapshots (`crates/or-launcher/tests/snapshots/`): `--help`, the
+  `launcher.cfg` template, and what each look and three option
+  combinations write (both INI files, environment, winebus values,
+  runtime components, gamescope filter), on Windows and Wine.
 - End-to-end option tests: every option's flag and `launcher.cfg` key
   reach the same setting and the INI key, environment or gamescope filter
   it changes (`plan::plan`, what a launch writes); `--help`, every bad
