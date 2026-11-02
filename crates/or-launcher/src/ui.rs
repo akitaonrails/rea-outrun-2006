@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use or_launcher::window::{METRICS, Outcome, PALETTE, Platform, SIZE, Setup, Window};
+use or_launcher::window::{METRICS, Outcome, PALETTE, Platform, SIZE, Setup, TITLE, Window};
 use rea_launcher::download::{self, Job, Pin};
 use rea_launcher_ui::eframe;
 use rea_launcher_ui::theme;
@@ -64,7 +64,7 @@ pub fn show(
     let wine = wine::is_wine();
     let screen = display::screen_size();
     let fit = WindowFit::new(SIZE, wine, screen, wine_scale).with_native_fit(true);
-    let options = fit.native_options("OutRun 2006");
+    let options = fit.native_options(TITLE);
     let setup = Setup {
         path: settings_path.to_path_buf(),
         saved: saved.map(str::to_string),
@@ -79,7 +79,7 @@ pub fn show(
     let window = Window::new(setup, Box::new(Win32), Some(fit));
     let outcome = window.outcome();
     eframe::run_native(
-        "OutRun 2006",
+        TITLE,
         options,
         Box::new(|cc| {
             theme::install_with(&cc.egui_ctx, &PALETTE, &METRICS);

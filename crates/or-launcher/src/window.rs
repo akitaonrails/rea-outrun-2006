@@ -88,6 +88,8 @@ const ERROR: Color32 = PALETTE.error;
 
 /// The window's design size in points (taller than the SDK's usual page).
 pub const SIZE: Vec2 = vec2(880.0, 760.0);
+/// The window's title (a second launcher finds the window by it).
+pub const TITLE: &str = "OutRun 2006";
 const PHOTO_W: f32 = 300.0;
 
 /// How the window was left.

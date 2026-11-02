@@ -34,12 +34,14 @@ mod app {
     use std::process::Command;
 
     use or_launcher::config::{self, Settings};
+    use or_launcher::instance::{self, SecondStart};
     use or_launcher::window::{self, Outcome};
     use or_launcher::{edition, form, hdpack, runtime, tweaks};
     use rea_launcher::fsx;
     use rea_launcher::log::Log;
     use rea_launcher_win32::dialog::{self, Icon};
     use rea_launcher_win32::http::WinHttp;
+    use rea_launcher_win32::instance::{self as win32_instance, Window};
     use rea_launcher_win32::{console, disk, display, gpu, wine, xinput};
 
     use crate::ui;
@@ -275,6 +277,26 @@ mod app {
         let settings_only = switch("--settings");
         let no_window = switch("--no-window");
         let check_only = switch("--check");
+        // One launcher at a time, held until the game this run starts has
+        // ended: a second start raises the window or says the game runs
+        // (`instance`). --check only reads and runs alongside.
+        let _instance = if check_only {
+            None
+        } else {
+            match win32_instance::single(instance::NAME) {
+                Ok(guard) => Some(guard),
+                Err(running) => {
+                    let second =
+                        SecondStart::new(running.bring_to_front(Window::Title(window::TITLE)));
+                    log_line(&format!("another launcher is running: {second:?}"));
+                    if let Some(message) = second.message() {
+                        tell(message, false, true);
+                    }
+                    // or-play --settings: nothing was started.
+                    return Ok(if settings_only { WINDOW_CLOSED } else { 0 });
+                }
+            }
+        };
         if switch("--download-hd-pack") {
             return download_hd_pack(&settings_path);
         }

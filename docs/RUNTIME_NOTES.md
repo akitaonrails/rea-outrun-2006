@@ -33,6 +33,27 @@ What was checked by running the game, newest first. Paths use
   `d3d9.dll` and `.or-dxvk` are gone and the game starts on the real
   Direct3D 9 (unit-tested with fake files).
 
+## Clean exit and single instance — pending real-game checks
+
+Unit- and Wine-tested with fakes only (the instance mutex under
+`wine-test`, or-play's stop/interrupt/lock in `linux/tests/`). To check
+with the game, headless (`gamescope --backend headless`), each time
+confirming afterwards that no `OR2006C2C.exe`, `OutRunLauncher.exe`,
+`wineserver` or gamescope process is left and the saves were written back:
+
+- the game's own Quit;
+- Alt+F4 / `WM_CLOSE` to the game window (the launcher only waits for the
+  game; it never closes it itself, so `close_gracefully` has no use here
+  yet);
+- Steam's "Stop" (Proton, without `or-play`);
+- `or-play stop`, Ctrl+C and SIGTERM to `or-play`, and closing gamescope;
+- a second `OutRunLauncher.exe` while the window is open (the window comes
+  forward) and while the game runs (the "already running" message), on
+  Windows and under Proton;
+- a launcher killed while the game runs releases the instance: a new
+  launcher could then start a second game from the same runtime. Check
+  what the game and the runtime sync do then.
+
 ## SDK v0.2.0 pass — to check by running the game
 
 - `outrun2006.ini` now keeps the game's `LANGUAGE`, `DX/ADAPTER` and
