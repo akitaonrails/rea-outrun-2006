@@ -1,9 +1,8 @@
-# OutRun2006Tweaks (MIT at this commit; GPL-3.0 from 021e4bf5 on), the
-# engine of the fixes: tweaks/ gets dinput8.dll, OR2006C2C.exe and the two
-# INI files. The tagged releases are outdated; this is the CI build at
-# commit 08e5efb4 (2026-08-26), the owner's known-good build.
-# nightly.link serves GitHub Actions artifacts, which expire: this one on
-# 2026-11-24. Before then, mirror it to a release of this repository and
-# point the URL there (same digest).
+# OutRun2006Tweaks (emoose), the engine of the fixes: tweaks/ gets
+# dinput8.dll, OR2006C2C.exe, the two INI files, LICENSE.md and SOURCE.txt.
+# Upstream ships current builds only as expiring CI artifacts, so each
+# build we use is repacked and kept as a release of this repository by
+# packaging/update-tweaks.sh (docs/TWEAKS.md); never edit this by hand.
+# Commit 08e5efb4 (2026-08-26T13:11:38Z), build run 32972770753.
 # One line: URL SHA-256.
-https://nightly.link/emoose/OutRun2006Tweaks/actions/runs/32972770753/outrun2006tweaks-08e5efb4deea4066c440307ec009c868a30562d3.zip 8e57a035b6bbfc358010c2d517271ca8c00dde574df23cfa283ebb627792d861
+https://github.com/akitaonrails/rea-outrun-2006/releases/download/tweaks-08e5efb4/OutRun2006Tweaks-08e5efb4.zip 1ec7dee827d3f619c7f7469817f5a036965eee09a2cfc24da5d421bc5ab7aef1
