@@ -17,7 +17,6 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use rea_launcher::cfg::spec::OptionSpec;
 use rea_launcher::download::{self, Job, Phase, Pin};
 use rea_launcher::fsx;
 use rea_launcher_ui::download::{Download, DownloadAction, DownloadState, download_row};
@@ -1007,7 +1006,7 @@ fn chip_row<T: PartialEq + Clone, S: AsRef<str>>(
                 widgets::chips_with(ui, &chips, value)
             })
             .inner;
-        name(ui, &response, row);
+        widgets::name_control(&response, Some(row.label), Some(row.description));
         widgets::note(ui, disabled.unwrap_or(row.description));
         ui.add_space(6.0);
     });
@@ -1020,18 +1019,9 @@ fn bool_row(ui: &mut egui::Ui, key: &'static str, on: &mut bool, disabled: Optio
     mark_rendered(ui.ctx(), key);
     ui.vertical(|ui| {
         let response = widgets::toggle(ui, on, row.label, disabled);
-        name(ui, &response, row);
+        widgets::name_control(&response, Some(row.label), Some(row.description));
         widgets::note(ui, disabled.unwrap_or(row.description));
         ui.add_space(6.0);
-    });
-}
-
-/// The row's label and description as the control's accessible name.
-fn name(ui: &egui::Ui, response: &egui::Response, row: &OptionSpec) {
-    let (label, description) = (row.label, row.description);
-    ui.ctx().accesskit_node_builder(response.id, |node| {
-        node.set_label(label.to_owned());
-        node.set_description(description.to_owned());
     });
 }
 
