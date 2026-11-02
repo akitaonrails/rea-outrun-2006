@@ -22,6 +22,11 @@ All notable changes to this project. The format follows
   instead of pasting it into its source (a path with a quote broke it).
 - A failure to write Wine's controller settings (winebus) is logged
   instead of ignored.
+- Wine DLL overrides: the player's own `WINEDLLOVERRIDES` rules for the
+  DLLs the game needs (`dinput8`, `d3d9`, `mscoree`, `mshtml`) are
+  dropped instead of competing with ours; their other rules are kept.
+  Wine is also recognised from `WINEPREFIX`, `WINELOADER` or
+  `STEAM_COMPAT_DATA_PATH` when a Wine build hides `wine_get_version`.
 
 ### Changed
 

@@ -94,10 +94,13 @@ pub fn open_url(url: &str) {
 }
 
 pub fn is_wine() -> bool {
-    unsafe {
+    // Some Wine builds hide `wine_get_version`, so the environment Wine,
+    // Proton and or-play set counts too.
+    let exported = unsafe {
         let ntdll = GetModuleHandleW(wide("ntdll.dll").as_ptr());
         !ntdll.is_null() && GetProcAddress(ntdll, c"wine_get_version".as_ptr().cast()).is_some()
-    }
+    };
+    exported || or_launcher::wine_env(|name| std::env::var_os(name).is_some())
 }
 
 // XInput, for the rumble test and the pad-aware settings window.

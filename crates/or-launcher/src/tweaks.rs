@@ -274,6 +274,37 @@ pub fn texture_keys(ini: &str, pack: Option<&Path>) -> String {
     )
 }
 
+/// The DLL overrides the game needs under Wine: the mod's `dinput8.dll`
+/// and DXVK's `d3d9.dll` load as native, and Wine's Mono and Gecko stay
+/// away (no download prompts).
+pub const WINE_OVERRIDES: &str = "dinput8=n,b;d3d9=n,b;mscoree,mshtml=d";
+
+/// `WINEDLLOVERRIDES` for the game: our rules first, then the player's
+/// own, minus their rules for the DLLs ours cover (Wine doesn't promise
+/// which of two rules for one DLL wins). Everything else they set is kept.
+pub fn wine_overrides(existing: Option<&str>) -> String {
+    const OURS: [&str; 4] = ["dinput8", "d3d9", "mscoree", "mshtml"];
+    let mut result = vec![WINE_OVERRIDES.to_owned()];
+    for rule in existing.into_iter().flat_map(|rules| rules.split(';')) {
+        if rule.trim().is_empty() {
+            continue;
+        }
+        let Some((names, action)) = rule.split_once('=') else {
+            result.push(rule.to_owned());
+            continue;
+        };
+        let kept: Vec<_> = names
+            .split(',')
+            .map(str::trim)
+            .filter(|name| !name.is_empty() && !OURS.iter().any(|o| name.eq_ignore_ascii_case(o)))
+            .collect();
+        if !kept.is_empty() {
+            result.push(format!("{}={action}", kept.join(",")));
+        }
+    }
+    result.join(";")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -578,5 +609,22 @@ mod tests {
         install(&runtime, &launcher_dir, true, &chosen, &mut quiet).unwrap();
         assert_eq!(backend(&runtime).as_deref(), Some("2"), "a choice wins");
         fs::remove_dir_all(&at).unwrap();
+    }
+
+    #[test]
+    fn wine_overrides_put_ours_first_and_drop_conflicting_rules() {
+        assert_eq!(wine_overrides(None), WINE_OVERRIDES);
+        assert_eq!(wine_overrides(Some("")), WINE_OVERRIDES);
+        assert_eq!(
+            wine_overrides(Some(
+                "DINPUT8=b;xinput1_3=n,b;d3d9,d3d11=b;MSCOREE,mshtml=;winemenubuilder.exe=d"
+            )),
+            format!("{WINE_OVERRIDES};xinput1_3=n,b;d3d11=b;winemenubuilder.exe=d")
+        );
+        // A rule without '=' is passed on as written.
+        assert_eq!(
+            wine_overrides(Some("odd;;foo=n")),
+            format!("{WINE_OVERRIDES};odd;foo=n")
+        );
     }
 }

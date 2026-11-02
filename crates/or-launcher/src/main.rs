@@ -116,15 +116,9 @@ mod app {
             .map(Path::to_path_buf)
     }
 
-    /// The DLL overrides the game needs under Wine: the mod's dinput8.dll
-    /// must load as native, DXVK's d3d9.dll too, and Mono dialogs stay
-    /// away. The player's own overrides are kept.
+    /// The DLL overrides for the game, merged with the player's own.
     fn wine_overrides() -> String {
-        let ours = "dinput8=n,b;d3d9=n,b;mscoree,mshtml=d";
-        match std::env::var("WINEDLLOVERRIDES") {
-            Ok(existing) if !existing.is_empty() => format!("{ours};{existing}"),
-            _ => ours.into(),
-        }
+        tweaks::wine_overrides(std::env::var("WINEDLLOVERRIDES").ok().as_deref())
     }
 
     /// `--download-hd-pack`: the HD Pack tab's download without the window,
