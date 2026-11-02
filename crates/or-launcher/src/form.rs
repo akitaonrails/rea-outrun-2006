@@ -253,7 +253,14 @@ impl Form {
     pub fn from_file(saved: Option<&str>, screen: Option<(u32, u32)>, wine: bool) -> Form {
         match saved {
             Some(text) if !text.trim().is_empty() => {
-                Form::new(&Settings::parse_file(text).0, screen, wine)
+                // A `look =` line under the file's own values, as a launch
+                // reads it (Settings::combine).
+                let file = Settings::parse_file(text).0;
+                let file = match file.look {
+                    Some(look) => look_settings(look, screen, wine).merged(file),
+                    None => file,
+                };
+                Form::new(&file, screen, wine)
             }
             _ => Form::first_run(screen, wine),
         }
@@ -508,6 +515,28 @@ mod tests {
         assert_eq!(
             Form::from_file(Some(&with_game), SCREEN, false),
             form(&with_game)
+        );
+    }
+
+    #[test]
+    fn a_look_line_in_the_file_is_what_the_window_shows() {
+        // A hand-written `look =` plays that look (Settings::combine), so
+        // the window must open on it, not on 640×480 Custom.
+        let text = config::set_key(config::template().as_str(), "look", "coast_to_coast");
+        let f = Form::from_file(Some(&text), SCREEN, false);
+        assert_eq!(f.look, Look::CoastToCoast);
+        assert_eq!(f.resolution, SCREEN);
+        // A value of its own still wins over the look.
+        let text = config::set_key(&text, "draw_distance", "8");
+        let f = Form::from_file(Some(&text), SCREEN, false);
+        assert_eq!(
+            (f.look, f.draw_distance, f.resolution),
+            (Look::Custom, 8, SCREEN)
+        );
+        let text = config::set_key(config::template().as_str(), "look", "original");
+        assert_eq!(
+            Form::from_file(Some(&text), SCREEN, true).look,
+            Look::Original
         );
     }
 

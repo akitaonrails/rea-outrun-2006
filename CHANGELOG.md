@@ -155,6 +155,10 @@ All notable changes to this project. The format follows
 
 ### Fixed
 
+- A `look =` line in `launcher.cfg` now shows in the settings window: it
+  opened on Custom at 640×480 although the game played the look's values,
+  and pressing Play saved 640×480 over them (seen with the real game,
+  2026-11-02).
 - `OutRunLauncher --linux` with nothing else opens the settings window
   again, as in 0.1.0 (with the Linux scaler), instead of starting the
   game. The window opens when no option is given; `--no-window`,
