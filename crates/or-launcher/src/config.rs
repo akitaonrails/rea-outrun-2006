@@ -214,6 +214,10 @@ impl Scaler {
 
 pub const FILE_NAME: &str = "launcher.cfg";
 
+/// A complete `outrun2006.ini` with the game's own defaults (the format
+/// the game's setup tool writes), for a copy of the game without one.
+pub const OUTRUN2006_SEED: &str = "DX/ADAPTER = 0\nDX/RES/WIDTH = 640\nDX/RES/HEIGHT = 480\nDX/ANTIALIASING = 0\nDX/FOG = 1\nLANGUAGE = 0\nDX/WINDOWED = 1\n";
+
 /// `resolution` value meaning the game's own 640x480.
 pub const ORIGINAL: (u32, u32) = (640, 480);
 
@@ -743,22 +747,27 @@ impl Settings {
         self.input_backend.unwrap_or(Backend::default_on(wine))
     }
 
-    /// The game's `outrun2006.ini`, written whole every run: the game's
-    /// own tool only ever writes these keys, and the mod deletes stale
-    /// copies older than three months.
-    pub fn outrun2006_ini(&self) -> String {
+    /// The game's `outrun2006.ini`: `existing` (the runtime's copy, else
+    /// the game folder's) with the launcher's keys set, the video mode, the
+    /// anti-aliasing and windowed or not; every other line (the language,
+    /// the adapter, fog) stays the game's. Without a file, a complete one
+    /// with the game's own defaults is seeded.
+    pub fn outrun2006_ini(&self, existing: Option<&str>) -> String {
+        let mut ini = Ini::parse(existing.unwrap_or(OUTRUN2006_SEED));
+        if !ini.is_text() {
+            ini = Ini::parse(OUTRUN2006_SEED);
+        }
         let (w, h) = self.video_resolution().unwrap_or(ORIGINAL);
-        let aa = self.antialiasing.unwrap_or(0);
         let windowed = u32::from(!self.fullscreen.unwrap_or(false));
-        format!(
-            "DX/ADAPTER = 0\n\
-             DX/RES/WIDTH = {w}\n\
-             DX/RES/HEIGHT = {h}\n\
-             DX/ANTIALIASING = {aa}\n\
-             DX/FOG = 1\n\
-             LANGUAGE = 0\n\
-             DX/WINDOWED = {windowed}\n"
-        )
+        ini.set("", "DX/RES/WIDTH", &w.to_string());
+        ini.set("", "DX/RES/HEIGHT", &h.to_string());
+        ini.set(
+            "",
+            "DX/ANTIALIASING",
+            &self.antialiasing.unwrap_or(0).to_string(),
+        );
+        ini.set("", "DX/WINDOWED", &windowed.to_string());
+        ini.to_text().expect("parsed from text")
     }
 
     /// Writes this launcher's keys into an `OutRun2006Tweaks.ini`'s text,
@@ -1019,15 +1028,18 @@ mod tests {
     #[test]
     fn outrun2006_ini_matches_the_games_format() {
         let s = Settings::default();
-        assert_eq!(
-            s.outrun2006_ini(),
-            "DX/ADAPTER = 0\nDX/RES/WIDTH = 640\nDX/RES/HEIGHT = 480\nDX/ANTIALIASING = 0\nDX/FOG = 1\nLANGUAGE = 0\nDX/WINDOWED = 1\n"
-        );
+        assert_eq!(s.outrun2006_ini(None), OUTRUN2006_SEED);
         let s =
             Settings::parse_file("resolution = 3840x2160\nfullscreen = true\nantialiasing = 2\n").0;
         assert_eq!(
-            s.outrun2006_ini(),
+            s.outrun2006_ini(None),
             "DX/ADAPTER = 0\nDX/RES/WIDTH = 3840\nDX/RES/HEIGHT = 2160\nDX/ANTIALIASING = 2\nDX/FOG = 1\nLANGUAGE = 0\nDX/WINDOWED = 0\n"
+        );
+        // The game's language, adapter and fog (and the line endings) stay.
+        let games = "DX/ADAPTER = 1\r\nDX/RES/WIDTH = 800\r\nDX/RES/HEIGHT = 600\r\nDX/ANTIALIASING = 0\r\nDX/FOG = 0\r\nLANGUAGE = 3\r\nDX/WINDOWED = 0\r\n";
+        assert_eq!(
+            s.outrun2006_ini(Some(games)),
+            "DX/ADAPTER = 1\r\nDX/RES/WIDTH = 3840\r\nDX/RES/HEIGHT = 2160\r\nDX/ANTIALIASING = 2\r\nDX/FOG = 0\r\nLANGUAGE = 3\r\nDX/WINDOWED = 0\r\n"
         );
     }
 
@@ -1434,7 +1446,7 @@ mod tests {
             s.hd_textures.unwrap_or(false),
             d.hd_textures.unwrap_or(false)
         );
-        assert_eq!(s.outrun2006_ini(), d.outrun2006_ini());
+        assert_eq!(s.outrun2006_ini(None), d.outrun2006_ini(None));
         assert_eq!(s.apply_tweaks(""), d.apply_tweaks(""));
     }
 

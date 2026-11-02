@@ -86,6 +86,11 @@ All notable changes to this project. The format follows
 
 ### Fixed
 
+- `outrun2006.ini` is no longer rewritten whole on every start: the
+  launcher sets only the resolution, anti-aliasing and windowed keys and
+  keeps the game's language, adapter and fog (the game folder's copy
+  seeds the launcher's the first time). Before, every start reset the
+  language to English (`LANGUAGE = 0`).
 - Saves: the runtime copy records each save file as of the last copy
   (`.or-saves`). At start, a save changed in the saves folder since then
   (a restored backup, saves from another PC) goes into the game; otherwise

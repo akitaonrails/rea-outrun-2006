@@ -395,6 +395,7 @@ mod app {
         ));
 
         tweaks::install(
+            &game,
             &runtime_dir,
             &launcher_dir().unwrap_or_default(),
             wine,

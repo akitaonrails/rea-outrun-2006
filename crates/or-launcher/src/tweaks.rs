@@ -71,6 +71,7 @@ fn usable_base(text: &str) -> bool {
 /// `textures-pack/` folders. `linux` selects the DXVK install (the caller
 /// decides from Wine detection).
 pub fn install(
+    game: &Path,
     runtime: &Path,
     launcher_dir: &Path,
     linux: bool,
@@ -132,10 +133,17 @@ pub fn install(
     fsx::install(&ini_path, ini.to_bytes()).map_err(|e| format!("cannot write {e}"))?;
     reset_overlay_keys(&runtime.join(USER_INI), log)?;
 
-    // The game's own settings, written whole (the mod deletes stale copies
-    // older than three months; ours is fresh every run).
+    // The game's own settings: the runtime's copy (else the game folder's)
+    // with the video keys set; the language and the rest stay the game's.
     let game_ini = runtime.join("outrun2006.ini");
-    fsx::install(&game_ini, settings.outrun2006_ini()).map_err(|e| format!("cannot write {e}"))?;
+    let existing = fs::read_to_string(&game_ini).ok().or_else(|| {
+        rea_launcher::paths::find_ignoring_case(game, "outrun2006.ini")
+            .and_then(|path| fs::read_to_string(path).ok())
+    });
+    let text = settings.outrun2006_ini(existing.as_deref());
+    if existing.as_deref() != Some(text.as_str()) {
+        fsx::install(&game_ini, text).map_err(|e| format!("cannot write {e}"))?;
+    }
 
     install_dxvk(runtime, launcher_dir, linux, log)?;
 
@@ -269,9 +277,8 @@ fn hd_texture_base(
     match &base {
         Some(base) => log(&format!("hd textures: {}", base.display())),
         None => log(&format!(
-            "warning: hd textures are on but {} holds no textures\\load folder; download the pack from {} and choose its folder",
-            source.display(),
-            crate::config::HD_PACK_PAGE
+            "warning: hd textures are on but {} holds no textures\\load folder; download the pack in the settings window's HD Pack tab (or with --download-hd-pack), or choose the folder of your copy there",
+            source.display()
         )),
     }
     base
@@ -371,6 +378,7 @@ mod tests {
         let mut log = |line: &str| lines.push(line.to_string());
 
         install(
+            &at.join("game"),
             &runtime,
             &launcher_dir,
             false,
@@ -392,7 +400,7 @@ mod tests {
         );
         assert_eq!(
             fs::read_to_string(runtime.join("outrun2006.ini")).unwrap(),
-            Settings::default().outrun2006_ini()
+            Settings::default().outrun2006_ini(None)
         );
 
         // A second run changes nothing and reports nothing.
@@ -402,6 +410,7 @@ mod tests {
         {
             let mut log = |line: &str| second.push(line.to_string());
             install(
+                &at.join("game"),
                 &runtime,
                 &launcher_dir,
                 false,
@@ -414,12 +423,49 @@ mod tests {
 
         // Changing a setting rewrites only the INI keys.
         let tuned = Settings::parse_file("fps_limit = unlimited\ndraw_distance = 8\n").0;
-        install(&runtime, &launcher_dir, false, &tuned, &mut log).unwrap();
+        install(
+            &at.join("game"),
+            &runtime,
+            &launcher_dir,
+            false,
+            &tuned,
+            &mut log,
+        )
+        .unwrap();
         let ini = fs::read_to_string(runtime.join("OutRun2006Tweaks.ini")).unwrap();
         assert!(ini.contains("FramerateLimit = 0"));
         assert!(ini.contains("FramerateInterpolation = true"));
         assert!(ini.contains("DrawDistanceIncrease = 8"));
 
+        fs::remove_dir_all(&at).unwrap();
+    }
+
+    #[test]
+    fn the_games_language_survives_in_outrun2006_ini() {
+        let at = temp("gameini");
+        let launcher_dir = launcher(&at);
+        let game = at.join("game");
+        fs::create_dir_all(&game).unwrap();
+        fs::write(
+            game.join("OUTRUN2006.INI"),
+            "DX/ADAPTER = 0\nDX/RES/WIDTH = 800\nDX/RES/HEIGHT = 600\nDX/ANTIALIASING = 0\nDX/FOG = 1\nLANGUAGE = 2\nDX/WINDOWED = 0\n",
+        )
+        .unwrap();
+        let runtime = at.join("runtime");
+        fs::create_dir_all(&runtime).unwrap();
+        let s = Settings::parse_file("resolution = 1920x1080\n").0;
+        install(&game, &runtime, &launcher_dir, false, &s, &mut |_| {}).unwrap();
+        let ini = || fs::read_to_string(runtime.join("outrun2006.ini")).unwrap();
+        assert!(ini().contains("LANGUAGE = 2"), "{}", ini());
+        assert!(ini().contains("DX/RES/WIDTH = 1920") && ini().contains("DX/WINDOWED = 1"));
+        // The player picks another language in the game; it stays.
+        fs::write(
+            runtime.join("outrun2006.ini"),
+            ini().replace("LANGUAGE = 2", "LANGUAGE = 4"),
+        )
+        .unwrap();
+        install(&game, &runtime, &launcher_dir, false, &s, &mut |_| {}).unwrap();
+        assert!(ini().contains("LANGUAGE = 4"));
         fs::remove_dir_all(&at).unwrap();
     }
 
@@ -438,6 +484,7 @@ mod tests {
         let mut lines = Vec::new();
         let mut log = |line: &str| lines.push(line.to_string());
         install(
+            &at.join("game"),
             &runtime,
             &launcher_dir,
             false,
@@ -464,7 +511,15 @@ mod tests {
         let at = temp("missing");
         let runtime = at.join("runtime");
         fs::create_dir_all(&runtime).unwrap();
-        let err = install(&runtime, &at, false, &Settings::default(), &mut |_| {}).unwrap_err();
+        let err = install(
+            &at.join("game"),
+            &runtime,
+            &at,
+            false,
+            &Settings::default(),
+            &mut |_| {},
+        )
+        .unwrap_err();
         assert!(err.contains("tweaks"), "{err}");
         fs::remove_dir_all(&at).unwrap();
     }
@@ -480,6 +535,7 @@ mod tests {
         let mut log = |_line: &str| {};
 
         install(
+            &at.join("game"),
             &runtime,
             &launcher_dir,
             true,
@@ -492,6 +548,7 @@ mod tests {
 
         // Moving the same runtime to Windows removes it again.
         install(
+            &at.join("game"),
             &runtime,
             &launcher_dir,
             false,
@@ -506,6 +563,7 @@ mod tests {
         fs::remove_file(launcher_dir.join("linux").join("d3d9.dll")).unwrap();
         assert!(
             install(
+                &at.join("game"),
                 &runtime,
                 &launcher_dir,
                 true,
@@ -516,6 +574,7 @@ mod tests {
         );
         assert!(
             install(
+                &at.join("game"),
                 &runtime,
                 &launcher_dir,
                 false,
@@ -554,7 +613,15 @@ mod tests {
         let mut log = |line: &str| lines.push(line.to_string());
         let mut s = Settings::parse_file("hd_textures = on\n").0;
         s.hd_textures_folder = Some(unzipped.clone());
-        install(&runtime, &launcher_dir, false, &s, &mut log).unwrap();
+        install(
+            &at.join("game"),
+            &runtime,
+            &launcher_dir,
+            false,
+            &s,
+            &mut log,
+        )
+        .unwrap();
         let tuned = ini(&runtime);
         assert!(tuned.contains(&format!(
             "TextureBaseFolder = {}",
@@ -566,14 +633,30 @@ mod tests {
 
         // Off: the game's own textures folder.
         s.hd_textures = Some(false);
-        install(&runtime, &launcher_dir, false, &s, &mut log).unwrap();
+        install(
+            &at.join("game"),
+            &runtime,
+            &launcher_dir,
+            false,
+            &s,
+            &mut log,
+        )
+        .unwrap();
         assert!(ini(&runtime).contains("TextureBaseFolder = textures"));
         assert!(ini(&runtime).contains("RestoreJPClarissa = false"));
 
         // On without a pack: a warning, and the game still starts.
         s.hd_textures = Some(true);
         s.hd_textures_folder = Some(at.join("nope"));
-        install(&runtime, &launcher_dir, false, &s, &mut log).unwrap();
+        install(
+            &at.join("game"),
+            &runtime,
+            &launcher_dir,
+            false,
+            &s,
+            &mut log,
+        )
+        .unwrap();
         assert!(ini(&runtime).contains("TextureBaseFolder = textures"));
         assert!(lines.iter().any(|l| l.starts_with("warning: hd textures")));
 
@@ -581,7 +664,15 @@ mod tests {
         fs::create_dir_all(launcher_dir.join("textures-pack/load")).unwrap();
         s.hd_textures_folder = None;
         let mut quiet = |_: &str| {};
-        install(&runtime, &launcher_dir, false, &s, &mut quiet).unwrap();
+        install(
+            &at.join("game"),
+            &runtime,
+            &launcher_dir,
+            false,
+            &s,
+            &mut quiet,
+        )
+        .unwrap();
         assert!(ini(&runtime).contains(&format!(
             "TextureBaseFolder = {}",
             launcher_dir.join("textures-pack").display()
@@ -642,12 +733,36 @@ mod tests {
         };
         let mut quiet = |_: &str| {};
         let unset = Settings::default();
-        install(&runtime, &launcher_dir, true, &unset, &mut quiet).unwrap();
+        install(
+            &at.join("game"),
+            &runtime,
+            &launcher_dir,
+            true,
+            &unset,
+            &mut quiet,
+        )
+        .unwrap();
         assert_eq!(backend(&runtime).as_deref(), Some("3"), "XInput under Wine");
-        install(&runtime, &launcher_dir, false, &unset, &mut quiet).unwrap();
+        install(
+            &at.join("game"),
+            &runtime,
+            &launcher_dir,
+            false,
+            &unset,
+            &mut quiet,
+        )
+        .unwrap();
         assert_eq!(backend(&runtime).as_deref(), Some("0"), "WGI on Windows");
         let chosen = Settings::parse_file("input_backend = dinput\n").0;
-        install(&runtime, &launcher_dir, true, &chosen, &mut quiet).unwrap();
+        install(
+            &at.join("game"),
+            &runtime,
+            &launcher_dir,
+            true,
+            &chosen,
+            &mut quiet,
+        )
+        .unwrap();
         assert_eq!(backend(&runtime).as_deref(), Some("2"), "a choice wins");
         fs::remove_dir_all(&at).unwrap();
     }
