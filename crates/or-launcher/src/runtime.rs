@@ -246,6 +246,25 @@ pub fn check_separate(game: &Path, runtime: &Path) -> Result<(), String> {
     check_separate_from(game, runtime, &cwd)
 }
 
+/// Writes `path` whole or not at all: into a temporary file next to it,
+/// then renamed over it (an interrupted write leaves the old file).
+pub fn write_atomic(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<()> {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".tmp");
+    let tmp = path.with_file_name(name);
+    let result = (|| {
+        let mut file = fs::File::create(&tmp)?;
+        io::Write::write_all(&mut file, contents.as_ref())?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&tmp, path)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    result
+}
+
 fn make_writable(path: &Path) -> io::Result<()> {
     let mut perm = fs::metadata(path)?.permissions();
     #[allow(clippy::permissions_set_readonly_false)]
@@ -280,7 +299,7 @@ pub fn sync(game: &Path, runtime: &Path) -> io::Result<usize> {
         let file = fs::OpenOptions::new().write(true).open(&to)?;
         file.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(stamp.mtime))?;
     }
-    fs::write(&manifest_path, format_manifest(&plan.manifest))?;
+    write_atomic(&manifest_path, format_manifest(&plan.manifest))?;
     ensure_save_dir(runtime)?;
     Ok(plan.copy.len())
 }
@@ -594,5 +613,19 @@ mod tests {
         assert!(!game.join("new-runtime").exists());
         fs::remove_file(alias).unwrap();
         fs::remove_dir_all(game).unwrap();
+    }
+
+    #[test]
+    fn atomic_writes_replace_the_whole_file() {
+        let dir = temp("atomic");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("launcher.cfg");
+        write_atomic(&path, "first\n").unwrap();
+        write_atomic(&path, "second\n").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "second\n");
+        assert!(!dir.join("launcher.cfg.tmp").exists());
+        // A folder that doesn't exist: an error, and nothing left behind.
+        assert!(write_atomic(&dir.join("none/launcher.cfg"), "x").is_err());
+        fs::remove_dir_all(dir).unwrap();
     }
 }

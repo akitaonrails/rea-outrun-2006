@@ -163,7 +163,7 @@ mod app {
                 if let Some(parent) = settings_path.parent() {
                     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
                 }
-                fs::write(settings_path, text).map_err(|e| e.to_string())?;
+                runtime::write_atomic(settings_path, text).map_err(|e| e.to_string())?;
                 log_line(&format!(
                     "hd pack: installed in {} and switched on",
                     dir.display()
@@ -313,7 +313,7 @@ mod app {
             if let Some(parent) = settings_path.parent() {
                 fs::create_dir_all(parent).map_err(|error| error.to_string())?;
             }
-            fs::write(&settings_path, text)
+            runtime::write_atomic(&settings_path, text)
                 .map_err(|error| format!("cannot save {}: {error}", settings_path.display()))?;
         }
 

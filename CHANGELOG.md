@@ -34,6 +34,9 @@ All notable changes to this project. The format follows
 - The runtime folder is refused inside the game folder (or around it) also
   when it doesn't exist yet, is a relative path, or is reached through a
   link.
+- `launcher.cfg` and the runtime copy's manifest are written to a
+  temporary file and renamed over the old one, so an interrupted write
+  can't leave them half-written.
 
 ### Changed
 

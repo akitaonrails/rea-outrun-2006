@@ -20,7 +20,7 @@ use eframe::egui::{
 use or_launcher::config::{self, Settings};
 use or_launcher::config::{Backend, Feedback, Vsync};
 use or_launcher::form::{self, Form, Look, PadAction};
-use or_launcher::{edition, hdpack, tweaks};
+use or_launcher::{edition, hdpack, runtime, tweaks};
 
 use crate::win32;
 
@@ -409,7 +409,7 @@ impl<'a> Window<'a> {
         if let Some(dir) = self.path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
-        match std::fs::write(&self.path, saved) {
+        match runtime::write_atomic(&self.path, saved) {
             Ok(()) => {
                 *self.outcome = Outcome::Play;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
