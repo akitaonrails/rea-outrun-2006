@@ -245,7 +245,7 @@ mod app {
         let ok = problems.is_empty();
         if !ok {
             lines.push(format!(
-                "Can't fix it? Report it with your launcher.log: {}",
+                "If you can't fix it, report it with your launcher.log: {}",
                 window::BUG_URL
             ));
         }
