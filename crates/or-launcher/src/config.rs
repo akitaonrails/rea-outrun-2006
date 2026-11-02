@@ -161,12 +161,16 @@ impl Backend {
         }
     }
 
-    fn parse(value: &str) -> Option<Backend> {
+    /// `Some(None)` is `auto`: no choice, the platform default.
+    fn parse(value: &str) -> Option<Option<Backend>> {
         let value = value.trim().to_ascii_lowercase();
         if value == "auto" {
-            return Some(Backend::WindowsGaming);
+            return Some(None);
         }
-        Backend::ALL.into_iter().find(|b| b.key() == value)
+        Backend::ALL
+            .into_iter()
+            .find(|b| b.key() == value)
+            .map(Some)
     }
 
     /// The INI value (0-3).
@@ -242,9 +246,9 @@ game =
 # Default: %USERPROFILE%\Saved Games\OutRun 2006
 #saves =
 
-# Video resolution, e.g. 1920x1080 or 3840x2160; original keeps the game's
-# own 640x480. The game runs as a borderless window at this size (see
-# fullscreen).
+# Video resolution, e.g. 1920x1080 or 3840x2160. Unset, it is the game's own
+# 640x480 (the settings window picks your screen's size on first run). The
+# game runs as a borderless window at this size (see fullscreen).
 #resolution = 1920x1080
 
 # true switches to exclusive fullscreen (the borderless window is easier on
@@ -257,15 +261,15 @@ game =
 #antialiasing = 0
 
 # Frame-rate cap in frames per second. The game's driving runs at a fixed
-# 60 Hz; above 60 the mod interpolates the picture. unlimited (0) turns the
+# 60 Hz; above 60 the mod interpolates the picture. unlimited (or 0) turns the
 # cap off entirely and leaves pacing to vsync or an external limiter.
 #fps_limit = 60
 
 # vsync: on waits for the screen's refresh, off doesn't.
 #vsync = on
 
-# How much further down the stage the world draws: 0 (the game's own), 4 or
-# 8; further out scenery can pop in.
+# How much further down the stage the world draws: 0 (the game's own) to 8;
+# the window offers 0, 4 and 8. Further out, scenery can pop in.
 #draw_distance = 4
 
 # Resolution of the car's reflections: original (128), 512, 1024 or 2048.
@@ -308,6 +312,10 @@ game =
 # Wine and Proton (whose wgi loses the d-pad). Try another if a pad isn't
 # seen.
 #input_backend = wgi
+
+# Linux (or-play) only: how gamescope enlarges the picture: linear (smooth,
+# the default), nearest (sharp), pixel (even pixels) or fsr.
+#scaler = linear
 
 # Start races with the manual gearbox selected.
 #manual_gearbox = false
@@ -364,7 +372,7 @@ OutRunLauncher [options]
   --deadzone <0-50>         steering deadzone in percent
   --vibration <mode>        rumble: off, on, swapped or merged
   --vibration-strength <0-10>
-  --impulse-triggers <mode> Xbox Series impulse triggers
+  --impulse-triggers <mode> Xbox One/Series impulse triggers (Windows): off, on, swapped or merged
   --input-backend <name>    wgi, raw, dinput or xinput
   --manual-gearbox on|off   start races with the manual gearbox
   --cd-switcher on|off      change music mid-race
@@ -380,7 +388,8 @@ These override launcher.cfg for one run (only --game is remembered). Without
 options the settings window opens first.
 
   --no-window               play with the saved settings, no window
-  --settings [--linux]      only the settings window (exit 0: play, 3: closed;
+  --settings [--linux]      only the settings window (exit codes 0: play,
+                           3: closed, 4: no window could be shown;
                            --linux adds the gamescope scaler, for or-play)
 
 OutRunLauncher --check [--game <folder>]
@@ -410,6 +419,11 @@ fn parse_resolution(value: &str) -> Option<(u32, u32)> {
     let w: u32 = w.trim().parse().ok()?;
     let h: u32 = h.trim().parse().ok()?;
     ((640..=7680).contains(&w) && (480..=4320).contains(&h)).then_some((w, h))
+}
+
+/// 0 (unlimited) or 10 to 240 frames per second.
+fn valid_fps(n: &u32) -> bool {
+    *n == 0 || (10..=240).contains(n)
 }
 
 /// `resolution` value meaning the game's own 640x480.
@@ -481,7 +495,7 @@ impl Settings {
                 },
                 "fps_limit" => match value.trim().to_ascii_lowercase().as_str() {
                     "unlimited" | "none" | "off" => s.fps_limit = Some(0),
-                    _ => match value.parse().ok().filter(|n| (10..=240).contains(n)) {
+                    _ => match value.parse().ok().filter(valid_fps) {
                         Some(f) => s.fps_limit = Some(f),
                         None => bad("fps_limit needs 10 to 240 or unlimited, not"),
                     },
@@ -536,7 +550,7 @@ impl Settings {
                     None => bad("impulse_triggers needs off, on, swapped or merged, not"),
                 },
                 "input_backend" => match Backend::parse(value) {
-                    Some(b) => s.input_backend = Some(b),
+                    Some(b) => s.input_backend = b,
                     None => bad("input_backend needs wgi, raw, dinput or xinput, not"),
                 },
                 "manual_gearbox" => boolean(&mut s.manual_gearbox, "manual_gearbox"),
@@ -924,14 +938,13 @@ impl Settings {
                 "--fps-limit" => {
                     let v = value("--fps-limit")?;
                     let lower = v.trim().to_ascii_lowercase();
-                    s.fps_limit =
-                        Some(if lower == "unlimited" || lower == "off" {
-                            0
-                        } else {
-                            v.parse().ok().filter(|n| (10..=240).contains(n)).ok_or_else(|| {
+                    s.fps_limit = Some(if lower == "unlimited" || lower == "off" {
+                        0
+                    } else {
+                        v.parse().ok().filter(valid_fps).ok_or_else(|| {
                             format!("--fps-limit needs 10 to 240 or unlimited, not {v}\n\n{USAGE}")
                         })?
-                        });
+                    });
                 }
                 "--draw-distance" => {
                     let v = value("--draw-distance")?;
@@ -982,11 +995,11 @@ impl Settings {
                 }
                 "--input-backend" => {
                     let v = value("--input-backend")?;
-                    s.input_backend = Some(Backend::parse(&v).ok_or_else(|| {
+                    s.input_backend = Backend::parse(&v).ok_or_else(|| {
                         format!(
                             "--input-backend needs wgi, raw, dinput or xinput, not {v}\n\n{USAGE}"
                         )
-                    })?);
+                    })?;
                 }
                 "--hd-textures" => s.set_hd_textures(&value("--hd-textures")?),
                 "--hd-textures-folder" => {
@@ -1399,5 +1412,133 @@ mod tests {
         assert_eq!(s.deadzone, Some(10));
         assert_eq!(s.vibration_strength, Some(5));
         assert_eq!(s.hd_textures, Some(false));
+    }
+
+    /// The text of `launcher.cfg` after the settings, as `apply_tweaks` sees it.
+    fn tweaks_of(cfg: &str) -> String {
+        Settings::parse_file(cfg).0.apply_tweaks("")
+    }
+
+    #[test]
+    fn the_templates_examples_are_the_defaults() {
+        // Every `#key = value` example, uncommented. Resolution is the one
+        // example that differs from the default (the game's own 640x480).
+        let text: String = TEMPLATE
+            .lines()
+            .filter_map(|line| {
+                let rest = line.strip_prefix('#')?;
+                let (key, _) = rest.split_once(" = ")?;
+                let key_ok =
+                    !key.is_empty() && key.bytes().all(|b| b.is_ascii_lowercase() || b == b'_');
+                (key_ok && key != "resolution").then(|| format!("{rest}\n"))
+            })
+            .collect();
+        assert!(text.lines().count() > 20, "{text}");
+        let (s, warnings) = Settings::parse_file(&text);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let d = Settings::default();
+        assert_eq!(s.fps_cap(), d.fps_cap());
+        assert_eq!(s.backend(), d.backend());
+        assert_eq!(s.deadzone_percent(), d.deadzone_percent());
+        assert_eq!(s.feedback(), d.feedback());
+        assert_eq!(s.impulse(), d.impulse());
+        assert_eq!(s.video_resolution(), d.video_resolution());
+        assert_eq!(s.scaler.unwrap_or(Scaler::Linear), Scaler::Linear);
+        assert_eq!(
+            s.hd_textures.unwrap_or(false),
+            d.hd_textures.unwrap_or(false)
+        );
+        assert_eq!(s.outrun2006_ini(), d.outrun2006_ini());
+        assert_eq!(s.apply_tweaks(""), d.apply_tweaks(""));
+    }
+
+    #[test]
+    fn auto_input_backend_means_no_choice() {
+        let (s, warnings) = Settings::parse_file("input_backend = auto\n");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(s.input_backend, None);
+        assert_eq!(s.backend_on(true), Backend::XInput);
+        let s = args(&["--input-backend", "AUTO"]).unwrap();
+        assert_eq!(s.input_backend, None);
+        assert_eq!(s.backend_on(false), Backend::WindowsGaming);
+        assert!(args(&["--input-backend", "joy"]).is_err());
+    }
+
+    #[test]
+    fn a_zero_frame_rate_cap_is_unlimited() {
+        let (s, warnings) = Settings::parse_file("fps_limit = 0\n");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(s.fps_cap(), 0);
+        assert_eq!(args(&["--fps-limit", "0"]).unwrap().fps_cap(), 0);
+        assert!(s.apply_tweaks("").contains("FramerateLimit = 0"));
+        assert_eq!(Settings::parse_file("fps_limit = 5\n").1.len(), 1);
+    }
+
+    #[test]
+    fn settings_reach_the_tweaks_ini() {
+        let line = |cfg: &str, section: &str, want: &str| {
+            let t = tweaks_of(cfg);
+            assert!(in_section(&t, section, want), "{cfg:?}: {want} not in\n{t}");
+        };
+        line("vsync = off\n", "Performance", "VSync = 0");
+        line("", "Performance", "VSync = 1");
+        line("anisotropy = 8\n", "Graphics", "AnisotropicFiltering = 8");
+        line("", "Graphics", "AnisotropicFiltering = 16");
+        line(
+            "xbox_brightness = true\n",
+            "Graphics",
+            "RestoreXboxBrightness = true",
+        );
+        line(
+            "music_shuffle = true\n",
+            "CDSwitcher",
+            "SwitcherShuffleTracks = true",
+        );
+        line(
+            "fullscreen = true\n",
+            "Window",
+            "WindowedBorderless = false",
+        );
+        line("deadzone = 10\n", "Controls", "SteeringDeadZone = 0.10");
+        line("vibration = swapped\n", "Controls", "VibrationMode = 2");
+        line("vibration = merged\n", "Controls", "VibrationMode = 3");
+        line(
+            "impulse_triggers = off\n",
+            "Controls",
+            "ImpulseVibrationMode = 0",
+        );
+        line(
+            "vibration_strength = 3\n",
+            "Controls",
+            "VibrationStrength = 3",
+        );
+        line("fps_limit = 90\n", "Performance", "FramerateLimit = 90");
+        line(
+            "fps_limit = 90\n",
+            "Performance",
+            "FramerateInterpolation = true",
+        );
+        line("", "Graphics", "UseHiDefCharacters = true");
+        line("", "CDSwitcher", "SwitcherEnable = true");
+        line("", "Misc", "SkipIntroLogos = true");
+    }
+
+    #[test]
+    fn more_flags_are_read() {
+        let s = args(&[
+            "--runtime",
+            "/run/or",
+            "--saves",
+            "/home/me/saves",
+            "--hd-textures-folder",
+            "/packs/hd",
+            "--vsync",
+            "off",
+        ])
+        .unwrap();
+        assert_eq!(s.runtime, Some(PathBuf::from("/run/or")));
+        assert_eq!(s.saves, Some(PathBuf::from("/home/me/saves")));
+        assert_eq!(s.hd_textures_folder, Some(PathBuf::from("/packs/hd")));
+        assert_eq!(s.vsync, Some(Vsync::Off));
     }
 }

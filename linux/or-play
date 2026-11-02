@@ -80,9 +80,14 @@ start() {
   if [ -z "$LAUNCHER" ] || [ ! -f "$LAUNCHER" ]; then
     echo "OutRunLauncher.exe not found next to or-play (or set OR_LAUNCHER)"; exit 1
   fi
-  # No resolution saved (the game's own setting): a 1080p screen.
-  res=$(get_key resolution); W=1920; H=1080
-  if [ -n "$res" ]; then W=${res%x*}; H=${res#*x}; fi
+  # No resolution saved: a 1080p screen. "original" is the game's own 640x480;
+  # anything that is not WIDTHxHEIGHT falls back to 1080p too.
+  res=$(get_key resolution | tr -d '\r \t' | tr 'A-Z' 'a-z'); W=1920; H=1080
+  case $res in
+    original) W=640; H=480 ;;
+    *[!0-9x]*|x*|*x|*x*x*|"") ;;
+    *x*) W=${res%x*}; H=${res#*x} ;;
+  esac
   F=$(get_key scaler); F=${F:-linear}
   inner=$STATE/inner.sh
   cat > "$inner" <<INNER

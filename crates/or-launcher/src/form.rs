@@ -52,6 +52,9 @@ pub struct Form {
     /// Remembered so a look picked by name stays picked even when its
     /// values match another (and Custom stays open while editing).
     pub look: Look,
+    /// Running under Wine or Proton: picks the default input API, which is
+    /// not written to the file.
+    pub wine: bool,
 
     // Picture
     pub resolution: Option<(u32, u32)>,
@@ -107,6 +110,7 @@ impl Form {
     pub fn original(wine: bool) -> Form {
         Form {
             look: Look::Original,
+            wine,
             resolution: None,
             fullscreen: false,
             antialiasing: 0,
@@ -147,6 +151,7 @@ impl Form {
     pub fn coast_to_coast(screen: Option<(u32, u32)>, wine: bool) -> Form {
         Form {
             look: Look::CoastToCoast,
+            wine,
             resolution: screen.and_then(landscape),
             fullscreen: false,
             antialiasing: 0,
@@ -203,7 +208,8 @@ impl Form {
             game: path(&s.game),
             saves: path(&s.saves),
             look: Look::Custom,
-            resolution: s.resolution,
+            wine,
+            resolution: s.video_resolution(),
             fullscreen: s.fullscreen.unwrap_or(false),
             antialiasing: s.antialiasing.unwrap_or(0),
             fps_limit: s.fps_limit.unwrap_or(60),
@@ -238,7 +244,10 @@ impl Form {
     /// The form for a first run: the preset that suits the screen.
     pub fn first_run(screen: Option<(u32, u32)>, wine: bool) -> Form {
         match recommended(screen) {
-            Look::SteamDeck => Form::steam_deck(),
+            Look::SteamDeck => Form {
+                wine,
+                ..Form::steam_deck()
+            },
             _ => Form::coast_to_coast(screen, wine),
         }
     }
@@ -250,6 +259,10 @@ impl Form {
         probe.game.clear();
         probe.saves.clear();
         probe.hd_folder.clear();
+        // The pack, the scaler and the platform are not part of a look.
+        probe.hd_textures = false;
+        probe.scaler = Scaler::Linear;
+        probe.wine = wine;
         if probe == Form::original(wine) {
             return Look::Original;
         }
@@ -258,7 +271,12 @@ impl Form {
             return Look::CoastToCoast;
         }
         probe.look = Look::SteamDeck;
-        if probe == Form::steam_deck() {
+        if probe
+            == (Form {
+                wine,
+                ..Form::steam_deck()
+            })
+        {
             return Look::SteamDeck;
         }
         Look::Custom
@@ -276,16 +294,21 @@ impl Form {
         let saves = std::mem::take(&mut self.saves);
         let hd_folder = std::mem::take(&mut self.hd_folder);
         let scaler = self.scaler;
+        let hd_textures = self.hd_textures;
         *self = match look {
             Look::Original => Form::original(wine),
             Look::CoastToCoast => Form::coast_to_coast(screen, wine),
-            Look::SteamDeck => Form::steam_deck(),
+            Look::SteamDeck => Form {
+                wine,
+                ..Form::steam_deck()
+            },
             Look::Custom => return,
         };
         self.game = game;
         self.saves = saves;
         self.hd_folder = hd_folder;
         self.scaler = scaler;
+        self.hd_textures = hd_textures;
     }
 
     /// The settings file with this form's values written in; every other
@@ -339,7 +362,12 @@ impl Form {
             Some(self.vibration_strength.to_string()),
         );
         put("impulse_triggers", Some(self.impulse_triggers.key().into()));
-        put("input_backend", Some(self.input_backend.key().into()));
+        // The platform's default API is left unset, not pinned.
+        put(
+            "input_backend",
+            (self.input_backend != Backend::default_on(self.wine))
+                .then(|| self.input_backend.key().into()),
+        );
         put("manual_gearbox", Some(self.manual_gearbox.to_string()));
         put("cd_switcher", Some(self.cd_switcher.to_string()));
         put("music_shuffle", Some(self.music_shuffle.to_string()));
@@ -618,6 +646,69 @@ mod tests {
             let saved = f.save(config::TEMPLATE);
             assert!(saved.contains(&format!("scaler = {}", scaler.key())));
             assert_eq!(Settings::parse_file(&saved).0.scaler, Some(scaler));
+        }
+
+        // The scaler is not part of a look.
+        for look in [Look::Original, Look::CoastToCoast, Look::SteamDeck] {
+            let mut f = form(config::TEMPLATE);
+            f.set_look(look, SCREEN, false);
+            f.scaler = Scaler::Nearest;
+            assert_eq!(Form::look_of(&f, SCREEN, false), look);
+            assert_eq!(form(&f.save(config::TEMPLATE)).look, look);
+        }
+    }
+
+    #[test]
+    fn a_look_keeps_the_hd_pack_switch() {
+        let mut f = form(config::TEMPLATE);
+        f.hd_textures = true;
+        f.set_look(Look::CoastToCoast, SCREEN, false);
+        assert!(f.hd_textures);
+        assert_eq!(Form::look_of(&f, SCREEN, false), Look::CoastToCoast);
+        f.set_look(Look::Original, SCREEN, false);
+        assert!(f.hd_textures);
+        assert_eq!(Form::look_of(&f, SCREEN, false), Look::Original);
+    }
+
+    fn input_line(saved: &str) -> Option<&str> {
+        saved
+            .lines()
+            .find(|l| l.trim_start().starts_with("input_backend ="))
+    }
+
+    #[test]
+    fn the_platform_default_input_api_is_not_pinned() {
+        let wine = |text: &str| Form::new(&Settings::parse_file(text).0, SCREEN, true);
+        let f = wine(config::TEMPLATE);
+        assert_eq!(f.input_backend, Backend::XInput);
+        assert_eq!(input_line(&f.save(config::TEMPLATE)), None);
+
+        let mut f = wine(config::TEMPLATE);
+        f.input_backend = Backend::DirectInput;
+        let saved = f.save(config::TEMPLATE);
+        assert_eq!(input_line(&saved), Some("input_backend = dinput"));
+        assert_eq!(wine(&saved).input_backend, Backend::DirectInput);
+
+        // Off Wine the default is Windows.Gaming.Input.
+        let mut f = form(config::TEMPLATE);
+        assert_eq!(f.input_backend, Backend::WindowsGaming);
+        assert_eq!(input_line(&f.save(config::TEMPLATE)), None);
+        f.input_backend = Backend::XInput;
+        assert_eq!(
+            input_line(&f.save(config::TEMPLATE)),
+            Some("input_backend = xinput")
+        );
+    }
+
+    #[test]
+    fn the_original_resolution_is_the_640x480_chip() {
+        for text in ["resolution = original\n", "resolution = 640x480\n"] {
+            assert_eq!(form(text).resolution, None);
+            let s = Settings::parse_file(&format!(
+                "{text}draw_distance = 0\nreflections = original\nanisotropy = 0\nsky_glow = false\nhd_characters = false\nvibration = off\nimpulse_triggers = off\ncd_switcher = false\nskip_logos = false\nfree_drive = false\nhorn = false\nrandom_anims = false\nshow_miles = false\nsoundtrack_fix = false\n"
+            ))
+            .0;
+            assert_eq!(Form::new(&s, SCREEN, false).look, Look::Original);
         }
     }
 }

@@ -185,7 +185,10 @@ mod app {
         log_line(concat!("OutRunLauncher ", env!("CARGO_PKG_VERSION")));
         let settings_path = settings_path();
         let mut cli: Vec<String> = std::env::args().skip(1).collect();
-        if take_flag(&mut cli, "--help") {
+        // Non-short-circuiting, so all three spellings are removed.
+        let help =
+            take_flag(&mut cli, "--help") | take_flag(&mut cli, "-h") | take_flag(&mut cli, "/?");
+        if help {
             win32::message("OutRun 2006 launcher", config::USAGE, false);
             return Ok(0);
         }

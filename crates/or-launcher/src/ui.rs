@@ -711,12 +711,19 @@ impl Window<'_> {
         };
         let gap = 10.0;
         let w = (ui.available_width() - 3.0 * gap) / 4.0;
+        // One title size for all four cards: the largest at which every
+        // title fits.
+        let title_size = cards
+            .iter()
+            .map(|(_, title, _)| fit_title(ui, title, w - 28.0))
+            .fold(22.0, f32::min);
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = gap;
             for (look, title, note) in cards {
                 if look_card(
                     ui,
                     vec2(w, 104.0),
+                    title_size,
                     self.form.look == look,
                     title,
                     &note,
@@ -877,26 +884,25 @@ impl Window<'_> {
         } else {
             "Download"
         };
-        ui.horizontal(|ui| {
-            if primary_button(ui, label).clicked() {
-                self.start_download(ui.ctx());
-            }
-            ui.add_space(10.0);
-            let detail = if partial > 0 {
-                format!(
-                    "{:.0} of {:.0} MB already here.",
-                    hdpack::mb(partial),
-                    hdpack::mb(self.pack.size)
-                )
-            } else {
-                format!(
-                    "{:.0} MB, {:.1} GB once unpacked. The launcher downloads, checks and unpacks it for you.",
-                    hdpack::mb(self.pack.size),
-                    hdpack::gb(self.pack.unpacked)
-                )
-            };
-            ui.label(egui::RichText::new(detail).font(font(13.0)).color(MUTED));
-        });
+        if primary_button(ui, label).clicked() {
+            self.start_download(ui.ctx());
+        }
+        ui.add_space(6.0);
+        // On its own line, so it wraps instead of widening the tab.
+        let detail = if partial > 0 {
+            format!(
+                "{:.0} of {:.0} MB already here.",
+                hdpack::mb(partial),
+                hdpack::mb(self.pack.size)
+            )
+        } else {
+            format!(
+                "{:.0} MB, {:.1} GB once unpacked. The launcher downloads, checks and unpacks it for you.",
+                hdpack::mb(self.pack.size),
+                hdpack::gb(self.pack.unpacked)
+            )
+        };
+        ui.label(egui::RichText::new(detail).font(font(13.0)).color(MUTED));
     }
 
     /// A pack is in place: switch it on or off, or remove the download.
@@ -1145,7 +1151,11 @@ impl Window<'_> {
             vec2(170.0, rect.height()),
         );
         let hint = if self.form.resolution.is_some() {
-            "The game runs at this resolution as a borderless window."
+            if self.form.fullscreen {
+                "The game runs at this resolution in exclusive fullscreen."
+            } else {
+                "The game runs at this resolution as a borderless window."
+            }
         } else {
             "Settings are saved when you press Play."
         };
@@ -1476,10 +1486,27 @@ fn toggle(ui: &mut egui::Ui, on: &mut bool, text: &str) -> egui::Response {
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
+/// The look card title size (22 at most) at which `title` fits `width`.
+fn fit_title(ui: &egui::Ui, title: &str, width: f32) -> f32 {
+    let mut size = 22.0;
+    while size > 12.0
+        && ui
+            .painter()
+            .layout_no_wrap(title.to_string(), named("condensed", size), INK)
+            .size()
+            .x
+            > width
+    {
+        size -= 0.5;
+    }
+    size
+}
+
 /// One of the looks; true when clicked.
 fn look_card(
     ui: &mut egui::Ui,
     size: Vec2,
+    title_size: f32,
     on: bool,
     title: &str,
     note: &str,
@@ -1507,7 +1534,7 @@ fn look_card(
         rect.left_top() + vec2(pad, pad - 2.0),
         Align2::LEFT_TOP,
         title,
-        named("condensed", 22.0),
+        named("condensed", title_size),
         if on { YELLOW } else { INK },
     );
     if recommended {

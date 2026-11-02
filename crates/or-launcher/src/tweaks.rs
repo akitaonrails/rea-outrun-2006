@@ -149,6 +149,12 @@ pub fn install(
             )),
             soundtrack::Applied::Failed(e) => log(&format!("warning: soundtrack fix failed: {e}")),
         }
+    } else {
+        match soundtrack::restore(runtime) {
+            Ok(true) => log("soundtrack: original Rush a Difficulty restored"),
+            Ok(false) => {}
+            Err(e) => log(&format!("warning: soundtrack restore failed: {e}")),
+        }
     }
     Ok(())
 }

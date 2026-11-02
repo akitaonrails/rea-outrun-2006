@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub const TRACK: &str = "Sound/14_Rush_a_Difficulty_1989.ogg";
+const BACKUP: &str = "Sound/Backup/14_Rush_a_Difficulty_1989.ogg";
 const PATCH: &str = "14_Rush_a_Difficulty_1989.ogg.vcdiff";
 /// The truncated file every known release ships.
 const BROKEN_SIZE: u64 = 3_055_933;
@@ -56,7 +57,7 @@ pub fn apply(runtime: &Path, launcher_dir: &Path) -> Applied {
     if let Err(e) = fs::create_dir_all(&backup_dir) {
         return Applied::Failed(format!("cannot create {}: {e}", backup_dir.display()));
     }
-    let backup = backup_dir.join("14_Rush_a_Difficulty_1989.ogg");
+    let backup = runtime.join(BACKUP);
     if !backup.is_file()
         && let Err(e) = fs::copy(&song, &backup)
     {
@@ -101,6 +102,20 @@ pub fn apply(runtime: &Path, launcher_dir: &Path) -> Applied {
             Applied::Failed(e)
         }
     }
+}
+
+/// Puts the original song back when the fix is switched off: only a fixed
+/// size song is replaced, and only from the backup `apply` made. `true`
+/// when it did.
+pub fn restore(runtime: &Path) -> Result<bool, String> {
+    let song = runtime.join(TRACK);
+    let backup = runtime.join(BACKUP);
+    let fixed = fs::metadata(&song).is_ok_and(|m| m.len() == FIXED_SIZE);
+    if !fixed || !backup.is_file() {
+        return Ok(false);
+    }
+    fs::copy(&backup, &song).map_err(|e| format!("cannot restore the song: {e}"))?;
+    Ok(true)
 }
 
 /// The xdelta3 command: the bundled Windows build (works under Wine too),
@@ -156,6 +171,21 @@ mod tests {
         fs::create_dir_all(dir.join("Sound")).unwrap();
         fs::write(dir.join(TRACK), vec![0u8; 1024]).unwrap();
         assert_eq!(apply(&dir, &dir), Applied::AlreadyFixed);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn switching_the_fix_off_restores_the_original_song() {
+        let dir = std::env::temp_dir().join(format!("or-sound-3-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("Sound/Backup")).unwrap();
+        let original = vec![1u8; BROKEN_SIZE as usize];
+        fs::write(dir.join(BACKUP), &original).unwrap();
+        fs::write(dir.join(TRACK), vec![2u8; FIXED_SIZE as usize]).unwrap();
+        assert_eq!(restore(&dir), Ok(true));
+        assert_eq!(fs::read(dir.join(TRACK)).unwrap(), original);
+        // Nothing left to restore the second time.
+        assert_eq!(restore(&dir), Ok(false));
         fs::remove_dir_all(&dir).unwrap();
     }
 }
