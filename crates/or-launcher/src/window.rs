@@ -23,7 +23,7 @@ use rea_launcher::fsx;
 use rea_launcher_ui::download::{Download, DownloadAction, DownloadState, download_row};
 use rea_launcher_ui::eframe;
 use rea_launcher_ui::egui::{
-    self, Align2, Color32, Key, Mesh, Rect, Shape, TextureHandle, Vec2, pos2, vec2,
+    self, Color32, Key, Mesh, Rect, Shape, TextureHandle, Vec2, pos2, vec2,
 };
 use rea_launcher_ui::pad::{self, Nav, PadNav};
 use rea_launcher_ui::spec::{mark_rendered, spec_row};
@@ -49,7 +49,8 @@ const fn rgb(hex: u32) -> Color32 {
 pub const PALETTE: Palette = Palette {
     base: rgb(0x0f0c0b),
     panel: rgb(0x211b18),
-    line: rgb(0x3d3430),
+    // Control borders: 3:1 against the base and the panels (WCAG non-text).
+    line: rgb(0x6d6663),
     ink: rgb(0xf6f1ea),
     muted: rgb(0xab9f96),
     action: rgb(0xd40000),
@@ -191,10 +192,16 @@ pub fn check_game(folder: &str, bundled: Option<&[u8]>) -> Check {
     }
     let dir = Path::new(folder);
     if !dir.is_dir() {
-        return Check::Problem("No such folder.".into());
+        return Check::Problem(format!(
+            "No such folder. Choose the folder that holds {}.",
+            edition::EXE
+        ));
     }
     let Some(exe) = rea_launcher::paths::find_ignoring_case(dir, edition::EXE) else {
-        return Check::Problem(format!("There is no {} in this folder.", edition::EXE));
+        return Check::Problem(format!(
+            "There is no {} in this folder. Choose the folder the game was installed in.",
+            edition::EXE
+        ));
     };
     match std::fs::read(&exe) {
         Ok(bytes) => match edition::identify_with_bundled(&bytes, bundled) {
@@ -268,6 +275,8 @@ pub struct Window {
     hd_job: Option<Arc<Job>>,
     hd_rate: Rate,
     hd_result: Option<(String, Color32)>,
+    /// Remove was pressed once; the second press deletes.
+    confirm_remove: bool,
     platform: Box<dyn Platform>,
     outcome: Rc<Cell<Outcome>>,
 }
@@ -321,6 +330,7 @@ impl Window {
             hd_job: None,
             hd_rate: Rate::default(),
             hd_result: None,
+            confirm_remove: false,
             platform,
             outcome: Rc::new(Cell::new(Outcome::Closed)),
         }
@@ -458,29 +468,21 @@ impl Window {
         }
         // The middle of the picture (the car), faded to black into the page.
         widgets::hero_image(p, rect, self.portrait.as_ref(), Crop::Center, BASE);
-        let x = rect.left() + 20.0;
-        let y = rect.bottom() - 20.0;
-        p.text(
-            pos2(x, y),
-            Align2::LEFT_BOTTOM,
-            "Music can be changed mid-race",
-            font(11.0),
+        // The caption sits on a solid plate: no small text straight on the
+        // photo.
+        let galley = p.layout(
+            "Splash Wave or Magical Sound Shower — the girl's request is optional. Music can be changed mid-race."
+                .to_string(),
+            font(13.0),
             MUTED,
+            rect.width() - 56.0,
         );
-        p.text(
-            pos2(x, y - 16.0),
-            Align2::LEFT_BOTTOM,
-            "the girl's request is optional",
-            font(11.0),
-            MUTED,
+        let plate = Rect::from_min_size(
+            pos2(rect.left() + 16.0, rect.bottom() - 28.0 - galley.size().y),
+            galley.size() + vec2(24.0, 16.0),
         );
-        p.text(
-            pos2(x, y - 34.0),
-            Align2::LEFT_BOTTOM,
-            "Splash Wave or Magical Sound Shower —",
-            font(11.0),
-            MUTED,
-        );
+        p.rect_filled(plate, 6.0, PALETTE.panel);
+        p.galley(plate.min + vec2(12.0, 8.0), galley, MUTED);
     }
 
     fn status(&self, ui: &mut egui::Ui) {
@@ -609,6 +611,7 @@ impl Window {
             // A size from the file or the command line stays shown.
             resolutions.push((Some(size), format!("{}×{}", size.0, size.1)));
         }
+        widgets::heading(ui, "Screen");
         chip_row(ui, "resolution", &resolutions, &mut f.resolution, None);
         bool_row(ui, "fullscreen", &mut f.fullscreen, None);
         let rates = with_current(&FRAME_RATES, f.fps_limit, |n| n.to_string());
@@ -616,6 +619,7 @@ impl Window {
         let mut vsync = f.vsync == Vsync::On;
         bool_row(ui, "vsync", &mut vsync, None);
         f.vsync = if vsync { Vsync::On } else { Vsync::Off };
+        group(ui, "Detail");
         let distances = with_current(&DISTANCES, f.draw_distance, |n| n.to_string());
         chip_row(ui, "draw_distance", &distances, &mut f.draw_distance, None);
         let mut reflections = match f.reflections {
@@ -631,10 +635,12 @@ impl Window {
         if spec_row(ui, option("antialiasing"), &mut aa).changed() {
             f.antialiasing = aa.parse().unwrap_or(0);
         }
+        group(ui, "Effects");
         bool_row(ui, "sky_glow", &mut f.sky_glow, None);
         bool_row(ui, "xbox_brightness", &mut f.xbox_brightness, None);
         bool_row(ui, "hd_characters", &mut f.hd_characters, None);
         if self.linux {
+            group(ui, "Linux");
             let mut scaler = f.scaler.key().to_string();
             if spec_row(ui, option("scaler"), &mut scaler).changed()
                 && let Some(s) = config::Scaler::ALL.into_iter().find(|s| s.key() == scaler)
@@ -755,8 +761,19 @@ impl Window {
                     job.cancel();
                 }
             }
+            Some(DownloadAction::Remove) if !self.confirm_remove => {
+                self.confirm_remove = true;
+                self.hd_result = Some((
+                    format!(
+                        "Press Remove again to delete the pack ({}). You can download it again later.",
+                        rea_launcher_ui::download::size_text(self.pin.unpacked_size)
+                    ),
+                    YELLOW,
+                ));
+            }
             Some(DownloadAction::Remove) => match download::remove(&self.pin, root) {
                 Ok(()) => {
+                    self.confirm_remove = false;
                     self.hd_job = None;
                     self.form.hd_textures = false;
                     self.form.hd_folder.clear();
@@ -935,6 +952,12 @@ impl eframe::App for Window {
     }
 }
 
+/// A heading that starts a new group of rows.
+fn group(ui: &mut egui::Ui, title: &str) {
+    ui.add_space(10.0);
+    widgets::heading(ui, title);
+}
+
 /// A row of chips for `key`: its label on the left, its description under
 /// it (both also the row's accessible name and description). `disabled`
 /// greys every chip out and says why.
@@ -960,6 +983,7 @@ fn chip_row<T: PartialEq + Clone, S: AsRef<str>>(
             .inner;
         name(ui, &response, row);
         widgets::note(ui, disabled.unwrap_or(row.description));
+        ui.add_space(6.0);
     });
 }
 
@@ -972,6 +996,7 @@ fn bool_row(ui: &mut egui::Ui, key: &'static str, on: &mut bool, disabled: Optio
         let response = widgets::toggle(ui, on, row.label, disabled);
         name(ui, &response, row);
         widgets::note(ui, disabled.unwrap_or(row.description));
+        ui.add_space(6.0);
     });
 }
 
@@ -1466,5 +1491,37 @@ mod tests {
         ] {
             assert!(saved.lines().any(|l| l == line), "{line} not in\n{saved}");
         }
+    }
+
+    #[test]
+    fn the_palette_and_text_sizes_pass_the_sdk_checks() {
+        assert_eq!(
+            theme::contrast_problems(&PALETTE, &METRICS),
+            Vec::<String>::new()
+        );
+        assert_eq!(theme::text_size_problems(&METRICS), Vec::<String>::new());
+    }
+
+    #[test]
+    fn remove_asks_twice() {
+        let dirs = Dirs::new("remove");
+        let pin = hdpack::pin();
+        let dir = hdpack::root(&dirs.root.join("home")).join(pin.name());
+        std::fs::create_dir_all(dir.join("textures/load")).unwrap();
+        std::fs::write(
+            dir.join(".complete"),
+            rea_launcher::identify::hex(&pin.sha256),
+        )
+        .unwrap();
+        let mut ui = open(&dirs, None, false, false);
+        show(&mut ui, Tab::HdPack);
+        assert_eq!(ui.state().form.hd_folder, dir.display().to_string());
+        ui.get_by_label("Remove").click();
+        ui.run();
+        assert!(dir.exists(), "the first press only asks");
+        ui.get_by_label("Remove").click();
+        ui.run();
+        assert!(!dir.exists());
+        assert!(ui.state().form.hd_folder.is_empty());
     }
 }

@@ -52,6 +52,13 @@ All notable changes to this project. The format follows
   resumes an interrupted download (the button was called "Resume download")
   and a failure stays on screen until the next try. The completion marker
   is now written before the folder is moved into place.
+- Settings window accessibility: control borders reach 3:1 contrast
+  (`line` `#3d3430` → `#6d6663`); the caption on the photo is 13 pt on a
+  solid plate instead of 11 pt straight on the picture; the Picture tab is
+  grouped (Screen, Detail, Effects, Linux); Remove asks for a second press
+  before deleting the 3.2 GB pack; folder errors say what to choose
+  instead. A test keeps the palette and text sizes within the SDK's
+  checks.
 - Every row in the window shows a one-line note of what it changes (before,
   some help was only on mouse hover, out of reach of a pad). Controls that
   can't be used now are shown greyed out with the reason instead of being
