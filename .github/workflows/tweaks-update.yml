@@ -1,0 +1,87 @@
+name: tweaks-update
+
+# Looks for a newer OutRun2006Tweaks build (upstream publishes them only as
+# expiring CI artifacts). When its binaries differ from the pinned build,
+# the build is repacked and kept as a release of this repository, and a
+# pull request moves packaging/tweaks.txt to it. See docs/TWEAKS.md.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"  # Mondays
+  workflow_dispatch:
+    inputs:
+      run:
+        description: "Upstream Actions run id (empty: the newest successful master build)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: tweaks-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Look for a newer build
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OR_REPO: ${{ github.repository }}
+        run: |
+          args=""
+          [ -n "${{ inputs.run }}" ] && args="--run ${{ inputs.run }}"
+          packaging/update-tweaks.sh $args | tee check.log
+          grep -q '^changed=yes' check.log && echo "changed=yes" >> "$GITHUB_OUTPUT" || true
+          short=$(sed -n 's/^upstream: run [0-9]*, commit \([0-9a-f]*\).*/\1/p' check.log)
+          echo "short=$short" >> "$GITHUB_OUTPUT"
+
+      - name: Skip when a pull request for this build is already open
+        id: open
+        if: steps.check.outputs.changed == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "tweaks/${{ steps.check.outputs.short }}" --state open --json number --jq length)
+          echo "exists=$([ "$n" -gt 0 ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the build and open a pull request
+        if: steps.check.outputs.changed == 'yes' && steps.open.outputs.exists == 'no'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OR_REPO: ${{ github.repository }}
+        run: |
+          short=${{ steps.check.outputs.short }}
+          if gh release view "tweaks-$short" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release tweaks-$short exists; repinning to it"
+            gh release delete "tweaks-$short" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          fi
+          args="--publish"
+          [ -n "${{ inputs.run }}" ] && args="$args --run ${{ inputs.run }}"
+          packaging/update-tweaks.sh $args
+          branch=tweaks/$short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add packaging/tweaks.txt
+          git commit -m "chore(tweaks): update OutRun2006Tweaks to $short"
+          git push --force origin "$branch"
+          gh pr create --repo "$GITHUB_REPOSITORY" --head "$branch" \
+            --title "chore(tweaks): update OutRun2006Tweaks to $short" \
+            --body "$(cat <<EOF
+          A newer OutRun2006Tweaks build has different binaries from the pinned one. It is repacked as the release [tweaks-$short](https://github.com/$GITHUB_REPOSITORY/releases/tag/tweaks-$short) and \`packaging/tweaks.txt\` points at it.
+
+          Before merging (docs/TWEAKS.md):
+          - play-test it with the launcher and note the result in \`docs/RUNTIME_NOTES.md\`;
+          - check its licence (LICENSE.md in the release zip) against \`THIRD_PARTY.md\`;
+          - if the INI gained or renamed keys the launcher writes, update \`config.rs\`.
+
+          Pull requests opened by this workflow don't start the build workflow; close and reopen it (or push to the branch) to run CI.
+          EOF
+          )"

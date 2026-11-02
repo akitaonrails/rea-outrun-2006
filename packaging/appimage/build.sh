@@ -5,9 +5,9 @@
 #   packaging/appimage/build.sh <package-folder> <output-folder>
 #
 # <package-folder> is an unpacked OutRunLauncher zip: OutRunLauncher.exe
-# and the folders it reads beside itself (tweaks, vc, linux, soundtrack,
-# textures-pack). Downloads (checked by SHA-256) are kept in $OR_CACHE
-# (default ~/.cache/or-appimage).
+# and the folders it reads beside itself (tweaks, vc, linux, soundtrack).
+# Downloads (checked by SHA-256) are kept in $OR_CACHE
+# (default ~/.cache/or-package, shared with package.sh).
 set -eu
 PKG=$(readlink -f "$1"); OUT=$(readlink -f "$2")
 HERE=$(dirname "$(readlink -f "$0")")
@@ -32,7 +32,7 @@ for tool in function_grep.pl widl winebuild winecpp winedump wineg++ winegcc win
 done
 # The launcher reads its components from the folders beside it.
 cp "$PKG/OutRunLauncher.exe" "$APPDIR/usr/lib/or/"
-for dir in tweaks vc linux soundtrack textures-pack; do
+for dir in tweaks vc linux soundtrack; do
   if [ -d "$PKG/$dir" ]; then cp -r "$PKG/$dir" "$APPDIR/usr/lib/or/$dir"; fi
 done
 mv "$APPDIR/usr/lib/or/linux/or-play" "$APPDIR/usr/lib/or/or-play"

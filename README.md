@@ -40,7 +40,9 @@ with your choices on every start.
 - Longer draw distance, sharper car reflections, anisotropic filtering, the
   console versions' sky glow, the Xbox brightness, and the hi-def passenger
   models the PC release shipped unused.
-- Optional community HD texture pack, or any texture folder of your own.
+- The community HD texture pack, a separate download: tick it in the
+  Picture tab, press **Get it…**, unzip it anywhere and choose its folder
+  ([docs/HD_TEXTURES.md](docs/HD_TEXTURES.md)).
 
 **Gamepads**
 
@@ -72,16 +74,18 @@ comes from.
 
 ## 2. Windows
 
-1. Unpack `OutRunLauncher-<version>.zip` anywhere and keep its folders
-   (`tweaks`, `vc`, `linux`, `soundtrack`, `textures-pack`) next to
-   `OutRunLauncher.exe`.
+1. Download `OutRunLauncher-<version>.zip` from the
+   [releases](https://github.com/akitaonrails/rea-outrun-2006/releases),
+   unpack it anywhere and keep its folders (`tweaks`, `vc`, `linux`,
+   `soundtrack`) next to `OutRunLauncher.exe`.
 2. Run `OutRunLauncher.exe`, choose the folder with your `OR2006C2C.exe`,
    pick a look, and press Play.
 
 ## 3. Linux
 
-- **AppImage** (no Wine needed): make `OutRunLauncher-x86_64.AppImage`
-  executable and run it. If [gamescope](https://github.com/ValveSoftware/gamescope)
+- **AppImage** (no Wine needed): download `OutRunLauncher-<version>-x86_64.AppImage`
+  from the [releases](https://github.com/akitaonrails/rea-outrun-2006/releases),
+  make it executable and run it. If [gamescope](https://github.com/ValveSoftware/gamescope)
   is installed, the game runs inside it at the size you chose.
 - **Steam**: add `OutRunLauncher.exe` as a non-Steam game and force a
   Proton version.
@@ -114,6 +118,12 @@ at start (see `docs/RUNTIME_NOTES.md`).
 
 Third-party components are downloaded at package time from the URLs and
 SHA-256 digests in `packaging/*.txt`; see [THIRD_PARTY.md](THIRD_PARTY.md).
+The bundled OutRun2006Tweaks build and how it is updated are described in
+[docs/TWEAKS.md](docs/TWEAKS.md).
+
+CI (`.github/workflows/build.yml`) tests, lints and builds every push and
+pull request, and uploads the Windows zip and the Linux AppImage as
+artifacts. Pushing a tag `v*` publishes both as a GitHub release.
 
 ## Licence
 

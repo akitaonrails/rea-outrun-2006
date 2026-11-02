@@ -27,12 +27,11 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 
 | Folder | Component | Licence | Pin |
 | --- | --- | --- | --- |
-| `tweaks/` | OutRun2006Tweaks by emoose, CI build of commit `08e5efb4`: `dinput8.dll`, the DRM-free replacement `OR2006C2C.exe`, `OutRun2006Tweaks.ini`, `OutRun2006Tweaks.lods.ini` | MIT at this commit (the project moved to GPL-3.0 at `021e4bf5`); the replacement EXE is derived from SEGA's game EXE | `packaging/tweaks.txt`, https://github.com/emoose/OutRun2006Tweaks |
+| `tweaks/` | OutRun2006Tweaks by emoose, CI build of commit `08e5efb4`, repacked as a release of this repository with its `LICENSE.md` and `SOURCE.txt` (docs/TWEAKS.md): `dinput8.dll`, the DRM-free replacement `OR2006C2C.exe`, `OutRun2006Tweaks.ini`, `OutRun2006Tweaks.lods.ini` | MIT at this commit (the project moved to GPL-3.0 at `021e4bf5`; the release also carries the source); the replacement EXE is derived from SEGA's game EXE | `packaging/tweaks.txt`, https://github.com/emoose/OutRun2006Tweaks |
 | `soundtrack/` | OutRun2006Tweaks Soundtrack Fix 1.0: `14_Rush_a_Difficulty_1989.ogg.vcdiff` | no licence of its own (published with OutRun2006Tweaks, then MIT); the patch restores SEGA audio | `packaging/soundtrack.txt` |
 | `soundtrack/` | xdelta3 3.1.0 (i686), shipped in the Soundtrack Fix as `xdelta3-3.1.0-i686.exe`, renamed `xdelta3.exe` | GPL-2.0 | https://github.com/jmacd/xdelta-gpl |
 | `linux/` | DXVK 3.1.1, 32-bit `d3d9.dll` (used under Wine and Proton only) | zlib | `packaging/dxvk.txt`, https://github.com/doitsujin/dxvk |
 | `vc/` | Microsoft Visual C++ 2015–2022 runtime 14.44.35211.0 (x86): `msvcp140.dll`, `vcruntime140.dll`, `vcomp140.dll`, deployed app-local | Microsoft Visual Studio Distributable Code | `packaging/vcredist.txt`, https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist |
-| `textures-pack/` (only with `OR_TEXTURES=1`) | OR2006Sprites HD GUI pack v0.26.09a, Envido32's compilation of the Sonic-TV community upscales | **none stated**; upscales and remakes of SEGA artwork. Not in default packages | `packaging/textures.txt`, https://github.com/envido32/OR2006Sprites |
 
 ## Bundled in the Linux AppImage (`packaging/appimage`)
 
@@ -43,6 +42,10 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 | The AppImage icon `packaging/appimage/outrun-launcher.png` | ours (MIT OR Apache-2.0) | this repository |
 
 ## Not bundled
+
+The community HD texture pack (Envido32's OR2006Sprites compilation): no
+licence is stated, so the launcher links to its download page instead of
+shipping it (docs/HD_TEXTURES.md).
 
 The game itself. OutRun is a trademark of SEGA; players need their own
 copy of OutRun 2006: Coast 2 Coast.

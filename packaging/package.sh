@@ -7,8 +7,8 @@
 # Build the launcher first (cargo build --release --target
 # i686-pc-windows-gnu). Every download comes from packaging/<name>.txt and
 # is checked by SHA-256; they are kept in $OR_CACHE (default
-# ~/.cache/or-package). OR_TEXTURES=1 adds the community HD texture pack
-# (3.2 GB unpacked, no licence: see packaging/textures.txt).
+# ~/.cache/or-package). The community HD texture pack is not bundled: it
+# is a separate download the launcher links to (docs/HD_TEXTURES.md).
 #
 # Needs curl, unzip, tar, cabextract and sha256sum.
 set -eu
@@ -34,9 +34,10 @@ cp "$ROOT/README.md" "$ROOT/THIRD_PARTY.md" "$ROOT/LICENSE-MIT" "$ROOT/LICENSE-A
 cp "$ROOT/linux/or-play" "$ROOT/linux/README.md" "$OUT/linux/"
 chmod +x "$OUT/linux/or-play"
 
-# OutRun2006Tweaks: the replacement EXE, dinput8.dll and its two INI files.
+# OutRun2006Tweaks: the replacement EXE, dinput8.dll, its two INI files,
+# and the licence and source notes of the build (docs/TWEAKS.md).
 unzip -q -j -o "$(fetch tweaks)" dinput8.dll OR2006C2C.exe \
-  OutRun2006Tweaks.ini OutRun2006Tweaks.lods.ini -d "$OUT/tweaks"
+  OutRun2006Tweaks.ini OutRun2006Tweaks.lods.ini LICENSE.md SOURCE.txt -d "$OUT/tweaks"
 
 # The soundtrack fix and the xdelta3 that applies it.
 unzip -q -j -o "$(fetch soundtrack)" 14_Rush_a_Difficulty_1989.ogg.vcdiff \
@@ -61,13 +62,5 @@ for dll in msvcp140 vcruntime140 vcomp140; do
   [ -f "$WORK/vcdll/$dll.dll_x86" ] || { echo "VC++ runtime: $dll.dll not found"; exit 1; }
   mv "$WORK/vcdll/$dll.dll_x86" "$OUT/vc/$dll.dll"
 done
-
-# The community HD texture pack, on request: its textures/load folder.
-if [ -n "${OR_TEXTURES:-}" ]; then
-  unzip -q -o "$(fetch textures)" 'textures/load/*' -x 'textures/load/README.md' \
-    'textures/load/download.png' 'textures/load/directory.png' -d "$WORK/tex"
-  mkdir -p "$OUT/textures-pack"
-  mv "$WORK/tex/textures/load" "$OUT/textures-pack/load"
-fi
 
 echo "packaged $OUT"
