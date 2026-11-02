@@ -8,6 +8,9 @@ What was checked by running the game, newest first. Paths use
 Changes made after v0.1.0 from the cross-launcher audit, covered by unit
 tests but not yet seen with the game:
 
+- Saves sync (`.or-saves` in the runtime folder): kill the game mid-session
+  after a save, start again, and check the save reaches the saves folder;
+  then put an older backup in the saves folder and check the game loads it.
 - Settings window under Wine on a 4K screen: created at 1.5x from the
   start (no resize after creation). Check it opens at full size and fully
   drawn under XWayland with fractional scaling, and still fits and centres

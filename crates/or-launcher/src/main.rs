@@ -282,10 +282,11 @@ mod app {
                 .map_err(|error| format!("cannot create {}: {error}", saves.display()))?;
             log_line(&format!("saves: created {} ({n} files)", saves.display()));
         }
-        let n = runtime::mirror(&saves, &rt_save)
-            .map_err(|error| format!("cannot read saves from {}: {error}", saves.display()))?;
+        let saves_state = runtime_dir.join(runtime::SAVES_STATE);
+        let (n_in, n_out) = runtime::saves_in(&saves, &rt_save, &saves_state)
+            .map_err(|error| format!("cannot sync saves with {}: {error}", saves.display()))?;
         log_line(&format!(
-            "saves: {n} files updated from {}",
+            "saves: {n_in} files updated from {}, {n_out} newer ones copied there",
             saves.display()
         ));
 
@@ -352,7 +353,7 @@ mod app {
         {
             log_line("the game crashed: a report is in the runtime's CrashDumps folder");
         }
-        match runtime::mirror(&rt_save, &saves) {
+        match runtime::saves_out(&rt_save, &saves, &saves_state) {
             Ok(n) if n > 0 => log_line(&format!("saves: {n} files written back")),
             Ok(_) => {}
             Err(error) => log_line(&format!(

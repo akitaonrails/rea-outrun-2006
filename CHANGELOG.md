@@ -8,9 +8,12 @@ All notable changes to this project. The format follows
 
 ### Fixed
 
-- Saves: copying the saves folder into the runtime copy no longer overwrites
-  a newer save there (newer wins), so progress from a session that ended
-  before the write-back is kept.
+- Saves: the runtime copy records each save file as of the last copy
+  (`.or-saves`). At start, a save changed in the saves folder since then
+  (a restored backup, saves from another PC) goes into the game; otherwise
+  a save the game wrote but never copied back (the session ended before
+  the write-back) goes to the saves folder instead of being overwritten.
+  Without a record the saves folder wins, as before.
 - Settings window under Wine: created at its final size on large screens
   instead of resized after creation, which XWayland with fractional
   scaling can lose (the window stayed small or clipped).

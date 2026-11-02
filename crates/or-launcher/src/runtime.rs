@@ -322,48 +322,129 @@ fn ensure_save_dir(runtime: &Path) -> io::Result<()> {
     save_dir(runtime).map(|_| ())
 }
 
-/// Whether a copy whose destination looks like `dst` should be made from a
-/// source stamped `src`: never over a newer file (the game saved, then the
-/// launcher never got to copy it back), nor over an identical one.
-fn should_mirror(src: Stamp, dst: Option<Stamp>) -> bool {
-    match dst {
-        None => true,
-        Some(dst) => dst.mtime < src.mtime || (dst.mtime == src.mtime && dst.size != src.size),
+/// Copies `src` to `dst` (creating folders, clearing read-only flags) and
+/// gives the copy `src`'s modification time, so both have the same stamp.
+fn copy_stamped(src: &Path, dst: &Path, mtime: u64) -> io::Result<()> {
+    if let Some(dir) = dst.parent() {
+        fs::create_dir_all(dir)?;
     }
+    if dst.exists() {
+        make_writable(dst)?;
+    }
+    fs::copy(src, dst)?;
+    make_writable(dst)?;
+    let file = fs::OpenOptions::new().write(true).open(dst)?;
+    file.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(mtime))
 }
 
-/// Copies every file below `from` into `to` (creating folders), skipping
-/// files whose copy is newer or already has the same size and modification
-/// time (newer wins). Returns how many files were copied. Used to keep the
-/// player's save folder (`saves` setting) and the runtime's `SaveGame`
-/// folder in step.
+/// Copies every file below `from` into `to` whose copy is missing or has
+/// another size or modification time. Returns how many files were copied.
 pub fn mirror(from: &Path, to: &Path) -> io::Result<usize> {
     if !from.is_dir() {
         return Ok(0);
     }
+    let theirs = if to.is_dir() {
+        list(to)?
+    } else {
+        Listing::new()
+    };
     let mut copied = 0;
     for (rel, stamp) in list(from)? {
-        let src = native(from, &rel);
-        let dst = native(to, &rel);
-        let existing = fs::metadata(&dst).ok().map(|m| Stamp {
-            size: m.len(),
-            mtime: mtime_secs(&m),
-        });
-        if !should_mirror(stamp, existing) {
+        if theirs.get(&rel) != Some(&stamp) {
+            copy_stamped(&native(from, &rel), &native(to, &rel), stamp.mtime)?;
+            copied += 1;
+        }
+    }
+    Ok(copied)
+}
+
+/// The runtime's record of each save file's stamp as of the last time the
+/// saves folder and the runtime's `SaveGame` were in step.
+pub const SAVES_STATE: &str = ".or-saves";
+
+/// Which save files to copy at launch, from the stamps in the saves folder,
+/// in the runtime and as last recorded (`None`: nothing recorded yet).
+///
+/// - A saves-folder file that changed since the record (restored backup,
+///   saves from another PC, a new folder): the saves folder wins.
+/// - Otherwise a runtime file that changed since the record (the game
+///   saved, then the session ended before the write-back): the runtime
+///   wins.
+/// - Nothing recorded yet (first run, rebuilt runtime): the saves folder
+///   wins wherever it differs.
+///
+/// Returns (saves → runtime, runtime → saves).
+pub fn plan_saves(
+    saves: &Listing,
+    runtime: &Listing,
+    state: Option<&Listing>,
+) -> (Vec<String>, Vec<String>) {
+    let mut to_runtime = Vec::new();
+    let mut to_saves = Vec::new();
+    let names: std::collections::BTreeSet<&String> = saves.keys().chain(runtime.keys()).collect();
+    for rel in names {
+        let (s, r) = (saves.get(rel), runtime.get(rel));
+        if s == r {
             continue;
         }
-        if let Some(dir) = dst.parent() {
-            fs::create_dir_all(dir)?;
+        let Some(state) = state else {
+            if s.is_some() {
+                to_runtime.push(rel.clone());
+            }
+            continue;
+        };
+        let k = state.get(rel);
+        if s.is_some() && s != k {
+            to_runtime.push(rel.clone());
+        } else if r.is_some() && r != k {
+            to_saves.push(rel.clone());
         }
-        if dst.exists() {
-            make_writable(&dst)?;
-        }
-        fs::copy(&src, &dst)?;
-        make_writable(&dst)?;
-        let file = fs::OpenOptions::new().write(true).open(&dst)?;
-        file.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(stamp.mtime))?;
-        copied += 1;
     }
+    (to_runtime, to_saves)
+}
+
+fn list_or_empty(dir: &Path) -> io::Result<Listing> {
+    if dir.is_dir() {
+        list(dir)
+    } else {
+        Ok(Listing::new())
+    }
+}
+
+/// Records every save file that is the same on both sides.
+fn record_saves(saves: &Path, rt_save: &Path, state_path: &Path) -> io::Result<()> {
+    let ours = list_or_empty(rt_save)?;
+    let same: Listing = list_or_empty(saves)?
+        .into_iter()
+        .filter(|(rel, stamp)| ours.get(rel) == Some(stamp))
+        .collect();
+    write_atomic(state_path, format_manifest(&same))
+}
+
+/// At launch: brings the saves folder and the runtime's `SaveGame` in step
+/// (see `plan_saves`) and records the result in `state_path`. Returns how
+/// many files went each way (to the runtime, to the saves folder).
+pub fn saves_in(saves: &Path, rt_save: &Path, state_path: &Path) -> io::Result<(usize, usize)> {
+    let state = fs::read_to_string(state_path)
+        .ok()
+        .map(|t| parse_manifest(&t));
+    let (s, r) = (list_or_empty(saves)?, list_or_empty(rt_save)?);
+    let (to_runtime, to_saves) = plan_saves(&s, &r, state.as_ref());
+    for rel in &to_runtime {
+        copy_stamped(&native(saves, rel), &native(rt_save, rel), s[rel].mtime)?;
+    }
+    for rel in &to_saves {
+        copy_stamped(&native(rt_save, rel), &native(saves, rel), r[rel].mtime)?;
+    }
+    record_saves(saves, rt_save, state_path)?;
+    Ok((to_runtime.len(), to_saves.len()))
+}
+
+/// After the game: copies what the game wrote to the saves folder and
+/// records the result. Returns how many files were copied.
+pub fn saves_out(rt_save: &Path, saves: &Path, state_path: &Path) -> io::Result<usize> {
+    let copied = mirror(rt_save, saves)?;
+    record_saves(saves, rt_save, state_path)?;
     Ok(copied)
 }
 
@@ -523,42 +604,93 @@ mod tests {
     }
 
     #[test]
-    fn should_mirror_lets_the_newer_file_win() {
-        assert!(should_mirror(stamp(1, 5), None));
-        assert!(should_mirror(stamp(1, 5), Some(stamp(1, 4))));
-        assert!(should_mirror(stamp(2, 5), Some(stamp(1, 5))));
-        assert!(!should_mirror(stamp(1, 5), Some(stamp(1, 5))));
-        assert!(!should_mirror(stamp(1, 5), Some(stamp(1, 6))));
-        assert!(!should_mirror(stamp(9, 5), Some(stamp(1, 6))));
+    fn saves_plan_follows_what_changed_since_the_record() {
+        let k = listing(&[("a", stamp(1, 1))]);
+        // Nothing changed.
+        assert_eq!(plan_saves(&k, &k, Some(&k)), (vec![], vec![]));
+        // The session ended before the write-back: the runtime wins.
+        let newer = listing(&[("a", stamp(2, 9))]);
+        assert_eq!(
+            plan_saves(&k, &newer, Some(&k)),
+            (vec![], vec!["a".to_string()])
+        );
+        // An older backup restored in the saves folder: the saves folder
+        // wins, though the runtime's copy is newer.
+        let older = listing(&[("a", stamp(3, 0))]);
+        assert_eq!(
+            plan_saves(&older, &k, Some(&k)),
+            (vec!["a".to_string()], vec![])
+        );
+        // Both changed: the saves folder wins.
+        assert_eq!(
+            plan_saves(&older, &newer, Some(&k)),
+            (vec!["a".to_string()], vec![])
+        );
+        // A save the player added, and one only the runtime has.
+        let added = listing(&[("a", stamp(1, 1)), ("b", stamp(5, 5))]);
+        let rt_only = listing(&[("a", stamp(1, 1)), ("c", stamp(6, 6))]);
+        assert_eq!(
+            plan_saves(&added, &rt_only, Some(&k)),
+            (vec!["b".to_string()], vec!["c".to_string()])
+        );
     }
 
     #[test]
-    fn mirror_never_overwrites_newer_progress() {
-        let saves = temp("mirror-newer-saves");
-        let rt = temp("mirror-newer-rt");
-        fs::create_dir_all(&saves).unwrap();
-        fs::write(saves.join("License.dat"), b"old").unwrap();
-        assert_eq!(mirror(&saves, &rt).unwrap(), 1);
-        // The game saved in the runtime, then the session ended before the
-        // launcher copied it back: the runtime copy is newer.
-        fs::write(rt.join("License.dat"), b"newer progress").unwrap();
+    fn without_a_record_the_saves_folder_wins() {
+        // First run after an upgrade, or a rebuilt runtime seeded from the
+        // game folder's own (newer) SaveGame.
+        let saves = listing(&[("a", stamp(1, 1))]);
+        let runtime = listing(&[("a", stamp(2, 9)), ("c", stamp(3, 3))]);
+        assert_eq!(
+            plan_saves(&saves, &runtime, None),
+            (vec!["a".to_string()], vec![])
+        );
+    }
+
+    fn set_mtime(path: &Path, secs: u64) {
         fs::OpenOptions::new()
             .write(true)
-            .open(rt.join("License.dat"))
+            .open(path)
             .unwrap()
-            .set_modified(SystemTime::now() + Duration::from_secs(60))
+            .set_modified(UNIX_EPOCH + Duration::from_secs(secs))
             .unwrap();
-        assert_eq!(mirror(&saves, &rt).unwrap(), 0);
-        assert_eq!(fs::read(rt.join("License.dat")).unwrap(), b"newer progress");
-        // Writing back afterwards brings the newer file to the saves folder.
-        assert_eq!(mirror(&rt, &saves).unwrap(), 1);
-        assert_eq!(
-            fs::read(saves.join("License.dat")).unwrap(),
-            b"newer progress"
-        );
+    }
+
+    #[test]
+    fn saves_round_trip_through_the_runtime() {
+        let saves = temp("saves-rt-saves");
+        let rt = temp("saves-rt-rt");
+        let state = temp("saves-rt-state");
+        fs::create_dir_all(&saves).unwrap();
+        fs::create_dir_all(&rt).unwrap();
+        fs::write(saves.join("License.dat"), b"mine").unwrap();
+        fs::write(rt.join("License.dat"), b"seeded from the game folder").unwrap();
+        set_mtime(&rt.join("License.dat"), 2_000_000_000);
+        // No record: the saves folder wins.
+        assert_eq!(saves_in(&saves, &rt, &state).unwrap(), (1, 0));
+        assert_eq!(fs::read(rt.join("License.dat")).unwrap(), b"mine");
+
+        // The game saves; the session is killed before the write-back.
+        fs::write(rt.join("License.dat"), b"progress").unwrap();
+        set_mtime(&rt.join("License.dat"), 2_000_000_100);
+        assert_eq!(saves_in(&saves, &rt, &state).unwrap(), (0, 1));
+        assert_eq!(fs::read(saves.join("License.dat")).unwrap(), b"progress");
+
+        // The game saves again; the exit write-back copies it.
+        fs::write(rt.join("License.dat"), b"more progress").unwrap();
+        set_mtime(&rt.join("License.dat"), 2_000_000_200);
+        assert_eq!(saves_out(&rt, &saves, &state).unwrap(), 1);
+        assert_eq!(saves_in(&saves, &rt, &state).unwrap(), (0, 0));
+
+        // The player restores an older backup: it reaches the game.
+        fs::write(saves.join("License.dat"), b"backup").unwrap();
+        set_mtime(&saves.join("License.dat"), 1_000_000_000);
+        assert_eq!(saves_in(&saves, &rt, &state).unwrap(), (1, 0));
+        assert_eq!(fs::read(rt.join("License.dat")).unwrap(), b"backup");
         for d in [saves, rt] {
             fs::remove_dir_all(d).unwrap();
         }
+        fs::remove_file(state).unwrap();
     }
 
     #[test]
