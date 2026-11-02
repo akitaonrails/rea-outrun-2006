@@ -40,6 +40,12 @@ for scaler in nearest pixel fsr linear; do
   rea_start > /dev/null
   check "$scaler" "gamescope -W 1920 -H 1080 -w 1920 -h 1080 -f -S fit -F $scaler -- sh $HOME/.config/or-launcher/inner.sh $T/OutRunLauncher.exe --no-window"
 done
+# Values match in any case, as the launcher reads them (SDK v0.3.2).
+printf 'resolution = 1920x1080\nscaler = FSR\n' > "$CFG"
+rea_start > /dev/null
+check "scaler in capitals" "-F fsr --"
+rea_start --scaler=Pixel > /dev/null
+check "--scaler=Value for one run" "-F pixel --"
 printf 'resolution = 1920x1080\n' > "$CFG"
 rea_start > /dev/null
 check "default is linear" "-F linear --"
@@ -63,6 +69,7 @@ size_of() {
 }
 size_of 'resolution = original\n' 640 480 "original is 640x480"
 size_of 'resolution = OFF\n' 640 480 "off is 640x480 too"
+size_of 'resolution = Original\n' 640 480 "Original in any case"
 size_of 'resolution = 1920X1080\n' 1920 1080 "uppercase X"
 size_of 'resolution = 1280x800\r\n' 1280 800 "CRLF line"
 size_of 'resolution = big\n' 1920 1080 "garbage falls back"
