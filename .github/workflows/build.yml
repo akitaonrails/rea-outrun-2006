@@ -3,7 +3,7 @@ name: build
 # Checks, builds and packages through the shared rea-launcher-sdk workflows
 # (packaging/README.md in the SDK): fmt, host tests, cargo audit + deny,
 # sh -n, linux/tests and packaging/tests, the sdk/ drift check, clippy and
-# the release build for i686-pc-windows-gnu, the zip (packaging/package.sh)
+# the release build for i686-pc-windows-gnu, its tests under Wine, the zip (packaging/package.sh)
 # and the AppImage with a portable Wine, both checked against
 # packaging/package.allow. Version tags publish a release with the tag's
 # CHANGELOG section.
@@ -24,9 +24,11 @@ permissions:
 
 jobs:
   ci:
-    uses: akitaonrails/rea-launcher-sdk/.github/workflows/launcher-ci.yml@v0.1.0
+    uses: akitaonrails/rea-launcher-sdk/.github/workflows/launcher-ci.yml@v0.2.0
     with:
       apt-packages: gcc-mingw-w64-i686 lld zip unzip cabextract
+      # The Windows-target tests (window, WinHTTP, registry) under Wine, headless.
+      wine-tests: true
       shell-tests: linux/tests/*.sh packaging/tests/*.sh
       package-command: |
         name="OutRunLauncher-$REA_VERSION_NAME"
@@ -52,7 +54,7 @@ jobs:
       contents: write
       id-token: write
       attestations: write
-    uses: akitaonrails/rea-launcher-sdk/.github/workflows/launcher-release.yml@v0.1.0
+    uses: akitaonrails/rea-launcher-sdk/.github/workflows/launcher-release.yml@v0.2.0
     with:
       package: or-launcher
       artifact-pattern: OutRunLauncher-*

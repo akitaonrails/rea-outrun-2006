@@ -3,10 +3,9 @@
 # every scaler, the race size as both the output and the nested size
 # (-W/-H, -w/-h), and the SDL pad settings: sh linux/tests/scaler.sh
 set -u
-# Run as or-play itself ($0), so it finds the vendored ../sdk/rea-play.sh.
-if [ -z "${OR_TEST_LOADED:-}" ]; then
-  OR_TEST_LOADED=1 exec sh -c '. "$1"' "$(dirname "$(readlink -f "$0")")/../or-play" "$(readlink -f "$0")"
-fi
+# or-play is sourced the SDK way (shell/README.md "Tests"): REA_FUNCTIONS_ONLY
+# loads it without running, REA_PLAY_HERE finds the vendored ../sdk library.
+PLAY_DIR=$(dirname "$(dirname "$(readlink -f "$0")")")
 unset GAMESCOPE_WAYLAND_DISPLAY DRI_PRIME __NV_PRIME_RENDER_OFFLOAD WINEDLLOVERRIDES
 unset SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
@@ -22,7 +21,7 @@ echo "$*" > "$T/ran"
 FAKE
 chmod +x "$T/fake-run"
 export OR_RUN=$T/fake-run OR_LAUNCHER=$T/OutRunLauncher.exe
-OR_PLAY_FUNCTIONS_ONLY=1 . "$0"
+REA_FUNCTIONS_ONLY=1 REA_PLAY_HERE=$PLAY_DIR . "$PLAY_DIR/or-play"
 REA_GPU= REA_TEST=1 REA_SYSFS=$T/nosys
 fails=0
 check() { # name expected-substring

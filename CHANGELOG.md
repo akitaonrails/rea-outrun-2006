@@ -8,6 +8,14 @@ All notable changes to this project. The format follows
 
 ### Changed
 
+- Updated rea-launcher-sdk to v0.2.0. The settings window's look cards,
+  selection colour and widget sizes now come from the SDK (`Metrics`),
+  with OutRun's values; the look cards gain a focus ring and report their
+  name, state and note to screen readers. `or-play`'s tests load it with
+  the SDK's `REA_FUNCTIONS_ONLY`/`REA_PLAY_HERE` convention
+  (`OR_PLAY_FUNCTIONS_ONLY` is gone). CI also runs the Windows-target
+  tests under Wine.
+
 - Built on the shared [rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk)
   v0.1.0: the runtime copy, saves mirror, INI and `launcher.cfg` editing,
   Win32 helpers, the settings window's kit, `or-play`'s session and

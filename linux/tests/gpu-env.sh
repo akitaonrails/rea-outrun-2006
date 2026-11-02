@@ -2,15 +2,14 @@
 # Tests or-play's GPU choice (the shared rea_gpu_env, as or-play configures
 # it) against fake sysfs trees: sh linux/tests/gpu-env.sh
 set -u
-# Run as or-play itself ($0), so it finds the vendored ../sdk/rea-play.sh.
-if [ -z "${OR_TEST_LOADED:-}" ]; then
-  OR_TEST_LOADED=1 exec sh -c '. "$1"' "$(dirname "$(readlink -f "$0")")/../or-play" "$(readlink -f "$0")"
-fi
+# or-play is sourced the SDK way (shell/README.md "Tests"): REA_FUNCTIONS_ONLY
+# loads it without running, REA_PLAY_HERE finds the vendored ../sdk library.
+PLAY_DIR=$(dirname "$(dirname "$(readlink -f "$0")")")
 # A clean environment: the player's own choice would win every case.
 unset DRI_PRIME __NV_PRIME_RENDER_OFFLOAD __GLX_VENDOR_LIBRARY_NAME VK_DRIVER_FILES VK_ICD_FILENAMES
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 export HOME=$T OR_PREFIX=$T/prefix
-OR_PLAY_FUNCTIONS_ONLY=1 . "$0"
+REA_FUNCTIONS_ONLY=1 REA_PLAY_HERE=$PLAY_DIR . "$PLAY_DIR/or-play"
 # or-play asks whether NVIDIA's OpenGL library is installed.
 REA_TEST=1 REA_NV_LIB_CHECK=nv_lib
 nv_lib() { [ -n "${NV_LIB:-}" ]; }

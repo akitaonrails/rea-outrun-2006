@@ -930,7 +930,7 @@ impl Settings {
         let mut s = Settings::default();
         match cfg::parse_args(args, &FLAG_KEYS, &[], |k, v| s.apply(k, v, Source::Args)) {
             Ok(_) => Ok(s),
-            Err(cfg::ArgError::Help) => Err(USAGE.into()),
+            Err(cfg::ArgError::Help(_)) => Err(USAGE.into()),
             Err(e) => Err(format!("{e}\n\n{USAGE}")),
         }
     }

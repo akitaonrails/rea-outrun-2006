@@ -9,7 +9,7 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 
 | Component | Licence | Source |
 | --- | --- | --- |
-| `rea-launcher`, `rea-launcher-win32`, `rea-launcher-ui`: the shared launcher SDK (runtime copy, saves, INI and settings editing, Win32 helpers, the settings window's kit) | MIT OR Apache-2.0 | https://github.com/akitaonrails/rea-launcher-sdk (tag `v0.1.0`) |
+| `rea-launcher`, `rea-launcher-win32`, `rea-launcher-ui`: the shared launcher SDK (runtime copy, saves, INI and settings editing, Win32 helpers, the settings window's kit) | MIT OR Apache-2.0 | https://github.com/akitaonrails/rea-launcher-sdk (tag `v0.2.0`) |
 | `sha2` and its RustCrypto dependencies | MIT OR Apache-2.0 | https://github.com/RustCrypto/hashes |
 | `windows-sys` | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
 | `eframe`, `egui` and their dependencies (`winit`, `glutin`, `glow`, …): the settings window | MIT OR Apache-2.0 (dependencies: MIT, Apache-2.0, Zlib, BSD; see `cargo tree`) | https://github.com/emilk/egui |

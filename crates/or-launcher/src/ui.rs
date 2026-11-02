@@ -12,13 +12,15 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use eframe::egui::{
-    self, Align, Align2, Color32, CornerRadius, Key, Mesh, Rect, Sense, Shape, Stroke, StrokeKind,
-    TextureHandle, Vec2, pos2, vec2,
+use rea_launcher_ui::eframe;
+use rea_launcher_ui::egui::{
+    self, Align, Align2, Color32, Key, Mesh, Rect, Shape, TextureHandle, Vec2, pos2, vec2,
 };
 use rea_launcher_ui::pad::{self, Nav, PadNav};
-use rea_launcher_ui::theme::{self, Palette, body as font, condensed, decal, semibold};
-use rea_launcher_ui::widgets::{self, Crop};
+use rea_launcher_ui::theme::{
+    self, ButtonText, CardMetrics, Metrics, Palette, body as font, condensed, decal, tint,
+};
+use rea_launcher_ui::widgets::{self, Crop, LookCard};
 use rea_launcher_ui::window::{Layout, WindowFit};
 use rea_launcher_win32::{dialog, disk, display, wine, xinput};
 
@@ -54,12 +56,25 @@ const PALETTE: Palette = Palette {
     disabled_ink: rgb(0x5a504a),
     disabled_line: rgb(0x2a2320),
     focus: rgb(0xf6f1ea),
+    // Selected text keeps OutRun's red highlight.
+    selection: tint(rgb(0xd40000), 153),
+};
+
+/// OutRun's widget sizes: roomier look cards with a larger note, ink text
+/// on outline buttons (the red is too dark to be text), one-line toggles.
+const METRICS: Metrics = Metrics {
+    button_text: ButtonText::Ink,
+    toggle_wrap: false,
+    card: CardMetrics {
+        pad: 14.0,
+        note: 13.5,
+        note_top: 32.0,
+        ..Metrics::DEFAULT.card
+    },
+    ..Metrics::DEFAULT
 };
 const BASE: Color32 = PALETTE.base;
-const PANEL: Color32 = PALETTE.panel;
-const LINE: Color32 = PALETTE.line;
 const RED: Color32 = PALETTE.action;
-const ON_RED: Color32 = PALETTE.on_action;
 const YELLOW: Color32 = PALETTE.select;
 const INK: Color32 = PALETTE.ink;
 const MUTED: Color32 = PALETTE.muted;
@@ -95,7 +110,8 @@ pub fn show(
     // The scale first: under Wine it makes the process DPI aware, so the
     // screen is measured in pixels.
     let wine_scale = display::wine_dpi_scale();
-    let fit = WindowFit::new(SIZE, wine::is_wine(), display::screen_size(), wine_scale);
+    let fit = WindowFit::new(SIZE, wine::is_wine(), display::screen_size(), wine_scale)
+        .with_native_fit(true);
     let options = fit.native_options("OutRun 2006");
     let path = settings_path.to_path_buf();
     let home = home.to_path_buf();
@@ -104,7 +120,7 @@ pub fn show(
         "OutRun 2006",
         options,
         Box::new(|cc| {
-            set_style(&cc.egui_ctx);
+            theme::install_with(&cc.egui_ctx, &PALETTE, &METRICS);
             Ok(Box::new(Window::new(
                 &cc.egui_ctx,
                 path,
@@ -118,13 +134,6 @@ pub fn show(
     )
     .map_err(|e| e.to_string())?;
     Ok(outcome)
-}
-
-/// The SDK's fonts and dark style in OutRun's colours; selected text keeps
-/// its red highlight.
-fn set_style(ctx: &egui::Context) {
-    theme::install(ctx, &PALETTE);
-    ctx.all_styles_mut(|style| style.visuals.selection.bg_fill = RED.gamma_multiply(0.6));
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -537,19 +546,19 @@ impl Window<'_> {
         // One title size for all four cards: the largest at which every
         // title fits.
         let titles: Vec<&str> = cards.iter().map(|(_, title, _)| *title).collect();
-        let title_size = widgets::fit_title(ui, &titles, w - 28.0);
+        let title_size = widgets::fit_title(ui, &titles, w - 2.0 * METRICS.card.pad);
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = gap;
             for (look, title, note) in cards {
-                if look_card(
-                    ui,
-                    vec2(w, 104.0),
-                    title_size,
-                    self.form.look == look,
+                let card = LookCard {
                     title,
-                    &note,
-                    look == best,
-                ) {
+                    note: &note,
+                    detail: None,
+                    selected: self.form.look == look,
+                    badge: (look == best).then_some("Recommended"),
+                    title_size,
+                };
+                if widgets::look_card(ui, vec2(w, 104.0), &card).clicked() {
                     self.form.set_look(look, self.screen, self.wine);
                     if look == Look::Custom {
                         self.tab = Tab::Picture;
@@ -1065,60 +1074,4 @@ fn hd_pack_note(folder: &str) -> (String, Color32) {
             ERROR,
         ),
     }
-}
-
-/// One of the looks; true when clicked. Kept here: the SDK's `look_card`
-/// draws its note smaller and closer to the edge (12 pt padding, 13 pt
-/// note) than OutRun's cards (14, 13.5).
-fn look_card(
-    ui: &mut egui::Ui,
-    size: Vec2,
-    title_size: f32,
-    on: bool,
-    title: &str,
-    note: &str,
-    recommended: bool,
-) -> bool {
-    let w = size.x;
-    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    let p = ui.painter();
-    let fill = if on {
-        PANEL
-    } else if resp.hovered() {
-        PANEL.gamma_multiply(0.6)
-    } else {
-        Color32::TRANSPARENT
-    };
-    p.rect(
-        rect,
-        CornerRadius::same(8),
-        fill,
-        Stroke::new(if on { 2.0 } else { 1.0 }, if on { YELLOW } else { LINE }),
-        StrokeKind::Inside,
-    );
-    let pad = 14.0;
-    p.text(
-        rect.left_top() + vec2(pad, pad - 2.0),
-        Align2::LEFT_TOP,
-        title,
-        condensed(title_size),
-        if on { YELLOW } else { INK },
-    );
-    if recommended {
-        // A small red tab on the card's top edge.
-        let galley = p.layout_no_wrap("Recommended".into(), semibold(12.0), ON_RED);
-        let tab = Rect::from_min_size(
-            pos2(
-                rect.right() - pad - galley.size().x - 12.0,
-                rect.top() - 9.0,
-            ),
-            galley.size() + vec2(12.0, 2.0),
-        );
-        p.rect_filled(tab, CornerRadius::same(4), RED);
-        p.galley(tab.min + vec2(6.0, 1.0), galley, ON_RED);
-    }
-    let galley = p.layout(note.to_string(), font(13.5), MUTED, w - 2.0 * pad);
-    p.galley(rect.left_top() + vec2(pad, pad + 32.0), galley, MUTED);
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
-        .clicked()
 }

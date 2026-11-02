@@ -19,7 +19,6 @@ zip = { version = "9", default-features = false, features = ["deflate-flate2-zli
 [target.'cfg(windows)'.dependencies]
 rea-launcher-win32.workspace = true
 rea-launcher-ui.workspace = true
-eframe = { version = "0.37", default-features = false, features = ["glow"] }
 
 # Only the HD pack download (WinHTTP) calls Windows itself; everything else
 # goes through rea-launcher-win32.

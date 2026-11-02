@@ -12,9 +12,9 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use rea_launcher::fsx;
 use rea_launcher::runtime::{self as engine, Policy, Stamp, SyncReport};
 use rea_launcher::saves::{Deleted, FirstRun, Mirror, Moved};
+use rea_launcher::{fsx, paths};
 
 pub use rea_launcher::paths::check_separate;
 
@@ -74,23 +74,23 @@ pub fn sync(game: &Path, runtime: &Path) -> io::Result<SyncReport> {
 /// Removes the temp files launchers before the SDK left when a write was
 /// interrupted (`name.tmp` beside the file); they are only unlinked.
 pub fn remove_old_temps(files: &[&Path]) {
-    for file in files {
-        let mut name = file.file_name().unwrap_or_default().to_os_string();
-        name.push(".tmp");
-        let _ = fsx::remove(&file.with_file_name(name));
-    }
+    let olds: Vec<PathBuf> = files
+        .iter()
+        .map(|file| {
+            let mut name = file.file_name().unwrap_or_default().to_os_string();
+            name.push(".tmp");
+            file.with_file_name(name)
+        })
+        .collect();
+    let olds: Vec<&Path> = olds.iter().map(PathBuf::as_path).collect();
+    let _ = fsx::remove_files(&olds);
 }
 
-/// The runtime folder's save folder, in whatever spelling it has; created
-/// as `SaveGame` when missing (Wine on Linux is case-sensitive on disk).
+/// The runtime folder's save folder, in whatever spelling it has on disk;
+/// created as `SaveGame` when missing (Wine on Linux is case-sensitive).
 pub fn save_dir(runtime: &Path) -> io::Result<PathBuf> {
-    // Listed, not looked up: on Windows a lookup in our spelling succeeds
-    // and would hide the folder's own.
-    for entry in std::fs::read_dir(runtime)? {
-        let entry = entry?;
-        if entry.file_type()?.is_dir() && entry.file_name().eq_ignore_ascii_case(SAVE_DIR) {
-            return Ok(entry.path());
-        }
+    if let Some(dir) = paths::find_ignoring_case(runtime, SAVE_DIR).filter(|d| d.is_dir()) {
+        return Ok(dir);
     }
     let dir = runtime.join(SAVE_DIR);
     std::fs::create_dir(&dir)?;
