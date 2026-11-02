@@ -24,8 +24,11 @@ UPSTREAM=emoose/OutRun2006Tweaks
 REPO=${OR_REPO:-akitaonrails/rea-outrun-2006}
 FILES="dinput8.dll OR2006C2C.exe OutRun2006Tweaks.ini OutRun2006Tweaks.lods.ini"
 CACHE=${OR_CACHE:-$HOME/.cache/or-package}
-PINS=$ROOT/packaging
-. "$PINS/pins.sh"
+# Pins are packaging/<name>.txt, fetched and checked by the SDK's pins.sh.
+. "$ROOT/sdk/packaging/pins.sh"
+PIN_DIR=$ROOT/packaging PIN_CACHE=$CACHE
+# fetch <name>: the pinned download's path (stops the script on failure).
+fetch() { pin_fetch "$1" "$CACHE/files" || exit 1; }
 
 RUN= PUBLISH= FORCE=
 while [ $# -gt 0 ]; do

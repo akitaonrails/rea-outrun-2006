@@ -280,19 +280,29 @@ Rust for the launcher; the Windows target is built with MinGW-w64 and lld.
 ```sh
 cargo test                                            # host unit tests
 cargo build --release --target i686-pc-windows-gnu    # needs mingw-w64 (i686) and lld
-sh linux/tests/gpu-env.sh && sh linux/tests/scaler.sh
+for t in linux/tests/*.sh packaging/tests/*.sh; do sh "$t"; done
 packaging/package.sh dist/OutRunLauncher              # fetches the pinned components
-packaging/appimage/build.sh dist/OutRunLauncher dist  # the AppImage
+sdk/packaging/appimage-wine.sh --app or --exe OutRunLauncher.exe \
+  --icon packaging/appimage/outrun-launcher.png \
+  --desktop packaging/appimage/outrun-launcher.desktop \
+  --payload linux --optional-payload tweaks --optional-payload vc \
+  --optional-payload soundtrack dist/OutRunLauncher dist   # the AppImage
 ```
+
+`sdk/` holds the shared play library and packaging scripts vendored from
+[rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk) (see
+AGENTS.md); the Rust crates come from it as git dependencies.
 
 The Windows targets link with lld (`.cargo/config.toml`): GNU ld 2.47
 drops one of the two `kernel32.dll` import groups and the launcher would
 crash at start ([docs/RUNTIME_NOTES.md](docs/RUNTIME_NOTES.md)).
 
 Third-party components are downloaded at package time from the URLs and
-SHA-256 digests in `packaging/*.txt`. CI
-(`.github/workflows/build.yml`) tests, lints, builds and packages every
-push and pull request, uploading the Windows zip and the AppImage as
+SHA-256 digests in `packaging/*.txt` (Wine and the AppImage tools in
+`sdk/packaging/appimage/tools.pins`). CI (`.github/workflows/build.yml`,
+on the SDK's reusable workflows) tests, lints, audits, builds and packages
+every push and pull request, checks the zip against
+`packaging/package.allow`, uploading the Windows zip and the AppImage as
 artifacts; a `v*` tag publishes both as a GitHub release. The
 `tweaks-update` workflow looks for newer OutRun2006Tweaks builds every
 week and opens a pull request ([docs/TWEAKS.md](docs/TWEAKS.md)).

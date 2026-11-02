@@ -14,8 +14,11 @@
 set -eu
 ROOT=$(dirname "$(dirname "$(readlink -f "$0")")")
 CACHE=${OR_CACHE:-$HOME/.cache/or-package}
-PINS=$ROOT/packaging
-. "$PINS/pins.sh"
+# Pins are packaging/<name>.txt, fetched and checked by the SDK's pins.sh.
+. "$ROOT/sdk/packaging/pins.sh"
+PIN_DIR=$ROOT/packaging PIN_CACHE=$CACHE
+# fetch <name>: the pinned download's path (stops the script on failure).
+fetch() { pin_fetch "$1" "$CACHE/files" || exit 1; }
 
 [ $# -eq 1 ] || { echo "usage: $0 <output-folder>"; exit 2; }
 OUT=$1

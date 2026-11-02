@@ -1,5 +1,13 @@
 name: build
 
+# Checks, builds and packages through the shared rea-launcher-sdk workflows
+# (packaging/README.md in the SDK): fmt, host tests, cargo audit + deny,
+# sh -n, linux/tests and packaging/tests, the sdk/ drift check, clippy and
+# the release build for i686-pc-windows-gnu, the zip (packaging/package.sh)
+# and the AppImage with a portable Wine, both checked against
+# packaging/package.allow. Version tags publish a release with the tag's
+# CHANGELOG section.
+
 on:
   push:
     branches: [main]
@@ -7,92 +15,44 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 permissions:
   contents: read
 
 jobs:
-  package:
-    name: Test, build and package
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install the 32-bit MinGW toolchain, lld and unpack tools
-        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-i686 lld zip unzip cabextract
-
-      - name: Install Rust (with the 32-bit Windows target)
-        run: |
-          rustup toolchain install stable --profile minimal --component clippy,rustfmt
-          rustup target add i686-pc-windows-gnu
-
-      - name: Check formatting
-        run: cargo fmt --all --check
-
-      - name: Unit tests (host)
-        run: cargo test --workspace --locked
-
-      - name: Linux helper tests (GPU choice, scalers, session)
-        run: sh linux/tests/gpu-env.sh && sh linux/tests/scaler.sh && sh linux/tests/supervision.sh
-
-      - name: Packaging script tests (shell syntax, release notes)
-        run: |
-          sh -n linux/or-play packaging/appimage/AppRun packaging/appimage/build.sh packaging/package.sh packaging/release-notes.sh
-          sh packaging/tests/release-notes.sh
-
-      - name: Lint (Windows target)
-        run: cargo clippy --release --target i686-pc-windows-gnu --workspace --all-targets --locked -- -D warnings
-
-      - name: Build OutRunLauncher.exe
-        run: cargo build --release --target i686-pc-windows-gnu --workspace --locked
-
-      - name: Package (fetches the pinned components)
-        run: |
-          name=OutRunLauncher-${GITHUB_REF_NAME//\//-}
-          packaging/package.sh "dist/$name"
-          (cd dist && zip -qr "$name.zip" "$name")
-          echo "PACKAGE=dist/$name.zip" >> "$GITHUB_ENV"
-          echo "PACKAGE_DIR=dist/$name" >> "$GITHUB_ENV"
-          echo "APPIMAGE=dist/$name-x86_64.AppImage" >> "$GITHUB_ENV"
-
-      - name: Build the Linux AppImage (with a portable Wine)
-        run: |
-          packaging/appimage/build.sh "$PACKAGE_DIR" dist/appimage
-          mv dist/appimage/OutRunLauncher-x86_64.AppImage "$APPIMAGE"
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: OutRunLauncher-windows
-          path: ${{ env.PACKAGE }}
-          if-no-files-found: error
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: OutRunLauncher-linux
-          path: ${{ env.APPIMAGE }}
-          if-no-files-found: error
+  ci:
+    uses: akitaonrails/rea-launcher-sdk/.github/workflows/launcher-ci.yml@v0.1.0
+    with:
+      apt-packages: gcc-mingw-w64-i686 lld zip unzip cabextract
+      shell-tests: linux/tests/*.sh packaging/tests/*.sh
+      package-command: |
+        name="OutRunLauncher-$REA_VERSION_NAME"
+        OR_CACHE="$REA_CACHE" packaging/package.sh "dist/$name"
+        (cd dist && zip -qr "$name.zip" "$name")
+        "$REA_SDK/packaging/appimage-wine.sh" --app or --exe OutRunLauncher.exe \
+          --icon packaging/appimage/outrun-launcher.png \
+          --desktop packaging/appimage/outrun-launcher.desktop \
+          --payload linux --optional-payload tweaks --optional-payload vc \
+          --optional-payload soundtrack --cache "$REA_CACHE" \
+          --name "$name" "dist/$name" dist
+      package-dir: dist/OutRunLauncher-*.zip
+      package-allowlist: packaging/package.allow
+      artifact-name: OutRunLauncher-packages
+      artifact-paths: |
+        dist/*.zip
+        dist/*.AppImage
 
   release:
-    name: Publish a release for version tags
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: package
-    runs-on: ubuntu-24.04
+    needs: ci
     permissions:
       contents: write
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: OutRunLauncher-*
-          merge-multiple: true
-          path: release
-
-      - name: Checksums and notes from the tag's CHANGELOG section
-        run: |
-          (cd release && sha256sum ./*.zip ./*.AppImage | sed 's| \./| |' > SHA256SUMS && cat SHA256SUMS)
-          packaging/release-notes.sh "$GITHUB_REF_NAME" > release-notes.md
-
-      - name: Create the GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes-file release-notes.md release/*.zip release/*.AppImage release/SHA256SUMS
+      id-token: write
+      attestations: write
+    uses: akitaonrails/rea-launcher-sdk/.github/workflows/launcher-release.yml@v0.1.0
+    with:
+      package: or-launcher
+      artifact-pattern: OutRunLauncher-*

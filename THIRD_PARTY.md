@@ -39,8 +39,8 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 
 | Component | Licence | Source |
 | --- | --- | --- |
-| Wine 11.20 (amd64, WoW64), Kron4ek's build of the unmodified WineHQ sources; licence and source notes inside the AppImage under `usr/share/doc/wine` | LGPL-2.1-or-later | `packaging/wine.txt`, https://dl.winehq.org/wine/source/11.x/wine-11.20.tar.xz, build scripts https://github.com/Kron4ek/Wine-Builds |
-| AppImage type2 runtime, release `20251108` (added by `appimagetool` 1.9.1) | MIT | `packaging/appimage-runtime.txt`, https://github.com/AppImage/type2-runtime/releases/tag/20251108 |
+| Wine 11.20 (amd64, WoW64), Kron4ek's build of the unmodified WineHQ sources; licence and source notes inside the AppImage under `usr/share/doc/wine` | LGPL-2.1-or-later | `sdk/packaging/appimage/tools.pins` (rea-launcher-sdk), https://dl.winehq.org/wine/source/11.x/wine-11.20.tar.xz, build scripts https://github.com/Kron4ek/Wine-Builds |
+| AppImage type2 runtime, release `20251108` (added by `appimagetool` 1.9.1) | MIT | `sdk/packaging/appimage/tools.pins`, https://github.com/AppImage/type2-runtime/releases/tag/20251108 |
 | The AppImage icon `packaging/appimage/outrun-launcher.png` | ours (MIT OR Apache-2.0) | this repository |
 
 ## Not bundled

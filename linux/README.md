@@ -58,8 +58,9 @@ DLL overrides itself.
 
 ## AppImage
 
-`packaging/appimage/build.sh <unpacked zip folder> <output folder>` builds
-`OutRunLauncher-x86_64.AppImage`: the launcher with its components,
-`or-play` and a portable Wine (Kron4ek's 11.20 WoW64 build, checked by
+The SDK's `sdk/packaging/appimage-wine.sh` (arguments in the main
+README's Building section) builds `OutRunLauncher-x86_64.AppImage` from
+an unpacked zip folder: the launcher with its components, `or-play` with
+the `rea-play.sh` library beside it and a portable Wine (Kron4ek's 11.20 WoW64 build, checked by
 SHA-256), so players need no Wine. Its `AppRun` puts that Wine first on the
 `PATH` and runs `or-play`. CI builds it with every package.
