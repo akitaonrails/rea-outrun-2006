@@ -18,11 +18,19 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 | Rust standard library | MIT OR Apache-2.0 | https://github.com/rust-lang/rust |
 | MinGW-w64 runtime (static parts linked by the GNU target) | ZPL-2.1 / public domain | https://www.mingw-w64.org |
 
-## Settings window artwork and fonts (compiled into OutRunLauncher.exe)
+## Images (window, package, README)
+
+| File | Author | Licence | Source |
+| --- | --- | --- | --- |
+| `crates/or-launcher/assets/portrait.jpg` (compiled into OutRunLauncher.exe): a sunset coast with a red convertible, the window's hero art | an illustration generated for this project on 2026-11-01 (commit `6e34e3e`); the tool and prompt were not recorded. No game artwork, no SEGA material. **Origin to be confirmed by the owner.** | ours (MIT OR Apache-2.0), pending that confirmation | this repository |
+| `packaging/appimage/outrun-launcher.png`: the AppImage and desktop icon | made for this project (commit `91c67e7`); how it was made was not recorded. **To be confirmed by the owner.** | ours (MIT OR Apache-2.0), pending that confirmation | this repository |
+| `docs/images/launcher-*.png`: screenshots of the settings window (they show `portrait.jpg`) | this project | ours (MIT OR Apache-2.0) | this repository |
+| README showcase poster and video (`showcase-poster.jpg`, `showcase-h264.mp4`): the settings window and the owner's own play-through on Linux, hosted outside the repository | the owner | screenshots and footage of the game, shown to illustrate the launcher; the game's images belong to SEGA | https://new-uploads-akitaonrails.s3.us-east-2.amazonaws.com/2026/11/02/outrun-2006/ |
+
+## Fonts (compiled into OutRunLauncher.exe)
 
 | File | Licence | Source |
 | --- | --- | --- |
-| `crates/or-launcher/assets/portrait.jpg`: a sunset coast with a red convertible, an illustration generated for this project (no game artwork) | ours (MIT OR Apache-2.0) | this repository |
 | Barlow and Barlow Condensed, bundled by `rea-launcher-ui` (`crates/rea-launcher-ui/assets/fonts` in the SDK) | SIL OFL 1.1 (`OFL.txt` there) | https://github.com/jpt/barlow |
 
 ## Bundled in the package (fetched by `packaging/package.sh`)
@@ -41,7 +49,7 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 | --- | --- | --- |
 | Wine 11.20 (amd64, WoW64), Kron4ek's build of the unmodified WineHQ sources; licence and source notes inside the AppImage under `usr/share/doc/wine` | LGPL-2.1-or-later | `sdk/packaging/appimage/tools.pins` (rea-launcher-sdk), https://dl.winehq.org/wine/source/11.x/wine-11.20.tar.xz, build scripts https://github.com/Kron4ek/Wine-Builds |
 | AppImage type2 runtime, release `20251108` (added by `appimagetool` 1.9.1) | MIT | `sdk/packaging/appimage/tools.pins`, https://github.com/AppImage/type2-runtime/releases/tag/20251108 |
-| The AppImage icon `packaging/appimage/outrun-launcher.png` | ours (MIT OR Apache-2.0) | this repository |
+| The AppImage icon `packaging/appimage/outrun-launcher.png` | ours (see Images) | this repository |
 
 ## Not bundled
 

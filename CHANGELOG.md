@@ -98,6 +98,10 @@ All notable changes to this project. The format follows
 
 ### Fixed
 
+- `THIRD_PARTY.md` lists every image in the window, the package and the
+  README (the icon, the screenshots and the showcase video were missing);
+  the origin of the generated hero art and icon is marked as to be
+  confirmed.
 - `outrun2006.ini` is no longer rewritten whole on every start: the
   launcher sets only the resolution, anti-aliasing and windowed keys and
   keeps the game's language, adapter and fog (the game folder's copy
