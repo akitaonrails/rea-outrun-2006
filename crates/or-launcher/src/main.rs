@@ -303,10 +303,14 @@ mod app {
             &settings,
             &mut |line| log_line(line),
         )?;
-        if wine && win32::wine_controller_baseline() == Ok(true) {
-            log_line(
-                "wine: controller baseline written (winebus: hidraw and Wine's device mapping off)",
-            );
+        if wine {
+            match win32::wine_controller_baseline() {
+                Ok(true) => log_line(
+                    "wine: controller baseline written (winebus: hidraw and Wine's device mapping off)",
+                ),
+                Ok(false) => {}
+                Err(error) => log_line(&format!("warning: wine controller baseline: {error}")),
+            }
         }
 
         // Remember the game folder; the rest of the file stays as written.

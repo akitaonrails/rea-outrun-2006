@@ -20,6 +20,8 @@ All notable changes to this project. The format follows
   OR2006C2C.exe no longer blocks a launch.
 - `or-play`'s generated script takes the launcher path as an argument
   instead of pasting it into its source (a path with a quote broke it).
+- A failure to write Wine's controller settings (winebus) is logged
+  instead of ignored.
 
 ### Changed
 
