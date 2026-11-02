@@ -324,20 +324,28 @@ mod app {
         // One launcher at a time, held until the game this run starts has
         // ended: a second start raises the window or says the game runs
         // (`instance`). --check only reads and runs alongside.
-        let _instance = if check_only {
+        let _instance = if !instance::needs_instance(&switches) {
             None
         } else {
             match win32_instance::single(instance::NAME) {
                 Ok(guard) => Some(guard),
                 Err(running) => {
-                    let second =
-                        SecondStart::new(running.bring_to_front(Window::Title(window::TITLE)));
+                    let window = Window::Title(window::TITLE);
+                    let action = instance::is_action(&switches);
+                    let second = SecondStart::of(
+                        action,
+                        || running.is_window_found(window),
+                        || running.bring_to_front(window),
+                    );
                     log_line(&format!("another launcher is running: {second:?}"));
-                    if let Some(message) = second.message() {
-                        play_note(message);
+                    match second.message() {
+                        // An action's outcome goes where its output goes.
+                        Some(message) if action => command(message, true),
+                        Some(message) => play_note(message),
+                        None => {}
                     }
                     // or-play --settings: nothing was started.
-                    return Ok(if settings_only { WINDOW_CLOSED } else { 0 });
+                    return Ok(second.exit_code(action, settings_only, WINDOW_CLOSED));
                 }
             }
         };

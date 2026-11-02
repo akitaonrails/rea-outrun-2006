@@ -230,7 +230,7 @@ launcher's own switches:
 | `--no-window` | play with the saved settings (and any options given) |
 | `--settings` | only the settings window; exit code 0 when Play was pressed, 3 when it was closed, 4 when no window could be shown (`--linux` adds the Linux scaler, for `or-play`) |
 | `--check` | checks the game folder and the launcher's files without playing; the report goes to `launcher.log`; exit code 0 ready, 1 not |
-| `--download-hd-pack` | downloads the HD texture pack and switches it on |
+| `--download-hd-pack` | downloads the HD texture pack and switches it on; exit code 5 when another launcher is open (the window, or the game) |
 | `--help` | every option and its values |
 
 A bad option or value exits with code 2 and says what it takes.

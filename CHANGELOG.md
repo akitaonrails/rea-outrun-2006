@@ -155,6 +155,10 @@ All notable changes to this project. The format follows
 
 ### Fixed
 
+- `--download-hd-pack` while another launcher is open no longer exits 0
+  without downloading anything. With the settings window open it says to
+  use the HD Pack tab; while the game runs it says so; either way it exits
+  with 5.
 - Errors that stop the launcher (game folder not found, an unknown
   `OR2006C2C.exe`, a failed install) show a dialog under Wine and Proton
   again, and are printed to `play.log` too. Since the console output
