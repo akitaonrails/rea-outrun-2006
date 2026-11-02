@@ -15,8 +15,7 @@ Windows and on Linux (Proton/Wine). It is not a distribution of the game.
   archives, music, track data, or other game assets, or anything copied out
   of them. Binary components (OutRun2006Tweaks, DXVK, Wine, xdelta3, the
   VC++ runtime, the soundtrack vcdiff) are fetched at package time from
-  URLs and digests pinned in `packaging/mirrored.txt` and
-  `packaging/*.txt` and are never committed.
+  URLs and digests pinned in `packaging/*.txt` and are never committed.
   OutRun2006Tweaks builds are repacked as `tweaks-<commit>` releases of
   this repository by `packaging/update-tweaks.sh` (docs/TWEAKS.md).
 - The community HD texture pack (no licence) is never bundled: the

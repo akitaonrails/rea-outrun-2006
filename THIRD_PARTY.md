@@ -2,8 +2,7 @@
 
 Everything bundled with or compiled into the package, with its licence and
 source. Binary components are never committed: `packaging/package.sh`
-fetches them from the URLs pinned in `packaging/mirrored.txt` and
-`packaging/*.txt` and checks each one
+fetches them from the URLs pinned in `packaging/*.txt` and checks each one
 by SHA-256. Add a row (and a pin) before bundling anything new.
 
 ## Compiled into OutRunLauncher.exe

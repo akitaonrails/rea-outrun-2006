@@ -46,7 +46,8 @@ All notable changes to this project. The format follows
   `launcher.log` and the EXE's SHA-256, a README uninstall section and a
   Contributing section (game issues here, shared code at rea-launcher-sdk).
 - DXVK and the VC++ redistributable are mirrored in this repository's
-  `thirdparty` release (`packaging/mirrored.txt`, `mirror` workflow) as
+  `thirdparty` release (`packaging/dxvk.txt`, `packaging/vcredist.txt`,
+  `mirror` workflow) as
   fallbacks for the package build.
 - The owner's decision of 2026-11-02 approving OutRun2006Tweaks'
   DRM-free replacement EXE is recorded in `AGENTS.md` and
@@ -66,6 +67,9 @@ All notable changes to this project. The format follows
   `--scaler` already chose its filter (the SDK's one-run helper flags
   replace or-play's own `--scaler` hook); `resolution = off` runs
   gamescope at the game's 640×480, as the launcher reads it.
+- The DXVK and VC++ pins are one file each (`packaging/dxvk.txt`,
+  `packaging/vcredist.txt`) like the others; the SDK's `mirror` workflow
+  reads them there, so `packaging/mirrored.txt` is gone.
 - The frame rate, draw distance, anisotropy and deadzone rows are the
   SDK's option rows (Range steps as chips); they look and behave as
   before. The window's tests use the SDK's `harness_sized`.

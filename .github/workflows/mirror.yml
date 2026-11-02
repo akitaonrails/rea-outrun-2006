@@ -1,8 +1,8 @@
 name: mirror
 
-# Copies the pins marked "mirror" in packaging/mirrored.txt (licences that
-# allow republishing: DXVK, the VC++ redistributable) into this
-# repository's `thirdparty` release, verified by sha256; package.sh lists
+# Copies the pins marked "mirror" in packaging/dxvk.txt and
+# packaging/vcredist.txt (licences that allow republishing: DXVK, the VC++
+# redistributable) into this repository's `thirdparty` release, verified by sha256; package.sh lists
 # those copies as fallbacks. Run by hand after changing a mirrored pin.
 
 on: workflow_dispatch
@@ -16,4 +16,4 @@ jobs:
       contents: write
     uses: akitaonrails/rea-launcher-sdk/.github/workflows/mirror.yml@v0.3.0
     with:
-      pins: packaging/mirrored.txt
+      pins: packaging/dxvk.txt packaging/vcredist.txt

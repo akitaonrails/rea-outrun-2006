@@ -14,10 +14,10 @@
 set -eu
 ROOT=$(dirname "$(dirname "$(readlink -f "$0")")")
 CACHE=${OR_CACHE:-$HOME/.cache/or-package}
-# Pins are packaging/mirrored.txt (with mirror fallbacks) and
-# packaging/<name>.txt, fetched and checked by the SDK's pins.sh.
+# Pins are packaging/<name>.txt (dxvk and vcredist with mirror
+# fallbacks), fetched and checked by the SDK's pins.sh.
 . "$ROOT/sdk/packaging/pins.sh"
-PIN_FILE=$ROOT/packaging/mirrored.txt PIN_DIR=$ROOT/packaging PIN_CACHE=$CACHE
+PIN_FILE='' PIN_DIR=$ROOT/packaging PIN_CACHE=$CACHE
 # fetch <name>: the pinned download's path (stops the script on failure).
 fetch() { pin_fetch "$1" "$CACHE/files" || exit 1; }
 

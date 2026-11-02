@@ -1,0 +1,6 @@
+# DXVK (zlib): serves the game's Direct3D 9 through Vulkan under Wine.
+# linux/ gets the 32-bit d3d9.dll (x32/ in the archive). Its licence allows
+# republishing ("mirror"): the mirror workflow keeps an exact copy in this
+# repository's `thirdparty` release, the fallback url.
+# One line: URL SHA-256 [fallback-url ...] [mirror].
+https://github.com/doitsujin/dxvk/releases/download/v3.1.1/dxvk-3.1.1.tar.gz 40565b4a724aadc4433fa4e010b4b23916d9b1f1baeee64e17186db94f54e608 https://github.com/akitaonrails/rea-outrun-2006/releases/download/thirdparty/dxvk-3.1.1.tar.gz mirror

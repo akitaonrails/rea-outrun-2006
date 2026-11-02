@@ -357,7 +357,7 @@ drops one of the two `kernel32.dll` import groups and the launcher would
 crash at start ([docs/RUNTIME_NOTES.md](docs/RUNTIME_NOTES.md)).
 
 Third-party components are downloaded at package time from the URLs and
-SHA-256 digests in `packaging/mirrored.txt` and `packaging/*.txt` (Wine and the AppImage tools in
+SHA-256 digests in `packaging/*.txt` (Wine and the AppImage tools in
 `sdk/packaging/appimage/tools.pins`). CI (`.github/workflows/build.yml`,
 on the SDK's reusable workflows) tests, lints, audits, builds and packages
 every push and pull request, runs the Windows-target tests under Wine,

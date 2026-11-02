@@ -1,0 +1,8 @@
+# Microsoft Visual C++ 2015-2022 x86 runtime 14.44.35211.0 (Visual Studio
+# Distributable Code: the redistributable package may be redistributed),
+# which the Tweaks DLL needs. vc/ gets msvcp140.dll, vcruntime140.dll and
+# vcomp140.dll, deployed app-local, so no installer ever runs. This is the
+# versioned URL behind aka.ms/vs/17/release/vc_redist.x86.exe; the files
+# come out with cabextract. Mirrored like dxvk.txt.
+# One line: URL SHA-256 [fallback-url ...] [mirror].
+https://download.visualstudio.microsoft.com/download/pr/990c720a-46ce-4dc7-87b9-c2eb615d34b9/0C09F2611660441084CE0DF425C51C11E147E6447963C3690F97E0B25C55ED64/VC_redist.x86.exe 0c09f2611660441084ce0df425c51c11e147e6447963c3690f97e0b25c55ed64 https://github.com/akitaonrails/rea-outrun-2006/releases/download/thirdparty/VC_redist.x86.exe mirror
