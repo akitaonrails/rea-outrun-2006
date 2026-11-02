@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 use rea_launcher::fsx;
 use rea_launcher::ini::Ini;
+use rea_launcher::ledger::{Ledger, Outcome};
 
 use crate::config::Settings;
 use crate::soundtrack;
@@ -20,7 +21,11 @@ use crate::soundtrack;
 pub const TWEAKS_DIR: &str = "tweaks";
 const VC_DIR: &str = "vc";
 const USER_INI: &str = "OutRun2006Tweaks.user.ini";
-const DXVK_MARKER: &str = ".or-dxvk";
+/// The runtime's component ledger (`rea_launcher::ledger`): DXVK's
+/// `d3d9.dll`, by SHA-256.
+pub const LEDGER: &str = ".or-components";
+/// The marker launchers before the ledger kept next to their `d3d9.dll`.
+const OLD_DXVK_MARKER: &str = ".or-dxvk";
 
 /// The x86 VC++ 2022 runtime DLLs the mod needs, deployed app-local (the
 /// officially supported way) so no installer is ever run.
@@ -140,7 +145,7 @@ pub fn install(
         fsx::install(&game_ini, text).map_err(|e| format!("cannot write {e}"))?;
     }
 
-    install_dxvk(runtime, launcher_dir, linux, log)?;
+    install_dxvk(game, runtime, launcher_dir, linux, log)?;
 
     if settings.soundtrack_fix.unwrap_or(true) {
         match soundtrack::apply(runtime, launcher_dir) {
@@ -209,39 +214,52 @@ pub fn check_components(launcher_dir: &Path, wine: bool) -> Components {
     found
 }
 
-/// Kept on its own marker rather than `rea_launcher::ledger`: the
-/// ledger's take-out brings the game folder's own `d3d9.dll` back, and
-/// repacks ship SpecialK's there (it would hijack Direct3D on Windows).
-///
 /// DXVK serves the game's Direct3D 9 on Linux; on Windows the real D3D9
-/// does (a local d3d9.dll from an earlier Linux run is removed).
+/// does (a `d3d9.dll` of ours from an earlier Linux run is taken out).
+/// Taking it out never brings the game folder's own `d3d9.dll` back:
+/// repacks ship SpecialK's there, which would hijack Direct3D on Windows
+/// (`Ledger::take_out_keep_game`).
 fn install_dxvk(
+    game: &Path,
     runtime: &Path,
     launcher_dir: &Path,
     linux: bool,
     log: &mut dyn FnMut(&str),
 ) -> Result<(), String> {
-    let marker = runtime.join(DXVK_MARKER);
     let destination = runtime.join("d3d9.dll");
+    // A runtime from before the ledger: its marker says the d3d9.dll is ours.
+    let old_marker = runtime.join(OLD_DXVK_MARKER);
+    if old_marker.is_file() {
+        let _ = fs::remove_file(&destination);
+        let _ = fs::remove_file(&old_marker);
+    }
+    let mut ledger = Ledger::load(game, runtime, LEDGER);
+    let failed = |e: std::io::Error| format!("DXVK: {e}");
     if !linux {
-        if marker.is_file() {
-            let _ = fs::remove_file(&destination);
-            let _ = fs::remove_file(&marker);
+        if ledger.take_out_keep_game("d3d9.dll", &[]).map_err(failed)? == Outcome::Restored {
             log("dxvk: removed (running on Windows)");
         }
         return Ok(());
     }
     let source = launcher_dir.join("linux").join("d3d9.dll");
-    if !source.is_file() {
-        return Err(format!(
+    let bytes = fs::read(&source).map_err(|_| {
+        format!(
             "DXVK is missing: {}. Keep the linux folder next to OutRunLauncher.exe.",
             source.display()
-        ));
+        )
+    })?;
+    if fs::read(&destination).is_ok_and(|now| now == bytes)
+        && ledger.owns("d3d9.dll", &[]).map_err(failed)?
+    {
+        return Ok(());
     }
-    if freshen(&source, &destination)? {
-        log("dxvk: installed");
+    match ledger.install("d3d9.dll", &bytes, &[]).map_err(failed)? {
+        Outcome::NotOurs => {
+            log("dxvk: the runtime's d3d9.dll is not the launcher's; left as it is")
+        }
+        _ => log("dxvk: installed"),
     }
-    fsx::install(&marker, b"d3d9.dll is managed by OutRunLauncher\n").map_err(|e| e.to_string())
+    Ok(())
 }
 
 /// The folder Tweaks should read HD textures from (`TextureBaseFolder`,
@@ -536,6 +554,51 @@ mod tests {
     }
 
     #[test]
+    fn dxvk_never_brings_the_games_d3d9_back_and_reads_the_old_marker() {
+        let at = temp("dxvk-ledger");
+        let launcher_dir = launcher(&at);
+        fs::create_dir_all(launcher_dir.join("linux")).unwrap();
+        fs::write(launcher_dir.join("linux").join("d3d9.dll"), b"dxvk 2").unwrap();
+        // A repack's SpecialK in the game folder.
+        let game = at.join("game");
+        fs::create_dir_all(&game).unwrap();
+        fs::write(game.join("d3d9.dll"), b"specialk").unwrap();
+        // A runtime from before the ledger: an older DXVK and its marker.
+        let runtime = at.join("runtime");
+        fs::create_dir_all(&runtime).unwrap();
+        fs::write(runtime.join("d3d9.dll"), b"dxvk 1").unwrap();
+        fs::write(runtime.join(OLD_DXVK_MARKER), b"").unwrap();
+        let mut log = |_line: &str| {};
+        let run = |linux: bool, log: &mut dyn FnMut(&str)| {
+            install(
+                &game,
+                &runtime,
+                &launcher_dir,
+                linux,
+                &Settings::default(),
+                log,
+            )
+            .unwrap()
+        };
+
+        run(true, &mut log);
+        assert_eq!(fs::read(runtime.join("d3d9.dll")).unwrap(), b"dxvk 2");
+        assert!(!runtime.join(OLD_DXVK_MARKER).exists());
+
+        run(false, &mut log);
+        assert!(
+            !runtime.join("d3d9.dll").exists(),
+            "SpecialK must not come back"
+        );
+
+        // A d3d9.dll that is not the launcher's stays on Windows too.
+        fs::write(runtime.join("d3d9.dll"), b"the player's").unwrap();
+        run(false, &mut log);
+        assert_eq!(fs::read(runtime.join("d3d9.dll")).unwrap(), b"the player's");
+        fs::remove_dir_all(&at).unwrap();
+    }
+
+    #[test]
     fn dxvk_follows_the_platform() {
         let at = temp("dxvk");
         let launcher_dir = launcher(&at);
@@ -555,7 +618,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!(fs::read(runtime.join("d3d9.dll")).unwrap(), b"dxvk");
-        assert!(runtime.join(DXVK_MARKER).is_file());
+        assert!(
+            Ledger::load(&at.join("game"), &runtime, LEDGER)
+                .owns("d3d9.dll", &[])
+                .unwrap()
+        );
 
         // Moving the same runtime to Windows removes it again.
         install(
@@ -568,7 +635,12 @@ mod tests {
         )
         .unwrap();
         assert!(!runtime.join("d3d9.dll").exists());
-        assert!(!runtime.join(DXVK_MARKER).exists());
+        assert_eq!(
+            Ledger::load(&at.join("game"), &runtime, LEDGER)
+                .names()
+                .count(),
+            0
+        );
 
         // Without the linux folder it is an error on Linux only.
         fs::remove_file(launcher_dir.join("linux").join("d3d9.dll")).unwrap();

@@ -57,6 +57,11 @@ All notable changes to this project. The format follows
 - Updated rea-launcher-sdk to v0.3.0. Screen readers now name the folder
   fields by their heading ("Game folder", "Saves", "Pack folder") and read
   the hint as their description.
+- DXVK's `d3d9.dll` in the runtime is recorded in the SDK's component
+  ledger (`.or-components`) instead of the `.or-dxvk` marker, which an
+  existing runtime has converted on its next run. On Windows it is still
+  taken out without bringing back a repack's SpecialK `d3d9.dll`; a
+  `d3d9.dll` that isn't the launcher's is now left alone.
 - Old spellings (`fps_limit = unlimited`, `anisotropy = off`,
   `reflections = 128`) and the removed `character_select` and `hot_plug`
   are read by the SDK's option table (value aliases, removed keys) instead
