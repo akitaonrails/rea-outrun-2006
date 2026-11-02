@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=OutRun 2006: Coast 2 Coast
+Comment=Play your own copy of OutRun 2006: Coast 2 Coast
+Exec=AppRun
+Icon=outrun-launcher
+Categories=Game;
+Terminal=false

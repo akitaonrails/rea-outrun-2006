@@ -264,11 +264,7 @@ mod app {
                 Err(error) => log_line(&format!("warning: {error}")),
             }
         } else {
-            log_line(&format!(
-                "wine: {} (DLL overrides: {})",
-                if wine { "yes" } else { "no" },
-                wine_overrides()
-            ));
+            log_line(&format!("wine: DLL overrides {}", wine_overrides()));
         }
 
         let mut command = Command::new(runtime_dir.join(EXE));

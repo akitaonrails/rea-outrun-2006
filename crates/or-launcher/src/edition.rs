@@ -64,19 +64,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn known_digests_identify() {
-        let original = [7u8; 14_950_400 >> 20]; // any bytes; we test the table
-        let _ = &original;
-        for (digest, edition) in digests() {
-            // A buffer whose hash cannot collide with the table fails.
-            assert_eq!(identify(&[0u8; 64]), Err(Sha256::digest([0u8; 64]).into()));
-            assert_eq!(identify(&digest).unwrap_or(edition), {
-                // The digest itself is not the preimage; this only checks the
-                // table maps round-trip through `hex`.
-                let _ = edition;
-                identify(&digest).unwrap_or(edition)
-            });
-        }
+    fn the_digest_table_decodes_and_is_distinct() {
+        let table: Vec<_> = digests().collect();
+        assert_eq!(
+            to_hex(&table[0].0),
+            "bdafa88a5abdd2a9743f6bdcc5e2189288c0203790412fce10b9bb649933482f"
+        );
+        assert_eq!(
+            to_hex(&table[1].0),
+            "68ceb386829066f8455b9d027320af962584321f3e2e8a79c72841495a6134c3"
+        );
+        assert_ne!(table[0].0, table[1].0);
+        assert!(!table[0].1.patched && table[1].1.patched);
     }
 
     #[test]
