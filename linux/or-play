@@ -89,8 +89,10 @@ start() {
   cat > "$inner" <<INNER
 #!/bin/sh
 trap 'wineserver -k; exit' INT TERM HUP
+# The launcher waits for the game (and copies the saves back) before it
+# exits, so waiting for it is waiting for the game. Watching for the game's
+# process instead raced Wine's start-up and killed the launcher.
 wine '$LAUNCHER' --no-window
-sleep 3; while pgrep -x OR2006C2C.exe >/dev/null; do sleep 1; done
 wineserver -k
 INNER
   chmod +x "$inner"
