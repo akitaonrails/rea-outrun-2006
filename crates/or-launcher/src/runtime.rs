@@ -336,4 +336,30 @@ mod tests {
         assert!(check_separate(&game, &temp("elsewhere")).is_ok());
         fs::remove_dir_all(&game).unwrap();
     }
+
+    #[test]
+    fn hostile_paths_for_game_runtime_and_saves() {
+        // Spaces, an apostrophe and accents in every folder.
+        let top = temp("hostile");
+        let game = top.join("Jogos d'Ação/OutRun 2006");
+        let rt = top.join("José/Runtime d'OR");
+        let saves = top.join("José/Saved Games/OutRun 2006 — mine");
+        fs::create_dir_all(game.join("SaveGame")).unwrap();
+        fs::write(game.join("Sound é.ogg"), b"song").unwrap();
+        fs::write(game.join("SaveGame/License.dat"), b"orig").unwrap();
+        assert!(check_separate(&game, &rt).is_ok());
+        assert_eq!(sync(&game, &rt).unwrap().brought, 2);
+        assert_eq!(fs::read(rt.join("Sound é.ogg")).unwrap(), b"song");
+        let rt_save = save_dir(&rt).unwrap();
+        let state = rt.join(SAVES_STATE);
+        let moved = saves_in(&saves, &rt_save, &state).unwrap();
+        assert_eq!(moved.to_saves, ["License.dat"]);
+        fs::write(rt_save.join("License.dat"), b"played").unwrap();
+        assert_eq!(
+            saves_out(&rt_save, &saves, &state).unwrap(),
+            ["License.dat"]
+        );
+        assert_eq!(fs::read(saves.join("License.dat")).unwrap(), b"played");
+        fs::remove_dir_all(&top).unwrap();
+    }
 }

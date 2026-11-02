@@ -124,12 +124,7 @@ pub fn install(
         };
     }
     let pack = hd_texture_base(settings, launcher_dir, log);
-    let mut ini = Ini::parse(&base);
-    settings.tweak(&mut ini);
-    texture_keys(&mut ini, pack.as_deref());
-    // Without a choice in launcher.cfg, the input API follows the platform.
-    let backend = settings.backend_on(linux).ini().to_string();
-    ini.set("Controls", "InputBackend", &backend);
+    let ini = tweaks_ini(&base, settings, pack.as_deref(), linux);
     fsx::install(&ini_path, ini.to_bytes()).map_err(|e| format!("cannot write {e}"))?;
     reset_overlay_keys(&runtime.join(USER_INI), log)?;
 
@@ -282,6 +277,18 @@ fn hd_texture_base(
         )),
     }
     base
+}
+
+/// `OutRun2006Tweaks.ini` from `base` with the launcher's keys: the
+/// settings, the HD pack's folder (`pack`, from `texture_base`) and the
+/// input API, which follows the platform (`wine`) unless one was chosen.
+pub fn tweaks_ini(base: &str, settings: &Settings, pack: Option<&Path>, wine: bool) -> Ini {
+    let mut ini = Ini::parse(base);
+    settings.tweak(&mut ini);
+    texture_keys(&mut ini, pack);
+    let backend = settings.backend_on(wine).ini().to_string();
+    ini.set("Controls", "InputBackend", &backend);
+    ini
 }
 
 /// The (section, key) pairs the launcher writes to `OutRun2006Tweaks.ini`.

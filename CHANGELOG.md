@@ -30,6 +30,11 @@ All notable changes to this project. The format follows
 - The settings window runs headless in tests on any host
   (`egui_kittest`): every tab, label, description, disabled reason and
   Play are tested, with hostile paths (`José/Jogos d'Ação`).
+- End-to-end option tests: every option's flag and `launcher.cfg` key
+  reach the same setting and the INI key, environment or gamescope filter
+  it changes (`plan::plan`, what a launch writes); `--help`, every bad
+  value's message, a `launcher.cfg` written by v0.1.0, and runtime and
+  saves folders with spaces, apostrophes and accents.
 
 ### Changed
 

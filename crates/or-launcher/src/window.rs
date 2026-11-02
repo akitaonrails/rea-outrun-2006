@@ -1059,6 +1059,7 @@ mod tests {
     use rea_launcher::cfg::spec;
     use rea_launcher_ui::spec::{clear_rendered, rendered_keys};
     use rea_launcher_ui::testing::{self, Harness, Queryable};
+    use rea_launcher_ui::theme;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     /// A platform that records what the window asked of it.
@@ -1140,8 +1141,17 @@ mod tests {
         }
     }
 
+    /// `testing::harness` lays out at the SDK's 880×640, where the long
+    /// tabs scroll and a click misses rows below the fold; this one is
+    /// tall enough to show every row of every tab.
     fn harness(window: Window) -> Harness<'static, Window> {
-        testing::harness(&PALETTE, &METRICS, window, |ui, w| w.draw(ui))
+        let mut ui = Harness::builder()
+            .with_size(vec2(SIZE.x, 1400.0))
+            .with_theme(egui::Theme::Dark)
+            .with_context_setup(|ctx| theme::install_with(ctx, &PALETTE, &METRICS))
+            .build_ui_state(|ui, w: &mut Window| w.draw(ui), window);
+        ui.run();
+        ui
     }
 
     fn open(dirs: &Dirs, saved: Option<&str>, linux: bool, wine: bool) -> Harness<'static, Window> {
@@ -1380,5 +1390,81 @@ mod tests {
         assert!(testing::checked(&ui.get_by_label("75")));
         assert!(testing::checked(&ui.get_by_label("2×")));
         assert!(testing::checked(&ui.get_by_label("1600×900")));
+    }
+
+    #[test]
+    fn every_switch_reaches_launcher_cfg() {
+        let dirs = Dirs::new("switches");
+        let mut ui = open(&dirs, None, false, false);
+        let before = config::Settings::parse_file(&ui.state().form.save("")).0;
+        let switches = [
+            (Tab::Picture, "fullscreen"),
+            (Tab::Picture, "vsync"),
+            (Tab::Picture, "sky_glow"),
+            (Tab::Picture, "xbox_brightness"),
+            (Tab::Picture, "hd_characters"),
+            (Tab::Controls, "manual_gearbox"),
+            (Tab::Extras, "music_shuffle"),
+            (Tab::Extras, "cd_switcher"),
+            (Tab::Extras, "skip_logos"),
+            (Tab::Extras, "free_drive"),
+            (Tab::Extras, "horn"),
+            (Tab::Extras, "random_anims"),
+            (Tab::Extras, "show_miles"),
+            (Tab::Extras, "soundtrack_fix"),
+        ];
+        for (tab, key) in switches {
+            show(&mut ui, tab);
+            ui.get_by_role_and_label(egui::accesskit::Role::Switch, option(key).label)
+                .click();
+            ui.run();
+        }
+        play(&ui).click();
+        ui.run();
+        let mut after =
+            config::Settings::parse_file(&std::fs::read_to_string(dirs.cfg()).unwrap()).0;
+        let mut before = before;
+        for (_, key) in switches {
+            let flipped = match key {
+                "vsync" => Some(after.vsync != before.vsync),
+                _ => after
+                    .toggle(key)
+                    .map(|v| *v)
+                    .zip(before.toggle(key).map(|v| *v))
+                    .map(|(a, b)| a != b),
+            };
+            assert_eq!(flipped, Some(true), "{key}");
+        }
+    }
+
+    #[test]
+    fn chips_reach_launcher_cfg() {
+        let dirs = Dirs::new("chips");
+        let mut ui = open(&dirs, None, false, false);
+        show(&mut ui, Tab::Picture);
+        for label in ["4K", "Game's own", "1024", "8×", "4× MSAA"] {
+            ui.get_all_by_label(label).next().unwrap().click();
+            ui.run();
+        }
+        show(&mut ui, Tab::Controls);
+        for label in ["30%", "Strong", "DInput"] {
+            ui.get_by_label(label).click();
+            ui.run();
+        }
+        play(&ui).click();
+        ui.run();
+        let saved = std::fs::read_to_string(dirs.cfg()).unwrap();
+        for line in [
+            "resolution = 3840x2160",
+            "draw_distance = 0",
+            "reflections = 1024",
+            "anisotropy = 8",
+            "antialiasing = 2",
+            "deadzone = 30",
+            "vibration_strength = 10",
+            "input_backend = dinput",
+        ] {
+            assert!(saved.lines().any(|l| l == line), "{line} not in\n{saved}");
+        }
     }
 }
