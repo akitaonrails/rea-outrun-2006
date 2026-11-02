@@ -157,6 +157,11 @@ Add `OutRunLauncher.exe` from the unpacked zip as a non-Steam game and
 force a Proton version in its compatibility settings. The launcher detects
 Proton and wires DXVK and the DLL overrides itself.
 
+Your own `WINEDLLOVERRIDES` are kept, except rules for the DLLs the
+launcher sets (`dinput8`, `d3d9`, `mscoree`, `mshtml`, with or without
+`.dll`): the launcher's rules replace them. A `d3d9=b` of your own (to
+leave DXVK for Wine's Direct3D) is therefore not applied.
+
 ### Linux: your own Wine
 
 Run `linux/or-play` from the unpacked zip: the settings window, then the

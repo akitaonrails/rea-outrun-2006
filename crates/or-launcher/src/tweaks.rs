@@ -279,6 +279,21 @@ pub fn texture_keys(ini: &str, pack: Option<&Path>) -> String {
 /// away (no download prompts).
 pub const WINE_OVERRIDES: &str = "dinput8=n,b;d3d9=n,b;mscoree,mshtml=d";
 
+/// Whether a rule's DLL name is `dll`, in any case, with or without
+/// `.dll` (Wine accepts both).
+fn same_dll(name: &str, dll: &str) -> bool {
+    let len = name.len();
+    let bare = if len > 4
+        && name.is_char_boundary(len - 4)
+        && name[len - 4..].eq_ignore_ascii_case(".dll")
+    {
+        &name[..len - 4]
+    } else {
+        name
+    };
+    bare.eq_ignore_ascii_case(dll)
+}
+
 /// `WINEDLLOVERRIDES` for the game: our rules first, then the player's
 /// own, minus their rules for the DLLs ours cover (Wine doesn't promise
 /// which of two rules for one DLL wins). Everything else they set is kept.
@@ -296,7 +311,7 @@ pub fn wine_overrides(existing: Option<&str>) -> String {
         let kept: Vec<_> = names
             .split(',')
             .map(str::trim)
-            .filter(|name| !name.is_empty() && !OURS.iter().any(|o| name.eq_ignore_ascii_case(o)))
+            .filter(|name| !name.is_empty() && !OURS.iter().any(|o| same_dll(name, o)))
             .collect();
         if !kept.is_empty() {
             result.push(format!("{}={action}", kept.join(",")));
@@ -625,6 +640,14 @@ mod tests {
         assert_eq!(
             wine_overrides(Some("odd;;foo=n")),
             format!("{WINE_OVERRIDES};odd;foo=n")
+        );
+    }
+
+    #[test]
+    fn wine_overrides_recognise_names_spelled_with_dll() {
+        assert_eq!(
+            wine_overrides(Some("D3D9.DLL=b;dinput8.dll=b;xinput1_3.dll=n;d3d9x.dll=b")),
+            format!("{WINE_OVERRIDES};xinput1_3.dll=n;d3d9x.dll=b")
         );
     }
 }

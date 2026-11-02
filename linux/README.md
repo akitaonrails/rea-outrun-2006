@@ -27,6 +27,11 @@ private copy of the game, so the prefix needs no winetricks. Under Wine the
 mod reads pads through XInput by default (Wine's Windows.Gaming.Input loses
 the d-pad); the Controls tab offers the others.
 
+Your own `WINEDLLOVERRIDES` are kept, except rules for the DLLs the
+launcher sets (`dinput8`, `d3d9`, `mscoree`, `mshtml`, with or without
+`.dll`): the launcher's rules replace them. A `d3d9=b` of your own (to
+leave DXVK for Wine's Direct3D) is therefore not applied.
+
 It needs `wine` and `gamescope`. Optional environment variables:
 
 | Variable | Meaning | Default |

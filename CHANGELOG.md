@@ -54,6 +54,10 @@ All notable changes to this project. The format follows
 - `or-play` interrupted (Ctrl+C, or its terminal closed) also stops Wine
   in our prefix and waits for the game's session to end; a game started
   by or-play 0.1.0 (pid-only lock) still counts as running.
+- Wine DLL overrides: a player's rule spelled with `.dll` (`D3D9.DLL=b`)
+  is recognised as a rule for that DLL too. The README says the
+  launcher's rules replace the player's own for its DLLs (a `d3d9` rule
+  to leave DXVK is not applied).
 
 ### Changed
 
