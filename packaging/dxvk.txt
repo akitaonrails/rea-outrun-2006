@@ -1,4 +1,0 @@
-# DXVK (zlib): serves the game's Direct3D 9 through Vulkan under Wine.
-# linux/ gets the 32-bit d3d9.dll (x32/ in the archive).
-# One line: URL SHA-256.
-https://github.com/doitsujin/dxvk/releases/download/v3.1.1/dxvk-3.1.1.tar.gz 40565b4a724aadc4433fa4e010b4b23916d9b1f1baeee64e17186db94f54e608

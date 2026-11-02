@@ -209,6 +209,10 @@ pub fn check_components(launcher_dir: &Path, wine: bool) -> Components {
     found
 }
 
+/// Kept on its own marker rather than `rea_launcher::ledger`: the
+/// ledger's take-out brings the game folder's own `d3d9.dll` back, and
+/// repacks ship SpecialK's there (it would hijack Direct3D on Windows).
+///
 /// DXVK serves the game's Direct3D 9 on Linux; on Windows the real D3D9
 /// does (a local d3d9.dll from an earlier Linux run is removed).
 fn install_dxvk(
