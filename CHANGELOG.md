@@ -43,6 +43,10 @@ All notable changes to this project. The format follows
 - `or-play` gives gamescope the race size as its output size too
   (`-W/-H`), and keeps SDL reading pads in the background
   (`SDL_*_ALLOW_BACKGROUND_EVENTS=1` unless already set).
+- The settings window opens on the recommended look only when there is no
+  `launcher.cfg` yet (or it is empty), as in the sibling launchers; a
+  saved file that matches the template word for word is kept as the
+  player's.
 
 ## [0.1.0] - 2026-11-02
 

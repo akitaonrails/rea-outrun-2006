@@ -201,9 +201,9 @@ mod app {
                     Err(error) => log_line(&format!("warning: {error}")),
                 }
             }
-            let text =
-                fs::read_to_string(&settings_path).unwrap_or_else(|_| config::TEMPLATE.into());
-            match ui::show(&settings_path, &home(), &text, linux) {
+            // No launcher.cfg yet: the window opens on the recommended look.
+            let saved = fs::read_to_string(&settings_path).ok();
+            match ui::show(&settings_path, &home(), saved.as_deref(), linux) {
                 Ok(ui::Outcome::Play) => {
                     log_line("settings window: play");
                     if settings_only {

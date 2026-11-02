@@ -252,6 +252,18 @@ impl Form {
         }
     }
 
+    /// The form for a settings file's text: the recommended look when there
+    /// is no file yet (or it is empty), otherwise what the file says. A file
+    /// that happens to match the template is the player's, not a first run.
+    pub fn from_file(saved: Option<&str>, screen: Option<(u32, u32)>, wine: bool) -> Form {
+        match saved {
+            Some(text) if !text.trim().is_empty() => {
+                Form::new(&Settings::parse_file(text).0, screen, wine)
+            }
+            _ => Form::first_run(screen, wine),
+        }
+    }
+
     /// The look these values make on a screen.
     pub fn look_of(form: &Form, screen: Option<(u32, u32)>, wine: bool) -> Look {
         let mut probe = form.clone();
@@ -516,6 +528,25 @@ mod tests {
         // And back.
         let back = config::set_key(&tweaked, "draw_distance", "4");
         assert_eq!(form(&back).look, Look::CoastToCoast);
+    }
+
+    #[test]
+    fn only_a_missing_or_empty_file_is_a_first_run() {
+        let first = Form::first_run(SCREEN, false);
+        assert_eq!(Form::from_file(None, SCREEN, false), first);
+        assert_eq!(Form::from_file(Some(""), SCREEN, false), first);
+        assert_eq!(Form::from_file(Some(" \r\n"), SCREEN, false), first);
+        assert_eq!(first.look, Look::CoastToCoast);
+        // A saved file that is the template word for word is the player's.
+        let kept = Form::from_file(Some(config::TEMPLATE), SCREEN, false);
+        assert_eq!(kept, form(config::TEMPLATE));
+        assert_ne!(kept.look, Look::CoastToCoast);
+        // A file with just the game folder (written by --game) too.
+        let with_game = config::set_key(config::TEMPLATE, "game", r"D:\OutRun");
+        assert_eq!(
+            Form::from_file(Some(&with_game), SCREEN, false),
+            form(&with_game)
+        );
     }
 
     #[test]

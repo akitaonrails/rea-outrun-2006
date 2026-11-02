@@ -17,7 +17,7 @@ use eframe::egui::{
     Mesh, Rect, Sense, Shape, Stroke, StrokeKind, TextureHandle, Vec2, pos2, vec2,
 };
 
-use or_launcher::config::{self, Settings};
+use or_launcher::config;
 use or_launcher::config::{Backend, Feedback, Vsync};
 use or_launcher::form::{self, Form, Look, PadAction};
 use or_launcher::{edition, hdpack, runtime, tweaks};
@@ -54,10 +54,16 @@ pub enum Outcome {
     Closed,
 }
 
-/// Shows the window over `settings_path` (its text, or the template for a
-/// first run). `linux` adds the gamescope scaler choice. Errors when no
-/// window can be made (no OpenGL); the caller then goes on without it.
-pub fn show(settings_path: &Path, home: &Path, text: &str, linux: bool) -> Result<Outcome, String> {
+/// Shows the window over `settings_path`, whose text is `saved` (`None`
+/// when there is no file yet: a first run, saved over the template).
+/// `linux` adds the gamescope scaler choice. Errors when no window can be
+/// made (no OpenGL); the caller then goes on without it.
+pub fn show(
+    settings_path: &Path,
+    home: &Path,
+    saved: Option<&str>,
+    linux: bool,
+) -> Result<Outcome, String> {
     let mut outcome = Outcome::Closed;
     let wine = win32::is_wine();
     // XWayland with fractional scaling can lose a resize sent after the
@@ -81,7 +87,7 @@ pub fn show(settings_path: &Path, home: &Path, text: &str, linux: bool) -> Resul
     };
     let path = settings_path.to_path_buf();
     let home = home.to_path_buf();
-    let text = text.to_string();
+    let saved = saved.map(str::to_string);
     eframe::run_native(
         "OutRun 2006",
         options,
@@ -91,7 +97,7 @@ pub fn show(settings_path: &Path, home: &Path, text: &str, linux: bool) -> Resul
                 &cc.egui_ctx,
                 path,
                 home,
-                text,
+                saved,
                 linux,
                 zoom,
                 &mut outcome,
@@ -312,19 +318,15 @@ impl<'a> Window<'a> {
         ctx: &egui::Context,
         path: PathBuf,
         home: PathBuf,
-        text: String,
+        saved: Option<String>,
         linux: bool,
         zoom: f32,
         outcome: &'a mut Outcome,
     ) -> Window<'a> {
         let screen = win32::screen_size();
         let wine = win32::is_wine();
-        let form = if text == config::TEMPLATE {
-            Form::first_run(screen, wine)
-        } else {
-            Form::new(&Settings::parse_file(&text).0, screen, wine)
-        };
-        let mut form = form;
+        let mut form = Form::from_file(saved.as_deref(), screen, wine);
+        let text = saved.unwrap_or_else(|| config::TEMPLATE.to_string());
         let pack = hdpack::Pack::pinned();
         // A pack downloaded earlier is offered even if its settings weren't
         // saved.
