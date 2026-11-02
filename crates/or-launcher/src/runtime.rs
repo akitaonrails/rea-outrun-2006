@@ -179,10 +179,62 @@ fn normalize(path: &Path) -> PathBuf {
     normalized
 }
 
+#[cfg(windows)]
+fn strip_os_prefix(value: &std::ffi::OsStr, prefix: &[u16]) -> Option<std::ffi::OsString> {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    let wide: Vec<u16> = value.encode_wide().collect();
+    wide.starts_with(prefix)
+        .then(|| std::ffi::OsString::from_wide(&wide[prefix.len()..]))
+}
+
+#[cfg(unix)]
+fn strip_os_prefix(value: &std::ffi::OsStr, prefix: &[u8]) -> Option<std::ffi::OsString> {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    let bytes = value.as_bytes();
+    bytes
+        .starts_with(prefix)
+        .then(|| std::ffi::OsString::from_vec(bytes[prefix.len()..].to_vec()))
+}
+
+/// Turns Win32 extended-length paths (`\\?\C:\…`, `\\?\UNC\…`, what
+/// canonicalize returns on Windows) back into drive and UNC paths, so they
+/// compare with paths that were only normalized.
+fn simplify_extended_length(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    const EXTENDED: &[u16] = &[92, 92, 63, 92];
+    #[cfg(windows)]
+    const UNC: &[u16] = &[85, 78, 67, 92];
+    #[cfg(unix)]
+    const EXTENDED: &[u8] = b"\\\\?\\";
+    #[cfg(unix)]
+    const UNC: &[u8] = b"UNC\\";
+    if let Some(rest) = strip_os_prefix(path.as_os_str(), EXTENDED) {
+        if let Some(unc) = strip_os_prefix(&rest, UNC) {
+            let mut simplified = std::ffi::OsString::from("\\\\");
+            simplified.push(unc);
+            return PathBuf::from(simplified);
+        }
+        return PathBuf::from(rest);
+    }
+    path.to_path_buf()
+}
+
+/// `path` canonicalized, or, when that fails for another reason than a
+/// missing file (some RAM disks, `subst` drives and network shares can't
+/// be canonicalized), normalized as text. `None` when it doesn't exist.
+fn canonical_or_lexical(path: &Path) -> Option<PathBuf> {
+    match fs::canonicalize(path) {
+        Ok(real) => Some(simplify_extended_length(&real)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+        Err(_) => Some(normalize(path)),
+    }
+}
+
 /// The absolute, real form of `path`, even when its last components don't
 /// exist yet: the nearest existing ancestor is canonicalized (links and
 /// Windows path aliases resolved), then the rest is appended with `.` and
-/// `..` handled as text. Relative paths start at `cwd`.
+/// `..` handled as text. Relative paths start at `cwd`. Where the system
+/// can't canonicalize, the path is normalized as text instead.
 pub fn resolve(path: &Path, cwd: &Path) -> Result<PathBuf, String> {
     let absolute = if path.is_absolute() {
         path.to_path_buf()
@@ -192,15 +244,15 @@ pub fn resolve(path: &Path, cwd: &Path) -> Result<PathBuf, String> {
     let mut ancestor = absolute.as_path();
     let mut suffix = Vec::new();
     loop {
-        match fs::canonicalize(ancestor) {
-            Ok(base) => {
+        match canonical_or_lexical(ancestor) {
+            Some(base) => {
                 let mut resolved = base;
                 for component in suffix.iter().rev() {
                     resolved.push(component);
                 }
                 return Ok(normalize(&resolved));
             }
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            None => {
                 let Some(component) = ancestor.components().next_back() else {
                     return Err(format!("cannot resolve {}", path.display()));
                 };
@@ -208,13 +260,13 @@ pub fn resolve(path: &Path, cwd: &Path) -> Result<PathBuf, String> {
                     std::path::Component::Normal(name) => suffix.push(name.to_os_string()),
                     std::path::Component::ParentDir => suffix.push("..".into()),
                     std::path::Component::CurDir => {}
-                    _ => return Err(format!("cannot resolve {}: {error}", path.display())),
+                    _ => return Ok(normalize(&absolute)),
                 }
-                ancestor = ancestor
-                    .parent()
-                    .ok_or_else(|| format!("cannot resolve {}: {error}", path.display()))?;
+                let Some(parent) = ancestor.parent() else {
+                    return Ok(normalize(&absolute));
+                };
+                ancestor = parent;
             }
-            Err(error) => return Err(format!("cannot resolve {}: {error}", path.display())),
         }
     }
 }
@@ -225,8 +277,8 @@ fn check_separate_from(game: &Path, runtime: &Path, cwd: &Path) -> Result<(), St
     } else {
         cwd.join(game)
     };
-    let g = fs::canonicalize(&absolute_game)
-        .map_err(|e| format!("game folder {}: {e}", game.display()))?;
+    let g = canonical_or_lexical(&absolute_game)
+        .ok_or_else(|| format!("game folder {}: not found", game.display()))?;
     let r = resolve(runtime, cwd)?;
     if r.starts_with(&g) || g.starts_with(&r) {
         return Err(format!(
@@ -759,5 +811,34 @@ mod tests {
         // A folder that doesn't exist: an error, and nothing left behind.
         assert!(write_atomic(&dir.join("none/launcher.cfg"), "x").is_err());
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn paths_that_cannot_be_canonicalized_are_normalized_as_text() {
+        // A path through a file fails with "not a directory", not "not
+        // found": it is still checked, as text.
+        let game = temp("lexical-game");
+        fs::create_dir_all(&game).unwrap();
+        fs::write(game.join("file"), b"x").unwrap();
+        let odd = game.join("file/x/../rt");
+        let real = fs::canonicalize(&game).unwrap();
+        assert_eq!(resolve(&odd, &game).unwrap(), real.join("file/rt"));
+        assert!(check_separate_from(&game, &odd, &game).is_err());
+        assert!(check_separate_from(&game.join("file/sub"), &temp("elsewhere"), &game).is_ok());
+        fs::remove_dir_all(game).unwrap();
+    }
+
+    #[test]
+    fn extended_length_paths_become_drive_and_unc_paths() {
+        assert_eq!(
+            simplify_extended_length(Path::new(r"\\?\C:\Games\OutRun")),
+            PathBuf::from(r"C:\Games\OutRun")
+        );
+        assert_eq!(
+            simplify_extended_length(Path::new(r"\\?\UNC\server\share\OutRun")),
+            PathBuf::from(r"\\server\share\OutRun")
+        );
+        let ordinary = Path::new(r"C:\Games\OutRun");
+        assert_eq!(simplify_extended_length(ordinary), ordinary);
     }
 }

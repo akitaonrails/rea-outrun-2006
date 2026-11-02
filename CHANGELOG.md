@@ -46,6 +46,9 @@ All notable changes to this project. The format follows
   message instead of being taken for a first run and written over; a file
   saved as ANSI is read (non-UTF-8 characters replaced) instead of being
   ignored.
+- The runtime-folder overlap check also works on drives Windows can't
+  canonicalize (some RAM disks, `subst` drives, network shares): those
+  paths are compared as text.
 
 ### Changed
 
