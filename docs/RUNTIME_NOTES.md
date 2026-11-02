@@ -3,6 +3,43 @@
 What was checked by running the game, newest first. Paths use
 `$OR2006_GAME_DIR` for the player's game folder.
 
+## 2026-11-01 — HD pack download, settings window, option audit
+
+**HD pack download under Wine (WinHTTP).** `OutRunLauncher.exe
+--download-hd-pack` in the `gaming` container's prefix (Wine 11.21)
+downloaded the pinned 326 MB release from GitHub over HTTPS (WinHTTP
+followed the redirect to GitHub's file servers), matched its SHA-256,
+unpacked 3.0 GB into `%LOCALAPPDATA%\OutRunLauncher\hd-pack\OR2-HD-GUI-v0.26.09a`,
+removed the zip and wrote `hd_textures = on` plus the folder into
+launcher.cfg. Not yet checked: the game drawing the pack's sprites in a
+race, and the download from the window's HD Pack tab (same code path).
+
+**Settings window under Wine.** Renders with the lld build (the GNU ld
+2.47 crash is gone). At 880×640 the Picture tab ran under the footer and
+the Play button; the window is now 880×760 (fits a 1280×800 Steam Deck)
+and tabs scroll if they still overflow; the HD pack moved to its own tab.
+
+**Gamepad in the menus (reported by the owner).** With
+`InputBackend = 0` (Windows.Gaming.Input) and the then-default
+`ControllerHotPlug = true`, A and B worked in the main menu but the d-pad
+did nothing and the left stick moved the selection only sometimes; driving
+worked. The owner's other agents were using the same pad at the time, which
+may have interfered. Since then hot-plug is always off (it only drives the
+legacy input path and rescans DirectInput every 2 s). To check next: the
+menus with each Input API (WGI, XInput, DInput, RawInput) under Wine, one
+pad, nothing else reading it. An automated check with a virtual uinput
+Xbox 360 pad and headless gamescope didn't work: headless gamescope's
+screenshots don't include the game's DXVK (Vulkan) surface.
+
+**Option audit** against the Tweaks source at `08e5efb4` (see the commit
+`fix(launcher): options audited against OutRun2006Tweaks`): character
+select (can crash the game), hot-plug (ignored by the new input) and half
+vsync (invalid for a borderless D3D9 window) removed; anti-aliasing is the
+game's MSAA; the CD switcher's previous track is Z only with the new input;
+`DX/FOG = 1` (the game's default); the in-game overlay's
+`OutRun2006Tweaks.user.ini` no longer overrides the launcher's keys. A fog
+0 vs 1 side-by-side wasn't captured; to do.
+
 ## 2026-11-01 — first end-to-end run on Linux (or-play, Wine 11.21)
 
 Setup: the `gaming` distrobox (Arch, Wine 11.21, gamescope, NVIDIA RTX,

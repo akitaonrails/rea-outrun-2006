@@ -36,25 +36,26 @@ with your choices on every start.
 **Picture**
 
 - Any resolution up to 4K, as a borderless window (or exclusive fullscreen).
-- Frame-rate cap with interpolation above 60 fps, and on, off or half vsync.
+- Frame-rate cap with interpolation above 60 fps, and vsync on or off.
 - Longer draw distance, sharper car reflections, anisotropic filtering, the
   console versions' sky glow, the Xbox brightness, and the hi-def passenger
   models the PC release shipped unused.
-- The community HD texture pack, a separate download: tick it in the
-  Picture tab, press **Get it…**, unzip it anywhere and choose its folder
+- The community HD texture pack, on request: the **HD Pack** tab downloads
+  it (326 MB, with progress, resume and a checksum), unpacks it and switches
+  it on, or points at a copy you already have
   ([docs/HD_TEXTURES.md](docs/HD_TEXTURES.md)).
 
 **Gamepads**
 
-- Tweaks' modern input system: hot-plug, adjustable steering deadzone,
+- Tweaks' modern input system: adjustable steering deadzone,
   rumble with a strength setting, and Xbox Series impulse triggers.
 
 **Extras**
 
-- CD switcher: change the music mid-race (Back = next track, RS+Back =
+- CD switcher: change the music mid-race (Back or X = next track, Z =
   previous), with optional shuffle.
 - Skip the boot logos, free drive without the countdown, the horn whenever
-  you like, character selection, OutRun miles on the menu.
+  you like, OutRun miles on the menu.
 - Restores the missing first two seconds of "Rush a Difficulty" by patching
   the launcher's copy of the song. No music is distributed.
 

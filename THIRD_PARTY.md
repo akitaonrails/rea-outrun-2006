@@ -13,6 +13,7 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 | `windows-sys` | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
 | `eframe`, `egui` and their dependencies (`winit`, `glutin`, `glow`, …): the settings window | MIT OR Apache-2.0 (dependencies: MIT, Apache-2.0, Zlib, BSD; see `cargo tree`) | https://github.com/emilk/egui |
 | `jpeg-decoder` | MIT OR Apache-2.0 | https://github.com/image-rs/jpeg-decoder |
+| `zip`, `flate2`, `zlib-rs` and `crc32fast`: unpacking the HD texture pack | zip: MIT; flate2, crc32fast: MIT OR Apache-2.0; zlib-rs: Zlib | https://github.com/zip-rs/zip2, https://github.com/rust-lang/flate2-rs, https://github.com/trifectatechfoundation/zlib-rs |
 | Rust standard library | MIT OR Apache-2.0 | https://github.com/rust-lang/rust |
 | MinGW-w64 runtime (static parts linked by the GNU target) | ZPL-2.1 / public domain | https://www.mingw-w64.org |
 
@@ -44,8 +45,9 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 ## Not bundled
 
 The community HD texture pack (Envido32's OR2006Sprites compilation): no
-licence is stated, so the launcher links to its download page instead of
-shipping it (docs/HD_TEXTURES.md).
+licence is stated, so it is never shipped. The launcher downloads it from
+the pack's own GitHub release when the player asks for it, pinned by
+`packaging/hd-pack.txt` (docs/HD_TEXTURES.md).
 
 The game itself. OutRun is a trademark of SEGA; players need their own
 copy of OutRun 2006: Coast 2 Coast.

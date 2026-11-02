@@ -13,9 +13,10 @@ Windows and on Linux (Proton/Wine). It is not a distribution of the game.
   URLs and digests pinned in `packaging/*.txt` and are never committed.
   OutRun2006Tweaks builds are repacked as `tweaks-<commit>` releases of
   this repository by `packaging/update-tweaks.sh` (docs/TWEAKS.md).
-- The community HD texture pack is a separate download the player gets
-  (no licence): the launcher links to it and reads it where it was
-  unzipped; packages never include it (docs/HD_TEXTURES.md).
+- The community HD texture pack (no licence) is never bundled: the
+  launcher downloads it from its own GitHub release when the player asks
+  (pinned in `packaging/hd-pack.txt`) and the game reads it in place
+  (docs/HD_TEXTURES.md).
 - The user's game folder is read only. The launcher builds a separate runtime
   folder from it.
 - Never commit a developer's absolute game path. Commands and code take an
