@@ -243,6 +243,12 @@ mod app {
         lines.extend(warnings.iter().map(|w| format!("warning: {w}")));
         lines.extend(problems.iter().map(|p| format!("problem: {p}")));
         let ok = problems.is_empty();
+        if !ok {
+            lines.push(format!(
+                "Can't fix it? Report it with your launcher.log: {}",
+                window::BUG_URL
+            ));
+        }
         lines.insert(
             0,
             if ok {

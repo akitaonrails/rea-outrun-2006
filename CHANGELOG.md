@@ -60,6 +60,10 @@ All notable changes to this project. The format follows
 
 ### Changed
 
+- The issue forms are the rea launchers' shared pair: a bug report and an
+  unknown-edition form (with OutRun's questions about repacks and
+  `play.log`). An unknown `OR2006C2C.exe` links to the unknown-edition
+  form, and `--check` links to the bug report when something is wrong.
 - A weekly `sdk-update` workflow opens a pull request when
   rea-launcher-sdk has a new tag, with its Migration items listed.
 - Updated rea-launcher-sdk to v0.3.0. Screen readers now name the folder

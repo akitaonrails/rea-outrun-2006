@@ -174,7 +174,10 @@ const TABS: [(Tab, &str); 5] = [
 /// Where to report an EXE the launcher doesn't know (the issue template
 /// asks for the SHA-256 and `launcher.log`).
 pub const REPORT_URL: &str =
-    "https://github.com/akitaonrails/rea-outrun-2006/issues/new?template=bug.yml";
+    "https://github.com/akitaonrails/rea-outrun-2006/issues/new?template=unknown-edition.yml";
+/// The bug report form, for problems the launcher can't fix itself.
+pub const BUG_URL: &str =
+    "https://github.com/akitaonrails/rea-outrun-2006/issues/new?template=bug-report.yml";
 
 /// What the game folder holds, checked when its text changes.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1380,6 +1383,15 @@ mod tests {
             other => panic!("{other:?}"),
         }
         ui.get_by_label("Report this version");
+    }
+
+    #[test]
+    fn report_links_name_the_issue_forms() {
+        let forms = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/ISSUE_TEMPLATE");
+        for url in [REPORT_URL, BUG_URL] {
+            let form = url.rsplit("template=").next().unwrap();
+            assert!(forms.join(form).is_file(), "{url}: no {form}");
+        }
     }
 
     #[test]

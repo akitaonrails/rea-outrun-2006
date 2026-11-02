@@ -267,9 +267,11 @@ OutRunLauncher --help               all options (printed to the terminal)
 - **Start over.** Delete the `OutRun2006` folder next to `launcher.cfg`;
   the next start copies the game again. Your saves are kept separately.
 - **Report a problem** with the
-  [bug form](https://github.com/akitaonrails/rea-outrun-2006/issues/new?template=bug.yml):
+  [bug report form](https://github.com/akitaonrails/rea-outrun-2006/issues/new?template=bug-report.yml):
   it asks for `launcher.log` and your EXE's SHA-256. Run
-  `OutRunLauncher --check` first; its report lands in the log.
+  `OutRunLauncher --check` first; its report lands in the log. An EXE the
+  launcher doesn't know goes in the
+  [unknown edition form](https://github.com/akitaonrails/rea-outrun-2006/issues/new?template=unknown-edition.yml).
 
 ## Uninstall
 
