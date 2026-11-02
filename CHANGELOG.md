@@ -16,7 +16,9 @@ All notable changes to this project. The format follows
   Without a record the saves folder wins, as before.
 - Settings window under Wine: created at its final size on large screens
   instead of resized after creation, which XWayland with fractional
-  scaling can lose (the window stayed small or clipped).
+  scaling can lose (the window stayed small or clipped). Wine's own DPI
+  setting (e.g. 144 or 192) is taken into account, so the window is not
+  enlarged twice.
 - `or-play stop` ends the game's session (and Wine in our prefix) instead
   of or-play's own shell; the lock holds the session's pid and start time,
   so a stale lock or a reused pid is never signalled and another

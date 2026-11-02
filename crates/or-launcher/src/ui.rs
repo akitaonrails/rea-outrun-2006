@@ -69,8 +69,11 @@ pub fn show(
     // XWayland with fractional scaling can lose a resize sent after the
     // window exists (rea-colin-mcrae-3's RUNTIME_NOTES): under Wine the
     // window is created at its final size; the first frame only sets egui's
-    // zoom. On Windows the first frame fits it to the DPI-aware scale.
-    let zoom = form::creation_zoom(wine, win32::screen_size());
+    // zoom. Wine then scales the window by its own DPI setting, so that is
+    // divided out. On Windows the first frame fits it to the DPI-aware
+    // scale.
+    let native = if wine { win32::wine_dpi_scale() } else { 1.0 };
+    let zoom = form::creation_zoom(wine, win32::screen_size(), native);
     let size = SIZE * zoom;
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

@@ -14,7 +14,8 @@ tests but not yet seen with the game:
 - Settings window under Wine on a 4K screen: created at 1.5x from the
   start (no resize after creation). Check it opens at full size and fully
   drawn under XWayland with fractional scaling, and still fits and centres
-  on Windows at 150 % scaling.
+  on Windows at 150 % scaling. Also with Wine's DPI set to 144 and 192
+  (`winecfg` → Graphics): the window must fit the screen, about 1.5x.
 - `or-play`: the game now runs in a session of its own (pid + start time
   in the lock). Check `or-play stop` from another terminal ends the game,
   gamescope and Wine, through `OR_RUN="distrobox enter gaming --"` too, and
