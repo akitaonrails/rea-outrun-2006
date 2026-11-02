@@ -12,7 +12,7 @@ use rea_launcher::fsx;
 use rea_launcher::ini::Ini;
 use rea_launcher::ledger::{Ledger, Outcome};
 
-use crate::config::Settings;
+use crate::config::{self, Settings};
 use crate::soundtrack;
 
 /// Files of the OutRun2006Tweaks build this launcher is wired for, next to
@@ -26,6 +26,9 @@ const USER_INI: &str = "OutRun2006Tweaks.user.ini";
 pub const LEDGER: &str = ".or-components";
 /// The marker launchers before the ledger kept next to their `d3d9.dll`.
 const OLD_DXVK_MARKER: &str = ".or-dxvk";
+/// Present once the runtime's `outrun2006.ini` holds the player's language,
+/// adapter and fog (a copy from launcher 0.1.0 was upgraded, or never was).
+pub const GAME_INI_MARK: &str = ".or-game-ini";
 
 /// The x86 VC++ 2022 runtime DLLs the mod needs, deployed app-local (the
 /// officially supported way) so no installer is ever run.
@@ -139,13 +142,30 @@ pub fn install(
     // folder's may already hold the same text, and it is still written.
     let game_ini = runtime.join("outrun2006.ini");
     let current = fs::read_to_string(&game_ini).ok();
-    let existing = current.clone().or_else(|| {
+    let games = || {
         rea_launcher::paths::find_ignoring_case(game, "outrun2006.ini")
             .and_then(|path| fs::read_to_string(path).ok())
-    });
+    };
+    // A runtime copy launcher 0.1.0 wrote has its language, adapter and fog
+    // reset; they come from the game folder's copy, once (the mark).
+    let mark = runtime.join(GAME_INI_MARK);
+    let existing = match current.clone() {
+        Some(text) if !mark.is_file() && config::outrun2006_ini_from_v010(&text) => match games() {
+            Some(games) => {
+                log("outrun2006.ini: language, adapter and fog taken from the game folder");
+                Some(config::outrun2006_ini_upgrade(&text, &games))
+            }
+            None => Some(text),
+        },
+        Some(text) => Some(text),
+        None => games(),
+    };
     let text = settings.outrun2006_ini(existing.as_deref());
     if current.as_deref() != Some(text.as_str()) {
         fsx::install(&game_ini, text).map_err(|e| format!("cannot write {e}"))?;
+    }
+    if !mark.is_file() {
+        fsx::write_atomic(&mark, "").map_err(|e| format!("cannot write {e}"))?;
     }
 
     install_dxvk(game, runtime, launcher_dir, linux, log)?;
@@ -520,6 +540,72 @@ mod tests {
         assert_eq!(
             fs::read_to_string(runtime.join("outrun2006.ini")).ok(),
             Some(games)
+        );
+        fs::remove_dir_all(&at).unwrap();
+    }
+
+    #[test]
+    fn a_runtime_from_v010_takes_the_games_language_once() {
+        let at = temp("gameini-v010");
+        let launcher_dir = launcher(&at);
+        let game = at.join("game");
+        fs::create_dir_all(&game).unwrap();
+        fs::write(
+            game.join("outrun2006.ini"),
+            "DX/ADAPTER = 1\r\nDX/RES/WIDTH = 800\r\nDX/RES/HEIGHT = 600\r\nDX/ANTIALIASING = 0\r\nDX/FOG = 0\r\nLANGUAGE = 3\r\nDX/WINDOWED = 0\r\n",
+        )
+        .unwrap();
+        let runtime = at.join("runtime");
+        fs::create_dir_all(&runtime).unwrap();
+        // What 0.1.0 wrote on every start.
+        let s = Settings::parse_file("resolution = 1920x1080\n").0;
+        fs::write(
+            runtime.join("outrun2006.ini"),
+            "DX/ADAPTER = 0\nDX/RES/WIDTH = 1920\nDX/RES/HEIGHT = 1080\nDX/ANTIALIASING = 0\nDX/FOG = 1\nLANGUAGE = 0\nDX/WINDOWED = 1\n",
+        )
+        .unwrap();
+        let mut lines = Vec::new();
+        install(&game, &runtime, &launcher_dir, false, &s, &mut |l| {
+            lines.push(l.to_string())
+        })
+        .unwrap();
+        let ini = || fs::read_to_string(runtime.join("outrun2006.ini")).unwrap();
+        assert_eq!(
+            ini(),
+            "DX/ADAPTER = 1\nDX/RES/WIDTH = 1920\nDX/RES/HEIGHT = 1080\nDX/ANTIALIASING = 0\nDX/FOG = 0\nLANGUAGE = 3\nDX/WINDOWED = 1\n"
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("taken from the game folder"))
+        );
+        // Only once: the player then picks English, adapter 0 and fog on
+        // in the game, which looks like 0.1.0's file again; it stays.
+        let english = "DX/ADAPTER = 0\nDX/RES/WIDTH = 1920\nDX/RES/HEIGHT = 1080\nDX/ANTIALIASING = 0\nDX/FOG = 1\nLANGUAGE = 0\nDX/WINDOWED = 1\n";
+        fs::write(runtime.join("outrun2006.ini"), english).unwrap();
+        install(&game, &runtime, &launcher_dir, false, &s, &mut |_| {}).unwrap();
+        assert_eq!(ini(), english);
+        fs::remove_dir_all(&at).unwrap();
+    }
+
+    #[test]
+    fn a_new_runtime_is_marked_and_never_upgraded() {
+        // No game copy: the seed (which looks like 0.1.0's) is the player's
+        // from the first start on.
+        let at = temp("gameini-mark");
+        let launcher_dir = launcher(&at);
+        let runtime = at.join("runtime");
+        fs::create_dir_all(&runtime).unwrap();
+        let game = at.join("game");
+        fs::create_dir_all(&game).unwrap();
+        let s = Settings::default();
+        install(&game, &runtime, &launcher_dir, false, &s, &mut |_| {}).unwrap();
+        assert!(runtime.join(GAME_INI_MARK).is_file());
+        fs::write(game.join("outrun2006.ini"), "LANGUAGE = 3\n").unwrap();
+        install(&game, &runtime, &launcher_dir, false, &s, &mut |_| {}).unwrap();
+        assert_eq!(
+            fs::read_to_string(runtime.join("outrun2006.ini")).unwrap(),
+            s.outrun2006_ini(None)
         );
         fs::remove_dir_all(&at).unwrap();
     }

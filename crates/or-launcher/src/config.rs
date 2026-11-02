@@ -218,6 +218,52 @@ pub const FILE_NAME: &str = "launcher.cfg";
 /// the game's setup tool writes), for a copy of the game without one.
 pub const OUTRUN2006_SEED: &str = "DX/ADAPTER = 0\nDX/RES/WIDTH = 640\nDX/RES/HEIGHT = 480\nDX/ANTIALIASING = 0\nDX/FOG = 1\nLANGUAGE = 0\nDX/WINDOWED = 1\n";
 
+/// The game's keys launcher 0.1.0 reset on every start, which later
+/// versions keep.
+pub const OUTRUN2006_GAME_KEYS: [&str; 3] = ["LANGUAGE", "DX/ADAPTER", "DX/FOG"];
+
+/// True for an `outrun2006.ini` exactly as launcher 0.1.0 wrote it whole
+/// on every start (adapter 0, fog on, language 0): its language, adapter
+/// and fog were the launcher's, not the player's.
+pub fn outrun2006_ini_from_v010(text: &str) -> bool {
+    let number = |v: &str| !v.is_empty() && v.bytes().all(|b| b.is_ascii_digit());
+    let Some(body) = text.strip_suffix('\n') else {
+        return false;
+    };
+    let lines: Vec<&str> = body.split('\n').collect();
+    let keys = [
+        "DX/ADAPTER = ",
+        "DX/RES/WIDTH = ",
+        "DX/RES/HEIGHT = ",
+        "DX/ANTIALIASING = ",
+        "DX/FOG = ",
+        "LANGUAGE = ",
+        "DX/WINDOWED = ",
+    ];
+    lines.len() == keys.len()
+        && lines.iter().zip(keys).enumerate().all(|(i, (line, key))| {
+            line.strip_prefix(key).is_some_and(|value| match i {
+                0 | 5 => value == "0",
+                4 => value == "1",
+                6 => value == "0" || value == "1",
+                _ => number(value),
+            })
+        })
+}
+
+/// `runtime` (an `outrun2006.ini` from launcher 0.1.0) with the language,
+/// adapter and fog of the game folder's copy `games`.
+pub fn outrun2006_ini_upgrade(runtime: &str, games: &str) -> String {
+    let games = Ini::parse(games);
+    let mut ini = Ini::parse(runtime);
+    for key in OUTRUN2006_GAME_KEYS {
+        if let Some(value) = games.get("", key) {
+            ini.set("", key, value.trim());
+        }
+    }
+    ini.to_text().unwrap_or_else(|| runtime.to_owned())
+}
+
 /// `resolution` value meaning the game's own 640x480.
 pub const ORIGINAL: (u32, u32) = (640, 480);
 
@@ -1017,6 +1063,28 @@ mod tests {
         assert_eq!(
             s.outrun2006_ini(Some(games)),
             "DX/ADAPTER = 1\r\nDX/RES/WIDTH = 3840\r\nDX/RES/HEIGHT = 2160\r\nDX/ANTIALIASING = 2\r\nDX/FOG = 0\r\nLANGUAGE = 3\r\nDX/WINDOWED = 0\r\n"
+        );
+    }
+
+    #[test]
+    fn outrun2006_ini_from_v010_is_recognised_and_upgraded() {
+        let old = "DX/ADAPTER = 0\nDX/RES/WIDTH = 1920\nDX/RES/HEIGHT = 1080\nDX/ANTIALIASING = 2\nDX/FOG = 1\nLANGUAGE = 0\nDX/WINDOWED = 1\n";
+        assert!(outrun2006_ini_from_v010(old));
+        assert!(outrun2006_ini_from_v010(OUTRUN2006_SEED));
+        for other in [
+            old.replace("LANGUAGE = 0", "LANGUAGE = 2"),
+            old.replace("DX/ADAPTER = 0", "DX/ADAPTER = 1"),
+            old.replace("DX/FOG = 1", "DX/FOG = 0"),
+            old.replace('\n', "\r\n"),
+            format!("{old}EXTRA = 1\n"),
+            old.trim_end().to_string(),
+        ] {
+            assert!(!outrun2006_ini_from_v010(&other), "{other:?}");
+        }
+        let games = "DX/ADAPTER = 1\r\nDX/RES/WIDTH = 800\r\nDX/RES/HEIGHT = 600\r\nDX/ANTIALIASING = 0\r\nDX/FOG = 0\r\nLANGUAGE = 3\r\nDX/WINDOWED = 0\r\n";
+        assert_eq!(
+            outrun2006_ini_upgrade(old, games),
+            "DX/ADAPTER = 1\nDX/RES/WIDTH = 1920\nDX/RES/HEIGHT = 1080\nDX/ANTIALIASING = 2\nDX/FOG = 0\nLANGUAGE = 3\nDX/WINDOWED = 1\n"
         );
     }
 
