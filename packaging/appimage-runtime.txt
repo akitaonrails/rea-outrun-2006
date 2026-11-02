@@ -1,0 +1,5 @@
+# AppImage type2 runtime 20251108 (MIT), the loader appimagetool puts at
+# the front of the AppImage. A dated release: the `continuous` tag is
+# rebuilt in place, which would break the checksum pin.
+# One line: URL SHA-256.
+https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d

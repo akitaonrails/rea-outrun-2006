@@ -47,6 +47,10 @@ All notable changes to this project. The format follows
   `launcher.cfg` yet (or it is empty), as in the sibling launchers; a
   saved file that matches the template word for word is kept as the
   player's.
+- AppImage: built with a pinned, dated AppImage runtime (`20251108`,
+  SHA-256 checked) instead of whatever appimagetool downloads, and carries
+  the README, licences, third-party list and Linux guide under
+  `usr/share/doc/or`.
 
 ## [0.1.0] - 2026-11-02
 
