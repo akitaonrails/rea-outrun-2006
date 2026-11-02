@@ -11,6 +11,9 @@ All notable changes to this project. The format follows
 - Saves: copying the saves folder into the runtime copy no longer overwrites
   a newer save there (newer wins), so progress from a session that ended
   before the write-back is kept.
+- Settings window under Wine: created at its final size on large screens
+  instead of resized after creation, which XWayland with fractional
+  scaling can lose (the window stayed small or clipped).
 
 ## [0.1.0] - 2026-11-02
 

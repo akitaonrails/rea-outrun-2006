@@ -3,6 +3,16 @@
 What was checked by running the game, newest first. Paths use
 `$OR2006_GAME_DIR` for the player's game folder.
 
+## Unreleased — to check by running the game
+
+Changes made after v0.1.0 from the cross-launcher audit, covered by unit
+tests but not yet seen with the game:
+
+- Settings window under Wine on a 4K screen: created at 1.5x from the
+  start (no resize after creation). Check it opens at full size and fully
+  drawn under XWayland with fractional scaling, and still fits and centres
+  on Windows at 150 % scaling.
+
 ## 2026-11-02 — the owner's play-test before v0.1.0
 
 The owner played through `linux/or-play` (gaming distrobox, Wine 11.21,

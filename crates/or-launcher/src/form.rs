@@ -460,6 +460,14 @@ pub fn window_zoom(screen: Option<(u32, u32)>, native: f32) -> f32 {
     (zoom * 20.0).round() / 20.0
 }
 
+/// The zoom the settings window is created with. Under Wine it is the
+/// final one (Wine reports 96 DPI, so the native scale is 1): XWayland can
+/// lose a resize sent after the window exists. On Windows the window starts
+/// at 1x and the first frame fits it to the DPI-aware scale.
+pub fn creation_zoom(wine: bool, screen: Option<(u32, u32)>) -> f32 {
+    if wine { window_zoom(screen, 1.0) } else { 1.0 }
+}
+
 /// Resolutions offered: the game's own, the screen's (when not already
 /// listed), then common sizes.
 pub fn resolutions(screen: Option<(u32, u32)>) -> Vec<(Option<(u32, u32)>, String)> {
@@ -624,6 +632,15 @@ mod tests {
         assert_eq!(window_zoom(Some((3840, 2160)), 1.5), 1.0);
         assert_eq!(window_zoom(Some((1280, 800)), 1.0), 1.0);
         assert_eq!(window_zoom(None, 1.0), 1.0);
+    }
+
+    #[test]
+    fn under_wine_the_window_is_created_at_its_final_size() {
+        // XWayland can lose a later resize: Wine starts zoomed.
+        assert_eq!(creation_zoom(true, Some((3840, 2160))), 1.5);
+        assert_eq!(creation_zoom(true, Some((1920, 1080))), 1.0);
+        // Windows starts at 1x; the first frame fits the DPI-aware scale.
+        assert_eq!(creation_zoom(false, Some((3840, 2160))), 1.0);
     }
 
     #[test]

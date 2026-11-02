@@ -59,17 +59,24 @@ pub enum Outcome {
 /// window can be made (no OpenGL); the caller then goes on without it.
 pub fn show(settings_path: &Path, home: &Path, text: &str, linux: bool) -> Result<Outcome, String> {
     let mut outcome = Outcome::Closed;
+    let wine = win32::is_wine();
+    // XWayland with fractional scaling can lose a resize sent after the
+    // window exists (rea-colin-mcrae-3's RUNTIME_NOTES): under Wine the
+    // window is created at its final size; the first frame only sets egui's
+    // zoom. On Windows the first frame fits it to the DPI-aware scale.
+    let zoom = form::creation_zoom(wine, win32::screen_size());
+    let size = SIZE * zoom;
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("OutRun 2006")
-            .with_inner_size(SIZE)
-            .with_min_inner_size(SIZE)
-            .with_max_inner_size(SIZE)
+            .with_inner_size(size)
+            .with_min_inner_size(size)
+            .with_max_inner_size(size)
             .with_resizable(false)
             .with_maximize_button(false),
         // Under Wine the desktop's window manager places it (on the monitor
         // in use); Wine's idea of the main screen can be another monitor.
-        centered: !win32::is_wine(),
+        centered: !wine,
         ..Default::default()
     };
     let path = settings_path.to_path_buf();
@@ -86,6 +93,7 @@ pub fn show(settings_path: &Path, home: &Path, text: &str, linux: bool) -> Resul
                 home,
                 text,
                 linux,
+                zoom,
                 &mut outcome,
             )))
         }),
@@ -252,6 +260,8 @@ struct Window<'a> {
     error: Option<String>,
     /// The size for this screen is set on the first frame.
     sized: bool,
+    /// The zoom the window was created with (only above 1 under Wine).
+    zoom: f32,
     /// What the last rumble test found.
     rumble_test: Option<String>,
     /// The gamepad buttons held at the last look, and what pressing them
@@ -304,6 +314,7 @@ impl<'a> Window<'a> {
         home: PathBuf,
         text: String,
         linux: bool,
+        zoom: f32,
         outcome: &'a mut Outcome,
     ) -> Window<'a> {
         let screen = win32::screen_size();
@@ -338,6 +349,7 @@ impl<'a> Window<'a> {
             text,
             error: None,
             sized: false,
+            zoom,
             rumble_test: None,
             pad_held: 0,
             pad_actions: Vec::new(),
@@ -351,16 +363,25 @@ impl<'a> Window<'a> {
     }
 
     /// Draws everything larger on a large screen (1.5x at 4K), as the
-    /// desktop's own scaling often doesn't reach programs under Wine, and
-    /// centres the larger window.
+    /// desktop's own scaling often doesn't reach programs under Wine. Under
+    /// Wine the window already has its final size (see `show`); on Windows
+    /// it is resized for the DPI-aware scale and centred.
     fn fit_screen(&mut self, ctx: &egui::Context) {
         self.sized = true;
-        let native = ctx.native_pixels_per_point().unwrap_or(1.0);
-        let zoom = form::window_zoom(self.screen, native);
+        let zoom = if self.wine {
+            self.zoom
+        } else {
+            let native = ctx.native_pixels_per_point().unwrap_or(1.0);
+            form::window_zoom(self.screen, native)
+        };
+        self.zoom = zoom;
         if zoom == 1.0 {
             return;
         }
         ctx.set_zoom_factor(zoom);
+        if self.wine {
+            return;
+        }
         let size = SIZE * zoom;
         for cmd in [
             egui::ViewportCommand::MinInnerSize(size),
@@ -368,9 +389,6 @@ impl<'a> Window<'a> {
             egui::ViewportCommand::InnerSize(size),
         ] {
             ctx.send_viewport_cmd(cmd);
-        }
-        if self.wine {
-            return;
         }
         if let Some(monitor) = ctx.input(|i| i.viewport().monitor_size) {
             let at = ((monitor - size) / 2.0).max(Vec2::ZERO);
