@@ -276,6 +276,16 @@ pub const SWITCHES: [&str; 5] = [
     "--download-hd-pack",
 ];
 
+/// Whether a run opens the settings window: `--settings`, or no option at
+/// all. `--linux` only adds the Linux scaler to the window, so it alone
+/// still opens it; `--no-window`, `--check`, `--download-hd-pack` and any
+/// option (`--game`, `--fov`…) play or act without it. Decided on the
+/// parsed flags, so `--linux` is never mistaken for an option.
+pub fn opens_window(args: &Settings, switches: &[String]) -> bool {
+    let has = |name: &str| switches.iter().any(|s| s == name);
+    has("--settings") || (*args == Settings::default() && switches.iter().all(|s| s == "--linux"))
+}
+
 /// The looks, as `--look` and `look =` name them (the window's cards).
 pub const LOOKS: &[(&str, &str)] = &[
     ("original", "Original 2006"),
@@ -1086,6 +1096,24 @@ mod tests {
             outrun2006_ini_upgrade(old, games),
             "DX/ADAPTER = 1\nDX/RES/WIDTH = 1920\nDX/RES/HEIGHT = 1080\nDX/ANTIALIASING = 2\nDX/FOG = 0\nLANGUAGE = 3\nDX/WINDOWED = 1\n"
         );
+    }
+
+    #[test]
+    fn the_window_opens_without_options_and_with_linux_alone() {
+        let opens = |list: &[&str]| {
+            let (args, switches) =
+                Settings::parse_args(list.iter().map(|s| s.to_string())).unwrap();
+            opens_window(&args, &switches)
+        };
+        assert!(opens(&[]));
+        assert!(opens(&["--linux"]), "or-play's window run");
+        assert!(opens(&["--settings"]) && opens(&["--settings", "--linux"]));
+        assert!(!opens(&["--no-window"]));
+        assert!(!opens(&["--no-window", "--linux"]));
+        assert!(!opens(&["--check"]) && !opens(&["--linux", "--check"]));
+        assert!(!opens(&["--download-hd-pack"]));
+        assert!(!opens(&["--game", "C:\\Games\\OutRun"]));
+        assert!(!opens(&["--linux", "--deadzone", "10"]));
     }
 
     /// `line` sits inside `[section]` (before the next section starts).

@@ -352,7 +352,7 @@ mod app {
         if switch("--download-hd-pack") {
             return download_hd_pack(&settings_path);
         }
-        if settings_only || (cli.is_empty() && !no_window && !check_only) {
+        if config::opens_window(&args, &switches) {
             if wine::is_wine() {
                 match gpu::prefer_glx() {
                     Ok(true) => log_line("Wine settings window: OpenGL through GLX (UseEGL=N)"),

@@ -155,6 +155,10 @@ All notable changes to this project. The format follows
 
 ### Fixed
 
+- `OutRunLauncher --linux` with nothing else opens the settings window
+  again, as in 0.1.0 (with the Linux scaler), instead of starting the
+  game. The window opens when no option is given; `--no-window`,
+  `--check` and `--download-hd-pack` still skip it.
 - `--download-hd-pack` while another launcher is open no longer exits 0
   without downloading anything. With the settings window open it says to
   use the HD Pack tab; while the game runs it says so; either way it exits
