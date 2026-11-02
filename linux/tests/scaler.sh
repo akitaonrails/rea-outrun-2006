@@ -3,43 +3,55 @@
 # every scaler, and the race size (-w/-h): sh linux/tests/scaler.sh
 set -u
 unset GAMESCOPE_WAYLAND_DISPLAY DRI_PRIME __NV_PRIME_RENDER_OFFLOAD
+unset SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS
 HERE=$(dirname "$(readlink -f "$0")")
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-export HOME=$T OR_PREFIX=$T/prefix OR_SYSFS=$T/nosys
+export T HOME=$T OR_PREFIX=$T/prefix OR_SYSFS=$T/nosys
 CFGDIR=$OR_PREFIX/drive_c/users/me/AppData/Local/OutRunLauncher
 mkdir -p "$CFGDIR"; : > "$T/OutRunLauncher.exe"
-# The wrapper: "gamescope is installed", and records the command it runs.
-fake_run() {
-  case "$*" in *"command -v gamescope"*) return 0 ;; esac
-  echo "$*" > "$T/ran"
-}
+# The wrapper (a program: or-play starts it through setsid): "gamescope is
+# installed" unless $T/no-gamescope exists, and records the command it runs.
+cat > "$T/fake-run" <<'FAKE'
+#!/bin/sh
+case "$*" in *"command -v gamescope"*) [ ! -e "$T/no-gamescope" ]; exit ;; esac
+echo "$*" > "$T/ran"
+FAKE
+chmod +x "$T/fake-run"
 OR_PLAY_FUNCTIONS_ONLY=1 . "$HERE/../or-play"
-RUN=fake_run LAUNCHER=$T/OutRunLauncher.exe GPU=
+RUN=$T/fake-run LAUNCHER=$T/OutRunLauncher.exe GPU=
 fails=0
-for scaler in nearest pixel fsr linear; do
-  printf 'resolution = 1920x1080\nscaler = %s\n' "$scaler" > "$CFGDIR/launcher.cfg"
-  CFG=$CFGDIR/launcher.cfg
-  start > /dev/null
+check() { # name expected-substring
   case "$(cat "$T/ran")" in
-    *"gamescope -w 1920 -h 1080 -f -S fit -F $scaler --"*) echo "ok   $scaler" ;;
-    *) echo "FAIL $scaler: $(cat "$T/ran")"; fails=$((fails + 1)) ;;
+    *"$2"*) echo "ok   $1" ;;
+    *) echo "FAIL $1: $(cat "$T/ran")"; fails=$((fails + 1)) ;;
   esac
+}
+CFG=$CFGDIR/launcher.cfg
+for scaler in nearest pixel fsr linear; do
+  printf 'resolution = 1920x1080\nscaler = %s\n' "$scaler" > "$CFG"
+  start > /dev/null
+  check "$scaler" "gamescope -w 1920 -h 1080 -f -S fit -F $scaler --"
 done
-printf 'resolution = 1920x1080\n' > "$CFGDIR/launcher.cfg"
+printf 'resolution = 1920x1080\n' > "$CFG"
 start > /dev/null
-case "$(cat "$T/ran")" in *"-F linear --"*) echo "ok   default is linear" ;; *) echo "FAIL default"; fails=$((fails + 1)) ;; esac
+check "default is linear" "-F linear --"
 # The race size from the resolution line.
 size_of() {
-  printf '%b' "$1" > "$CFGDIR/launcher.cfg"
+  printf '%b' "$1" > "$CFG"
   start > /dev/null
-  case "$(cat "$T/ran")" in
-    *"gamescope -w $2 -h $3 -f"*) echo "ok   $4" ;;
-    *) echo "FAIL $4: $(cat "$T/ran")"; fails=$((fails + 1)) ;;
-  esac
+  check "$4" "gamescope -w $2 -h $3 -f"
 }
 size_of 'resolution = original\n' 640 480 "original is 640x480"
 size_of 'resolution = 1920X1080\n' 1920 1080 "uppercase X"
 size_of 'resolution = 1280x800\r\n' 1280 800 "CRLF line"
 size_of 'resolution = big\n' 1920 1080 "garbage falls back"
 size_of 'resolution = 12x\n' 1920 1080 "half a size falls back"
+size_of 'resolution = 3840x2160\nfullscreen = true\n' 3840 2160 "exclusive fullscreen also in gamescope"
+
+# No gamescope of our own inside one, or without one installed.
+GAMESCOPE_WAYLAND_DISPLAY=fake start > /dev/null
+check "already in gamescope runs directly" "sh $HOME/.config/or-launcher/inner.sh $LAUNCHER"
+: > "$T/no-gamescope"
+start > /dev/null
+check "no gamescope installed runs directly" "sh $HOME/.config/or-launcher/inner.sh $LAUNCHER"
 [ "$fails" = 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }

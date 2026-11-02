@@ -12,6 +12,10 @@ tests but not yet seen with the game:
   start (no resize after creation). Check it opens at full size and fully
   drawn under XWayland with fractional scaling, and still fits and centres
   on Windows at 150 % scaling.
+- `or-play`: the game now runs in a session of its own (pid + start time
+  in the lock). Check `or-play stop` from another terminal ends the game,
+  gamescope and Wine, through `OR_RUN="distrobox enter gaming --"` too, and
+  that `or-play` then returns.
 
 ## 2026-11-02 — the owner's play-test before v0.1.0
 

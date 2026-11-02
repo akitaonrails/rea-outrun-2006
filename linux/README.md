@@ -10,7 +10,7 @@ picks a portrait monitor or switches your desktop's video mode.
 ```sh
 or-play          # the settings window, then the game
 or-play --play   # the game with the saved settings, no window
-or-play stop     # end the game
+or-play stop     # end the game session or-play started
 or-play status   # running or idle
 ```
 
@@ -37,7 +37,9 @@ It needs `wine` and `gamescope`. Optional environment variables:
 
 `or-play` stays open until the game ends (a distrobox or AppImage session
 would otherwise end the game with it), and refuses to start a second game
-while one is running or still loading. Inside a gamescope session (a Steam Deck in Game Mode), or when
+while one is running or still loading. The game runs in a session of its
+own; `or-play stop` ends that session and what is left in the prefix, and
+never another program that took over an old pid. Inside a gamescope session (a Steam Deck in Game Mode), or when
 gamescope isn't installed, it runs the game directly.
 
 ## Steam / Proton

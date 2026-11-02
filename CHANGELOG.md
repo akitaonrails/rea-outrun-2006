@@ -14,6 +14,12 @@ All notable changes to this project. The format follows
 - Settings window under Wine: created at its final size on large screens
   instead of resized after creation, which XWayland with fractional
   scaling can lose (the window stayed small or clipped).
+- `or-play stop` ends the game's session (and Wine in our prefix) instead
+  of or-play's own shell; the lock holds the session's pid and start time,
+  so a stale lock or a reused pid is never signalled and another
+  OR2006C2C.exe no longer blocks a launch.
+- `or-play`'s generated script takes the launcher path as an argument
+  instead of pasting it into its source (a path with a quote broke it).
 
 ## [0.1.0] - 2026-11-02
 

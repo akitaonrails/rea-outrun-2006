@@ -3,7 +3,7 @@
 #
 #   or-play           show the settings window, then start the game
 #   or-play --play    start the game with the saved settings (no window)
-#   or-play stop      end the game
+#   or-play stop      end the game session or-play started, and its Wine
 #   or-play status    running or idle
 #
 # The settings window is OutRunLauncher.exe's own (the same as on Windows),
@@ -38,12 +38,39 @@ done
 
 get_key() { [ -f "$CFG" ] && sed -n "s|^$1 *= *||p" "$CFG" | tail -1; }
 LOCK=$STATE/running.pid
-# Running, or still starting: OR2006C2C.exe exists, or the gamescope session we
-# started is alive (the launcher copies files before OR2006C2C.exe appears).
-running() {
-  pgrep -x OR2006C2C.exe >/dev/null && return 0
-  [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK")" 2>/dev/null
+
+# Prints a process's session id and start time from /proc. The fields after
+# the last ") " are used, so a command name with spaces or parentheses
+# can't shift them.
+proc_stat() {
+  [ -r "/proc/$1/stat" ] || return 1
+  stat=$(cat "/proc/$1/stat") || return 1
+  rest=${stat##*) }
+  set -- $rest
+  [ "$#" -ge 20 ] || return 1
+  printf '%s %s\n' "$4" "${20}"
 }
+
+read_lock() {
+  [ -r "$LOCK" ] || return 1
+  IFS=' ' read -r LOCK_PID LOCK_START < "$LOCK" || return 1
+  case "$LOCK_PID" in ''|*[!0-9]*) return 1 ;; esac
+  case "$LOCK_START" in ''|*[!0-9]*) return 1 ;; esac
+}
+
+# The lock holds the pid and start time of the session or-play started. It
+# counts only while that pid is still the leader of its own session with the
+# same start time: a stale lock, or a pid reused by another program, doesn't.
+session_valid() {
+  read_lock || return 1
+  stats=$(proc_stat "$LOCK_PID") || return 1
+  [ "$stats" = "$LOCK_PID $LOCK_START" ]
+}
+
+# Running, or still starting (the launcher copies files before
+# OR2006C2C.exe appears): the session or-play started is alive. Another
+# OR2006C2C.exe (Steam's, say) is not ours and doesn't count.
+running() { session_valid; }
 
 # The best GPU for the game, as environment assignments (none: the
 # default GPU). A player's own DRI_PRIME / __NV_PRIME_RENDER_OFFLOAD win.
@@ -90,37 +117,75 @@ start() {
   esac
   F=$(get_key scaler); F=${F:-linear}
   inner=$STATE/inner.sh
-  cat > "$inner" <<INNER
+  # The launcher's path is the script's first argument, never part of its
+  # source (a path with a quote in it can't break or inject into it).
+  cat > "$inner" <<'INNER'
 #!/bin/sh
 trap 'wineserver -k; exit' INT TERM HUP
 # The launcher waits for the game (and copies the saves back) before it
 # exits, so waiting for it is waiting for the game. Watching for the game's
 # process instead raced Wine's start-up and killed the launcher.
-wine '$LAUNCHER' --no-window
+wine "$1" --no-window
 wineserver -k
 INNER
   chmod +x "$inner"
   # Already inside gamescope (a Steam Deck in Game Mode), or none installed:
   # the game runs directly (a second gamescope inside one fails). Otherwise
   # gamescope gives the game a landscape screen of the game's size and scales
-  # it to the monitor, keeping its shape.
+  # it to the monitor, keeping its shape. The game has no windowed mode on
+  # the desktop (a borderless window of the race size at 0,0, or exclusive
+  # fullscreen), so it always goes in gamescope when there is one.
   if [ -n "${GAMESCOPE_WAYLAND_DISPLAY:-}" ] || ! $RUN sh -c "command -v gamescope" >/dev/null 2>&1; then
     echo "starting without a gamescope of our own"
-    launch sh "$inner"
+    launch sh "$inner" "$LAUNCHER"
   else
     echo "starting at ${W}x${H}, scaler $F"
-    launch gamescope -w "$W" -h "$H" -f -S fit -F "$F" -- "$inner"
+    launch gamescope -w "$W" -h "$H" -f -S fit -F "$F" -- "$inner" "$LAUNCHER"
   fi
 }
 
-# Runs a command in the prefix and waits for it, so the game outlives
-# nothing that started it (distrobox and the AppImage end their session,
-# and everything in it, when or-play returns). The lock holds or-play's
-# own pid meanwhile, for `or-play stop` and `status`.
-launch() {
-  echo $$ > "$LOCK"
-  $RUN env WINEPREFIX="$PREFIX" $GPU "$@" > "$STATE/play.log" 2>&1 < /dev/null
+# Interrupted while the game runs: end the session we started.
+launch_interrupted() {
+  trap - EXIT HUP INT TERM
+  if session_valid; then
+    kill -TERM "-$LOCK_PID" 2>/dev/null || true
+  fi
   rm -f "$LOCK"
+  exit 143
+}
+
+# Runs a command in the prefix, in a session of its own, and waits for it,
+# so the game outlives nothing that started it (distrobox and the AppImage
+# end their session, and everything in it, when or-play returns). The lock
+# holds the session's pid and start time meanwhile, for `or-play stop` and
+# `status`.
+launch() {
+  setsid $RUN env WINEPREFIX="$PREFIX" $GPU "$@" > "$STATE/play.log" 2>&1 < /dev/null &
+  pid=$!
+  stats=$(proc_stat "$pid") || {
+    wait "$pid"
+    return "$?"
+  }
+  printf '%s %s\n' "$pid" "${stats#* }" > "$LOCK"
+  trap 'rm -f "$LOCK"' EXIT
+  trap 'launch_interrupted' HUP INT TERM
+  wait "$pid"
+  rc=$?
+  rm -f "$LOCK"
+  trap - EXIT HUP INT TERM
+  return "$rc"
+}
+
+# Ends the session or-play started (checked again right before the signal:
+# a stale or reused pid, or another OR2006C2C.exe, is never a target), then
+# whatever is left in our own Wine prefix.
+stop_session() {
+  if session_valid; then
+    kill -TERM "-$LOCK_PID" 2>/dev/null || true
+  fi
+  rm -f "$LOCK"
+  $RUN env WINEPREFIX="$PREFIX" wineserver -k 2>/dev/null
+  return 0
 }
 
 # The settings window; its exit code says what to do next.
@@ -154,9 +219,7 @@ case "${1:-}" in
     if running; then echo "already running"; else start; fi ;;
   status) if running; then echo running; else echo idle; fi ;;
   stop)
-    $RUN env WINEPREFIX="$PREFIX" wineserver -k 2>/dev/null
-    [ -f "$LOCK" ] && kill "$(cat "$LOCK")" 2>/dev/null
-    rm -f "$LOCK"
+    stop_session
     echo stopped ;;
   *) echo "usage: $0 [--play|stop|status]"; exit 2 ;;
 esac
