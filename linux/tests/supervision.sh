@@ -124,7 +124,7 @@ for case in 0:0 4:0 3:1 1:1; do
   [ "$got" = "${case#*:}" ] && ok "settings exit ${case%:*} -> $got" || fail "settings exit ${case%:*} gave $got"
 done
 case "$(cat "$T/settings")" in
-  *"WINEPREFIX=$OR_PREFIX"*"wine $LAUNCHER --settings --linux") ok "settings window: our prefix and helper flags" ;;
+  *"WINEPREFIX=$OR_PREFIX"*"SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1"*"wine $LAUNCHER --settings --linux") ok "settings window: our prefix, SDL, helper flags" ;;
   *) fail "settings command: $(cat "$T/settings")" ;;
 esac
 

@@ -140,7 +140,7 @@ INNER
     launch sh "$inner" "$LAUNCHER"
   else
     echo "starting at ${W}x${H}, scaler $F"
-    launch gamescope -w "$W" -h "$H" -f -S fit -F "$F" -- "$inner" "$LAUNCHER"
+    launch gamescope -w "$W" -h "$H" -W "$W" -H "$H" -f -S fit -F "$F" -- "$inner" "$LAUNCHER"
   fi
 }
 
@@ -158,9 +158,15 @@ launch_interrupted() {
 # so the game outlives nothing that started it (distrobox and the AppImage
 # end their session, and everything in it, when or-play returns). The lock
 # holds the session's pid and start time meanwhile, for `or-play stop` and
-# `status`.
+# `status`. OutRun2006Tweaks reads pads through SDL: SDL keeps reading them
+# when the game's window isn't focused, unless the caller says otherwise.
 launch() {
-  setsid $RUN env WINEPREFIX="$PREFIX" $GPU "$@" > "$STATE/play.log" 2>&1 < /dev/null &
+  sdl_pad_bg=${SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS:-1}
+  sdl_joy_bg=${SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS:-1}
+  setsid $RUN env WINEPREFIX="$PREFIX" \
+    SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS="$sdl_pad_bg" \
+    SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS="$sdl_joy_bg" \
+    $GPU "$@" > "$STATE/play.log" 2>&1 < /dev/null &
   pid=$!
   stats=$(proc_stat "$pid") || {
     wait "$pid"
@@ -190,7 +196,10 @@ stop_session() {
 
 # The settings window; its exit code says what to do next.
 settings() {
-  $RUN env WINEPREFIX="$PREFIX" $GPU wine "$LAUNCHER" --settings --linux 2>/dev/null
+  $RUN env WINEPREFIX="$PREFIX" \
+    SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS="${SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS:-1}" \
+    SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS="${SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS:-1}" \
+    $GPU wine "$LAUNCHER" --settings --linux 2>/dev/null
   rc=$?
   # The window ran on the desktop. Its wineserver lingers for a few seconds
   # and is tied to the desktop's display; a game started meanwhile would

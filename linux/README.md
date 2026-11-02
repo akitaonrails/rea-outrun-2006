@@ -39,7 +39,10 @@ It needs `wine` and `gamescope`. Optional environment variables:
 would otherwise end the game with it), and refuses to start a second game
 while one is running or still loading. The game runs in a session of its
 own; `or-play stop` ends that session and what is left in the prefix, and
-never another program that took over an old pid. Inside a gamescope session (a Steam Deck in Game Mode), or when
+never another program that took over an old pid. SDL keeps reading pads
+while the game's window is in the background
+(`SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS`,
+`SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS`, default 1; your own values win). Inside a gamescope session (a Steam Deck in Game Mode), or when
 gamescope isn't installed, it runs the game directly.
 
 ## Steam / Proton

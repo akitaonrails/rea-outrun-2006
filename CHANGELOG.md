@@ -21,6 +21,12 @@ All notable changes to this project. The format follows
 - `or-play`'s generated script takes the launcher path as an argument
   instead of pasting it into its source (a path with a quote broke it).
 
+### Changed
+
+- `or-play` gives gamescope the race size as its output size too
+  (`-W/-H`), and keeps SDL reading pads in the background
+  (`SDL_*_ALLOW_BACKGROUND_EVENTS=1` unless already set).
+
 ## [0.1.0] - 2026-11-02
 
 The first release: a launcher that plays your own copy of OutRun 2006:

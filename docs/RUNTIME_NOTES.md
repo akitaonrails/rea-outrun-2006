@@ -16,6 +16,14 @@ tests but not yet seen with the game:
   in the lock). Check `or-play stop` from another terminal ends the game,
   gamescope and Wine, through `OR_RUN="distrobox enter gaming --"` too, and
   that `or-play` then returns.
+- gamescope now gets the race size as its output size too (`-W/-H` as well
+  as `-w/-h`). Check the window still fills a 4K monitor with a 1080p race
+  and the chosen scaler (FSR, nearest) still applies.
+- `SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS=1` and
+  `SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1` are exported for the game and
+  the settings window (OutRun2006Tweaks reads pads through SDL). Check the
+  pad in menus and in a race with XInput and WGI, and that nothing reads
+  it twice.
 
 ## 2026-11-02 — the owner's play-test before v0.1.0
 
