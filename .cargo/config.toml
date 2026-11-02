@@ -1,5 +1,11 @@
+# GNU ld 2.47 drops one of two import descriptors with the same DLL name
+# (the standard library's kernel32.dll and windows-sys' raw-dylib one), so
+# GetModuleHandleW and friends jump into garbage at run time. lld links
+# them correctly with every binutils version.
 [target.i686-pc-windows-gnu]
 linker = "i686-w64-mingw32-gcc"
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
 
 [target.x86_64-pc-windows-gnu]
 linker = "x86_64-w64-mingw32-gcc"
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
