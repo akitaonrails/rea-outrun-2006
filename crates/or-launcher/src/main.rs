@@ -6,12 +6,15 @@ mod ui;
 mod win32;
 
 #[cfg(windows)]
+use rea_launcher_win32::dialog::{self, Icon};
+
+#[cfg(windows)]
 fn main() {
     let code = match app::run() {
         Ok(code) => code,
         Err(error) => {
             app::log_line(&format!("error: {error}"));
-            win32::message("OutRun 2006 launcher", &error, true);
+            dialog::message("OutRun 2006 launcher", &error, Icon::Error);
             1
         }
     };
@@ -29,12 +32,15 @@ fn main() {
 #[cfg(windows)]
 mod app {
     use std::fs;
-    use std::io::Write as _;
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
     use or_launcher::config::{self, Settings};
     use or_launcher::{edition, runtime, tweaks};
+    use rea_launcher::fsx;
+    use rea_launcher::log::Log;
+    use rea_launcher_win32::dialog::{self, Icon};
+    use rea_launcher_win32::{disk, gpu, wine, xinput};
 
     use crate::{ui, win32};
 
@@ -47,16 +53,10 @@ mod app {
             .join("OutRunLauncher")
     }
 
+    /// `launcher.log` in the launcher's home folder (started afresh past
+    /// 1 MiB).
     pub fn log_line(line: &str) {
-        let dir = home();
-        let _ = fs::create_dir_all(&dir);
-        if let Ok(mut file) = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(dir.join("launcher.log"))
-        {
-            let _ = writeln!(file, "{line}");
-        }
+        Log::new(home().join("launcher.log")).line(line);
     }
 
     /// A `launcher.cfg` next to the exe wins (portable installs); otherwise
@@ -143,7 +143,7 @@ mod app {
         let thread_pack = pack.clone();
         let thread_home = home.clone();
         let handle = std::thread::spawn(move || {
-            let free = win32::free_space(&thread_home);
+            let free = disk::free_space(&thread_home);
             hdpack::install(&thread_pack, &thread_home, free, &win32::WinHttp, &worker)
         });
         let mut logged = None;
@@ -173,7 +173,7 @@ mod app {
                 if let Some(parent) = settings_path.parent() {
                     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
                 }
-                runtime::write_atomic(settings_path, text).map_err(|e| e.to_string())?;
+                fsx::write_atomic(settings_path, text).map_err(|e| e.to_string())?;
                 log_line(&format!(
                     "hd pack: installed in {} and switched on",
                     dir.display()
@@ -193,7 +193,7 @@ mod app {
         let help =
             take_flag(&mut cli, "--help") | take_flag(&mut cli, "-h") | take_flag(&mut cli, "/?");
         if help {
-            win32::message("OutRun 2006 launcher", config::USAGE, false);
+            dialog::message("OutRun 2006 launcher", config::USAGE, Icon::Info);
             return Ok(0);
         }
         let settings_only = take_flag(&mut cli, "--settings");
@@ -204,8 +204,8 @@ mod app {
             return download_hd_pack(&settings_path);
         }
         if settings_only || (cli.is_empty() && !no_window && !check_only) {
-            if win32::is_wine() {
-                match win32::prefer_gpu_opengl() {
+            if wine::is_wine() {
+                match gpu::prefer_glx() {
                     Ok(true) => log_line("Wine settings window: OpenGL through GLX (UseEGL=N)"),
                     Ok(false) => {}
                     Err(error) => log_line(&format!("warning: {error}")),
@@ -256,14 +256,14 @@ mod app {
         })?;
         log_line(&format!("game: {} ({})", game.display(), detected.name));
         if check_only {
-            win32::message(
+            dialog::message(
                 "OutRun 2006 launcher",
                 &format!(
                     "Ready to play.\n\nGame folder: {}\nVersion: {}",
                     game.display(),
                     detected.name
                 ),
-                false,
+                Icon::Info,
             );
             return Ok(0);
         }
@@ -273,11 +273,22 @@ mod app {
             .clone()
             .unwrap_or_else(|| home().join("OutRun2006"));
         runtime::check_separate(&game, &runtime_dir)?;
-        let copied = runtime::sync(&game, &runtime_dir)
+        let saves_state = runtime_dir.join(runtime::SAVES_STATE);
+        // Temp files left by launchers before the SDK (`name.tmp`).
+        runtime::remove_old_temps(&[
+            &runtime_dir.join(runtime::MANIFEST),
+            &saves_state,
+            &settings_path,
+        ]);
+        let report = runtime::sync(&game, &runtime_dir)
             .map_err(|error| format!("cannot prepare {}: {error}", runtime_dir.display()))?;
+        for warning in &report.warnings {
+            log_line(&format!("warning: {warning}"));
+        }
         log_line(&format!(
-            "runtime: {} ({copied} files copied)",
-            runtime_dir.display()
+            "runtime: {} ({} files copied)",
+            runtime_dir.display(),
+            report.brought
         ));
 
         // The player's saves live outside the runtime copy; the game reads
@@ -286,21 +297,24 @@ mod app {
         let saves = settings.saves.clone().unwrap_or_else(default_saves);
         let rt_save = runtime::save_dir(&runtime_dir)
             .map_err(|error| format!("cannot prepare saves: {error}"))?;
-        if !saves.is_dir() {
-            // First run with this folder: start it from what the game has.
-            let n = runtime::mirror(&rt_save, &saves)
-                .map_err(|error| format!("cannot create {}: {error}", saves.display()))?;
-            log_line(&format!("saves: created {} ({n} files)", saves.display()));
-        }
-        let saves_state = runtime_dir.join(runtime::SAVES_STATE);
-        let (n_in, n_out) = runtime::saves_in(&saves, &rt_save, &saves_state)
+        let created = !saves.is_dir();
+        let moved = runtime::saves_in(&saves, &rt_save, &saves_state)
             .map_err(|error| format!("cannot sync saves with {}: {error}", saves.display()))?;
+        if created {
+            log_line(&format!(
+                "saves: created {} ({} files)",
+                saves.display(),
+                moved.to_saves.len()
+            ));
+        }
         log_line(&format!(
-            "saves: {n_in} files updated from {}, {n_out} newer ones copied there",
-            saves.display()
+            "saves: {} files updated from {}, {} newer ones copied there",
+            moved.to_runtime.len(),
+            saves.display(),
+            if created { 0 } else { moved.to_saves.len() }
         ));
 
-        let wine = win32::is_wine();
+        let wine = wine::is_wine();
         tweaks::install(
             &runtime_dir,
             &launcher_dir().unwrap_or_default(),
@@ -309,7 +323,7 @@ mod app {
             &mut |line| log_line(line),
         )?;
         if wine {
-            match win32::wine_controller_baseline() {
+            match wine::seed_winebus(&rea_launcher::wine::SDL_ONLY) {
                 Ok(true) => log_line(
                     "wine: controller baseline written (winebus: hidraw and Wine's device mapping off)",
                 ),
@@ -324,12 +338,12 @@ mod app {
             if let Some(parent) = settings_path.parent() {
                 fs::create_dir_all(parent).map_err(|error| error.to_string())?;
             }
-            runtime::write_atomic(&settings_path, text)
+            fsx::write_atomic(&settings_path, text)
                 .map_err(|error| format!("cannot save {}: {error}", settings_path.display()))?;
         }
 
         if !wine {
-            match win32::prefer_fast_gpu(&runtime_dir.join(EXE)) {
+            match gpu::prefer_fast_gpu(&runtime_dir.join(EXE)) {
                 Ok(true) => log_line("Windows: high-performance GPU for the game"),
                 Ok(false) => {}
                 Err(error) => log_line(&format!("warning: {error}")),
@@ -350,7 +364,7 @@ mod app {
         let status = command.status().map_err(|error| {
             format!("cannot start {}: {error}", runtime_dir.join(EXE).display())
         })?;
-        win32::stop_rumble();
+        xinput::stop_rumble();
         let code = status.code().unwrap_or(1) as u32;
         log_line(&format!("game exited with {code}"));
         // The mod writes crash reports into CrashDumps.
@@ -364,7 +378,9 @@ mod app {
             log_line("the game crashed: a report is in the runtime's CrashDumps folder");
         }
         match runtime::saves_out(&rt_save, &saves, &saves_state) {
-            Ok(n) if n > 0 => log_line(&format!("saves: {n} files written back")),
+            Ok(copied) if !copied.is_empty() => {
+                log_line(&format!("saves: {} files written back", copied.len()))
+            }
             Ok(_) => {}
             Err(error) => log_line(&format!(
                 "warning: saves not written back to {}: {error}",

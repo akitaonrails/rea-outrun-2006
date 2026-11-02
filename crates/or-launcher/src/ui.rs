@@ -13,36 +13,60 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use eframe::egui::{
-    self, Align, Align2, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Key,
-    Mesh, Rect, Sense, Shape, Stroke, StrokeKind, TextureHandle, Vec2, pos2, vec2,
+    self, Align, Align2, Color32, CornerRadius, Key, Mesh, Rect, Sense, Shape, Stroke, StrokeKind,
+    TextureHandle, Vec2, pos2, vec2,
 };
+use rea_launcher_ui::pad::{self, Nav, PadNav};
+use rea_launcher_ui::theme::{self, Palette, body as font, condensed, decal, semibold};
+use rea_launcher_ui::widgets::{self, Crop};
+use rea_launcher_ui::window::{Layout, WindowFit};
+use rea_launcher_win32::{dialog, disk, display, wine, xinput};
 
 use or_launcher::config;
 use or_launcher::config::{Backend, Feedback, Vsync};
-use or_launcher::form::{self, Form, Look, PadAction};
-use or_launcher::{edition, hdpack, runtime, tweaks};
+use or_launcher::form::{self, Form, Look};
+use or_launcher::{edition, hdpack, tweaks};
+use rea_launcher::fsx;
 
 use crate::win32;
 
 // Rosso, Modena yellow and black: the colours of OutRun's car.
-const BASE: Color32 = Color32::from_rgb(0x0f, 0x0c, 0x0b);
-const PANEL: Color32 = Color32::from_rgb(0x21, 0x1b, 0x18);
-const LINE: Color32 = Color32::from_rgb(0x3d, 0x34, 0x30);
-/// The action colour: Play, primary buttons, the tab underline. Never text
-/// on the dark base (3.5:1); white on it is 5.5:1.
-const RED: Color32 = Color32::from_rgb(0xd4, 0x00, 0x00);
-const RED_BRIGHT: Color32 = Color32::from_rgb(0xe8, 0x16, 0x0e);
-/// Chosen and good: selected chips, switches on, highlighted text.
-const YELLOW: Color32 = Color32::from_rgb(0xff, 0xd4, 0x00);
-const INK: Color32 = Color32::from_rgb(0xf6, 0xf1, 0xea);
-const MUTED: Color32 = Color32::from_rgb(0xab, 0x9f, 0x96);
-const ON_RED: Color32 = Color32::WHITE;
-const ON_YELLOW: Color32 = Color32::from_rgb(0x1a, 0x13, 0x00);
-/// Light coral: errors are text, and red is never text, so the two don't
-/// meet.
-const ERROR: Color32 = Color32::from_rgb(0xff, 0x95, 0x80);
+const fn rgb(hex: u32) -> Color32 {
+    Color32::from_rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
+}
 
-const SIZE: Vec2 = vec2(form::WINDOW.0, form::WINDOW.1);
+/// Red is the action colour (Play, primary buttons, the tab underline),
+/// never text on the dark base (3.5:1; white on it is 5.5:1). Yellow is
+/// whatever is chosen. Errors are light coral text, so red and error never
+/// meet.
+const PALETTE: Palette = Palette {
+    base: rgb(0x0f0c0b),
+    panel: rgb(0x211b18),
+    line: rgb(0x3d3430),
+    ink: rgb(0xf6f1ea),
+    muted: rgb(0xab9f96),
+    action: rgb(0xd40000),
+    action_hover: rgb(0xe8160e),
+    on_action: Color32::WHITE,
+    select: rgb(0xffd400),
+    on_select: rgb(0x1a1300),
+    error: rgb(0xff9580),
+    disabled_ink: rgb(0x5a504a),
+    disabled_line: rgb(0x2a2320),
+    focus: rgb(0xf6f1ea),
+};
+const BASE: Color32 = PALETTE.base;
+const PANEL: Color32 = PALETTE.panel;
+const LINE: Color32 = PALETTE.line;
+const RED: Color32 = PALETTE.action;
+const ON_RED: Color32 = PALETTE.on_action;
+const YELLOW: Color32 = PALETTE.select;
+const INK: Color32 = PALETTE.ink;
+const MUTED: Color32 = PALETTE.muted;
+const ERROR: Color32 = PALETTE.error;
+
+/// The window's design size in points (taller than the SDK's usual page).
+const SIZE: Vec2 = vec2(880.0, 760.0);
 const PHOTO_W: f32 = 300.0;
 
 /// How the window was left.
@@ -65,29 +89,14 @@ pub fn show(
     linux: bool,
 ) -> Result<Outcome, String> {
     let mut outcome = Outcome::Closed;
-    let wine = win32::is_wine();
-    // XWayland with fractional scaling can lose a resize sent after the
-    // window exists (rea-colin-mcrae-3's RUNTIME_NOTES): under Wine the
-    // window is created at its final size; the first frame only sets egui's
-    // zoom. Wine then scales the window by its own DPI setting, so that is
-    // divided out. On Windows the first frame fits it to the DPI-aware
-    // scale.
-    let native = if wine { win32::wine_dpi_scale() } else { 1.0 };
-    let zoom = form::creation_zoom(wine, win32::screen_size(), native);
-    let size = SIZE * zoom;
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("OutRun 2006")
-            .with_inner_size(size)
-            .with_min_inner_size(size)
-            .with_max_inner_size(size)
-            .with_resizable(false)
-            .with_maximize_button(false),
-        // Under Wine the desktop's window manager places it (on the monitor
-        // in use); Wine's idea of the main screen can be another monitor.
-        centered: !wine,
-        ..Default::default()
-    };
+    // Under Wine the window is created at its final size (XWayland can
+    // lose a later resize), with Wine's own DPI scale divided out; on
+    // Windows the first frame fits it to the DPI-aware scale.
+    // The scale first: under Wine it makes the process DPI aware, so the
+    // screen is measured in pixels.
+    let wine_scale = display::wine_dpi_scale();
+    let fit = WindowFit::new(SIZE, wine::is_wine(), display::screen_size(), wine_scale);
+    let options = fit.native_options("OutRun 2006");
     let path = settings_path.to_path_buf();
     let home = home.to_path_buf();
     let saved = saved.map(str::to_string);
@@ -102,7 +111,7 @@ pub fn show(
                 home,
                 saved,
                 linux,
-                zoom,
+                fit,
                 &mut outcome,
             )))
         }),
@@ -111,75 +120,11 @@ pub fn show(
     Ok(outcome)
 }
 
+/// The SDK's fonts and dark style in OutRun's colours; selected text keeps
+/// its red highlight.
 fn set_style(ctx: &egui::Context) {
-    let mut fonts = FontDefinitions::default();
-    let font = |bytes: &'static [u8]| std::sync::Arc::new(FontData::from_static(bytes));
-    fonts.font_data.insert(
-        "barlow".into(),
-        font(include_bytes!("../assets/fonts/Barlow-Regular.ttf")),
-    );
-    fonts.font_data.insert(
-        "barlow-semibold".into(),
-        font(include_bytes!("../assets/fonts/Barlow-SemiBold.ttf")),
-    );
-    fonts.font_data.insert(
-        "condensed".into(),
-        font(include_bytes!(
-            "../assets/fonts/BarlowCondensed-SemiBold.ttf"
-        )),
-    );
-    fonts.font_data.insert(
-        "decal".into(),
-        font(include_bytes!(
-            "../assets/fonts/BarlowCondensed-BlackItalic.ttf"
-        )),
-    );
-    // Barlow everywhere (egui's own fonts are left out to keep the
-    // launcher small); the named families are the other weights.
-    for family in [FontFamily::Proportional, FontFamily::Monospace] {
-        fonts.families.insert(family, vec!["barlow".into()]);
-    }
-    for name in ["barlow-semibold", "condensed", "decal"] {
-        fonts.families.insert(
-            FontFamily::Name(name.into()),
-            vec![name.into(), "barlow".into()],
-        );
-    }
-    ctx.set_fonts(fonts);
-
-    // One look whatever the system theme is.
-    ctx.set_theme(egui::Theme::Dark);
-    ctx.all_styles_mut(|style| {
-        let v = &mut style.visuals;
-        *v = egui::Visuals::dark();
-        v.panel_fill = BASE;
-        v.extreme_bg_color = PANEL;
-        v.text_edit_bg_color = Some(PANEL);
-        v.override_text_color = Some(INK);
-        v.selection.bg_fill = RED.gamma_multiply(0.6);
-        v.selection.stroke = Stroke::new(1.0, YELLOW);
-        v.text_cursor.stroke = Stroke::new(2.0, YELLOW);
-        for w in [
-            &mut v.widgets.inactive,
-            &mut v.widgets.hovered,
-            &mut v.widgets.active,
-            &mut v.widgets.open,
-        ] {
-            w.bg_stroke = Stroke::new(1.0, LINE);
-            w.corner_radius = CornerRadius::same(6);
-        }
-        v.widgets.hovered.bg_stroke = Stroke::new(1.0, MUTED);
-        v.widgets.active.bg_stroke = Stroke::new(1.0, RED);
-        style.spacing.item_spacing = vec2(8.0, 8.0);
-    });
-}
-
-fn font(size: f32) -> FontId {
-    FontId::new(size, FontFamily::Proportional)
-}
-
-fn named(name: &str, size: f32) -> FontId {
-    FontId::new(size, FontFamily::Name(name.into()))
+    theme::install(ctx, &PALETTE);
+    ctx.all_styles_mut(|style| style.visuals.selection.bg_fill = RED.gamma_multiply(0.6));
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -206,6 +151,14 @@ impl Tab {
         Tab::ALL[(at + by).rem_euclid(Tab::ALL.len() as isize) as usize]
     }
 }
+
+const TABS: [(Tab, &str); 5] = [
+    (Tab::Play, "Play"),
+    (Tab::Picture, "Picture"),
+    (Tab::HdPack, "HD Pack"),
+    (Tab::Controls, "Controls"),
+    (Tab::Extras, "Extras"),
+];
 
 /// What the game folder holds, checked when its text changes.
 enum Check {
@@ -267,16 +220,13 @@ struct Window<'a> {
     path: PathBuf,
     text: String,
     error: Option<String>,
-    /// The size for this screen is set on the first frame.
-    sized: bool,
-    /// The zoom the window was created with (only above 1 under Wine).
-    zoom: f32,
+    /// Sizes the window for this screen on the first frame.
+    fit: WindowFit,
     /// What the last rumble test found.
     rumble_test: Option<String>,
-    /// The gamepad buttons held at the last look, and what pressing them
-    /// asks of this frame.
-    pad_held: u16,
-    pad_actions: Vec<PadAction>,
+    /// The gamepad, and the steps it asked of this frame.
+    pad: PadNav,
+    pending: Vec<Nav>,
     /// The launcher's home folder, where the HD pack is downloaded.
     home: PathBuf,
     pack: hdpack::Pack,
@@ -323,11 +273,11 @@ impl<'a> Window<'a> {
         home: PathBuf,
         saved: Option<String>,
         linux: bool,
-        zoom: f32,
+        fit: WindowFit,
         outcome: &'a mut Outcome,
     ) -> Window<'a> {
-        let screen = win32::screen_size();
-        let wine = win32::is_wine();
+        let screen = display::screen_size();
+        let wine = wine::is_wine();
         let mut form = Form::from_file(saved.as_deref(), screen, wine);
         let text = saved.unwrap_or_else(|| config::TEMPLATE.to_string());
         let pack = hdpack::Pack::pinned();
@@ -346,58 +296,23 @@ impl<'a> Window<'a> {
             tab: Tab::Play,
             screen,
             resolutions: form::resolutions(screen),
-            pads: win32::xinput_pads().len(),
+            pads: xinput::connected(),
             linux,
             wine,
-            portrait: load_portrait(ctx),
+            portrait: widgets::load_jpeg(ctx, "portrait", include_bytes!("../assets/portrait.jpg")),
             path,
             text,
             error: None,
-            sized: false,
-            zoom,
+            fit,
             rumble_test: None,
-            pad_held: 0,
-            pad_actions: Vec::new(),
+            pad: PadNav::default(),
+            pending: Vec::new(),
             home,
             pack,
             hd_job: None,
             hd_rate: Rate::default(),
             hd_result: None,
             outcome,
-        }
-    }
-
-    /// Draws everything larger on a large screen (1.5x at 4K), as the
-    /// desktop's own scaling often doesn't reach programs under Wine. Under
-    /// Wine the window already has its final size (see `show`); on Windows
-    /// it is resized for the DPI-aware scale and centred.
-    fn fit_screen(&mut self, ctx: &egui::Context) {
-        self.sized = true;
-        let zoom = if self.wine {
-            self.zoom
-        } else {
-            let native = ctx.native_pixels_per_point().unwrap_or(1.0);
-            form::window_zoom(self.screen, native)
-        };
-        self.zoom = zoom;
-        if zoom == 1.0 {
-            return;
-        }
-        ctx.set_zoom_factor(zoom);
-        if self.wine {
-            return;
-        }
-        let size = SIZE * zoom;
-        for cmd in [
-            egui::ViewportCommand::MinInnerSize(size),
-            egui::ViewportCommand::MaxInnerSize(size),
-            egui::ViewportCommand::InnerSize(size),
-        ] {
-            ctx.send_viewport_cmd(cmd);
-        }
-        if let Some(monitor) = ctx.input(|i| i.viewport().monitor_size) {
-            let at = ((monitor - size) / 2.0).max(Vec2::ZERO);
-            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(at.to_pos2()));
         }
     }
 
@@ -414,7 +329,7 @@ impl<'a> Window<'a> {
         if let Some(dir) = self.path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
-        match runtime::write_atomic(&self.path, saved) {
+        match fsx::write_atomic(&self.path, saved) {
             Ok(()) => {
                 *self.outcome = Outcome::Play;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -424,101 +339,57 @@ impl<'a> Window<'a> {
     }
 }
 
-fn load_portrait(ctx: &egui::Context) -> Option<TextureHandle> {
-    let mut decoder = jpeg_decoder::Decoder::new(&include_bytes!("../assets/portrait.jpg")[..]);
-    let rgb = decoder.decode().ok()?;
-    let info = decoder.info()?;
-    let size = [usize::from(info.width), usize::from(info.height)];
-    (rgb.len() == size[0] * size[1] * 3).then(|| {
-        ctx.load_texture(
-            "portrait",
-            egui::ColorImage::from_rgb(size, &rgb),
-            egui::TextureOptions::LINEAR,
-        )
-    })
-}
-
 impl eframe::App for Window<'_> {
-    /// The gamepad, as keys: the d-pad moves the focus (Tab, Shift+Tab), A
-    /// presses the control in focus (Space); Start and LB/RB are handled in
-    /// `ui`, which also asks for the next look.
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
-        let now = win32::xinput_buttons();
-        self.pad_actions = form::pad_actions(self.pad_held, now);
-        self.pad_held = now;
-        for action in &self.pad_actions {
-            let (key, modifiers) = match action {
-                PadAction::Next => (Key::Tab, egui::Modifiers::NONE),
-                PadAction::Previous => (Key::Tab, egui::Modifiers::SHIFT),
-                PadAction::Press => (Key::Space, egui::Modifiers::NONE),
-                _ => continue,
-            };
-            for pressed in [true, false] {
-                raw.events.push(egui::Event::Key {
-                    key,
-                    physical_key: None,
-                    pressed,
-                    repeat: false,
-                    modifiers,
-                });
-            }
-        }
+    /// The gamepad, as keys (the SDK's pad navigation): the d-pad moves
+    /// the focus and steps a chip row, A presses; Start and LB/RB are
+    /// handled in `ui`, which also asks for the next look.
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        let navs = self.pad.update(xinput::buttons());
+        pad::inject(ctx, raw, &navs);
+        self.pending.extend(navs);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        if !self.sized {
-            self.fit_screen(&ctx);
-        }
+        self.fit.first_frame(&ctx);
         let full = ui.max_rect();
         ui.painter().rect_filled(full, 0.0, BASE);
         self.draw_photo(ui, full);
-        draw_decal(ui, full);
+        widgets::stripes(
+            ui.painter(),
+            full,
+            &[(30.0, RED), (16.0, YELLOW.gamma_multiply(0.9))],
+        );
 
-        let content = Rect::from_min_max(
-            pos2(full.left() + PHOTO_W + 12.0, full.top() + 24.0),
-            pos2(full.right() - 32.0, full.bottom() - 24.0),
-        );
-        let footer_h = 52.0;
-        let body = Rect::from_min_max(
-            content.min,
-            pos2(content.right(), content.bottom() - footer_h - 16.0),
-        );
-        ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
+        let layout = Layout::new(full, PHOTO_W);
+        ui.scope_builder(egui::UiBuilder::new().max_rect(layout.body), |ui| {
             ui.label(
                 egui::RichText::new("OutRun 2006")
-                    .font(named("decal", 46.0))
+                    .font(decal(46.0))
                     .color(INK),
             );
             ui.add_space(-6.0);
             ui.label(
                 egui::RichText::new("COAST 2 COAST")
-                    .font(named("condensed", 17.0))
+                    .font(condensed(17.0))
                     .color(YELLOW),
             );
             ui.add_space(4.0);
             self.status(ui);
             ui.add_space(4.0);
-            self.tabs(ui);
+            widgets::tabs_bar(ui, &TABS, &mut self.tab);
             ui.add_space(14.0);
             // Long tabs scroll inside the body instead of running under
             // the footer.
-            egui::ScrollArea::vertical()
-                .id_salt(self.tab)
-                .auto_shrink([false, false])
-                .show(ui, |ui| match self.tab {
-                    Tab::Play => self.play_tab(ui),
-                    Tab::Picture => self.picture_tab(ui),
-                    Tab::HdPack => self.hd_tab(ui),
-                    Tab::Controls => self.controls_tab(ui),
-                    Tab::Extras => self.extras_tab(ui),
-                });
+            widgets::tab_body(ui, self.tab, |ui| match self.tab {
+                Tab::Play => self.play_tab(ui),
+                Tab::Picture => self.picture_tab(ui),
+                Tab::HdPack => self.hd_tab(ui),
+                Tab::Controls => self.controls_tab(ui),
+                Tab::Extras => self.extras_tab(ui),
+            });
         });
-        let footer = Rect::from_min_max(
-            pos2(content.left(), content.bottom() - footer_h),
-            content.max,
-        );
-        self.footer(ui, footer, &ctx);
+        self.footer(ui, layout.footer, &ctx);
         self.poll_download();
 
         if ctx.input(|i| i.key_pressed(Key::Enter)) && !ctx.egui_wants_keyboard_input() {
@@ -526,11 +397,12 @@ impl eframe::App for Window<'_> {
         }
         // A pad sends no events: look again soon.
         ctx.request_repaint_after(std::time::Duration::from_millis(50));
-        for action in std::mem::take(&mut self.pad_actions) {
-            match action {
-                PadAction::Play => self.play(&ctx),
-                PadAction::NextTab => self.tab = self.tab.step(1),
-                PadAction::PreviousTab => self.tab = self.tab.step(-1),
+        // Taken, so a second egui pass in one frame can't play twice.
+        for nav in std::mem::take(&mut self.pending) {
+            match nav {
+                Nav::Play => self.play(&ctx),
+                Nav::NextTab => self.tab = self.tab.step(1),
+                Nav::PreviousTab => self.tab = self.tab.step(-1),
                 _ => {}
             }
         }
@@ -545,21 +417,7 @@ impl Window<'_> {
     fn draw_photo(&self, ui: &egui::Ui, full: Rect) {
         let rect = Rect::from_min_size(full.min, vec2(PHOTO_W, full.height()));
         let p = ui.painter();
-        if let Some(tex) = &self.portrait {
-            // Fill the height; keep the middle of the picture (the car).
-            let size = tex.size_vec2();
-            let (w, h) = (size.x, size.y);
-            let shown_w = rect.height() * w / h;
-            let over = (shown_w - rect.width()).max(0.0);
-            let u0 = over / 2.0 / shown_w;
-            let u1 = 1.0 - u0;
-            p.image(
-                tex.id(),
-                rect,
-                Rect::from_min_max(pos2(u0, 0.0), pos2(u1, 1.0)),
-                Color32::WHITE,
-            );
-        } else {
+        if self.portrait.is_none() {
             // Without the artwork: a black-to-red-to-yellow sky.
             let colors = [BASE, RED.gamma_multiply(0.45), RED, YELLOW];
             let n = colors.len() as f32;
@@ -577,20 +435,8 @@ impl Window<'_> {
                 p.add(Shape::mesh(m));
             }
         }
-        // Fades to black join the photo to the page.
-        gradient(
-            p,
-            Rect::from_min_max(
-                pos2(rect.left() + rect.width() * 0.55, rect.top()),
-                rect.max,
-            ),
-            true,
-        );
-        gradient(
-            p,
-            Rect::from_min_max(pos2(rect.left(), rect.bottom() - 130.0), rect.max),
-            false,
-        );
+        // The middle of the picture (the car), faded to black into the page.
+        widgets::hero_image(p, rect, self.portrait.as_ref(), Crop::Center, BASE);
         let x = rect.left() + 20.0;
         let y = rect.bottom() - 20.0;
         p.text(
@@ -632,49 +478,8 @@ impl Window<'_> {
         ui.label(egui::RichText::new(text).font(font(13.5)).color(color));
     }
 
-    fn tabs(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 26.0;
-            for (tab, name) in [
-                (Tab::Play, "Play"),
-                (Tab::Picture, "Picture"),
-                (Tab::HdPack, "HD Pack"),
-                (Tab::Controls, "Controls"),
-                (Tab::Extras, "Extras"),
-            ] {
-                let on = self.tab == tab;
-                let galley = ui.painter().layout_no_wrap(
-                    name.to_string(),
-                    named("condensed", 22.0),
-                    if on { INK } else { MUTED },
-                );
-                let (rect, resp) =
-                    ui.allocate_exact_size(galley.size() + vec2(0.0, 8.0), Sense::click());
-                let color = if on || resp.hovered() { INK } else { MUTED };
-                ui.painter().galley(rect.min, galley, color);
-                if on {
-                    let bar = Rect::from_min_size(
-                        pos2(rect.left(), rect.bottom() - 3.0),
-                        vec2(rect.width(), 3.0),
-                    );
-                    ui.painter().rect_filled(bar, 0.0, RED);
-                }
-                if resp
-                    .on_hover_cursor(egui::CursorIcon::PointingHand)
-                    .clicked()
-                {
-                    self.tab = tab;
-                }
-            }
-        });
-        let y = ui.cursor().top() - 4.0;
-        let r = ui.max_rect();
-        ui.painter()
-            .hline(r.left()..=r.right(), y, Stroke::new(1.0, LINE));
-    }
-
     fn play_tab(&mut self, ui: &mut egui::Ui) {
-        heading(ui, "Game folder");
+        widgets::heading(ui, "Game folder");
         let game_hint = if self.linux {
             format!(
                 "The folder with your {}, e.g. Z:\\home\\you\\Games\\OutRun 2006",
@@ -683,12 +488,9 @@ impl Window<'_> {
         } else {
             format!("The folder with your installed {}", edition::EXE)
         };
-        if folder_field(
-            ui,
-            &mut self.form.game,
-            &game_hint,
-            &format!("Choose the folder with your {}", edition::EXE),
-        ) {
+        if widgets::folder_field(ui, &mut self.form.game, &game_hint, || {
+            dialog::pick_folder(&format!("Choose the folder with your {}", edition::EXE))
+        }) {
             self.error = None;
         }
         let (note, color) = match &self.check {
@@ -702,7 +504,7 @@ impl Window<'_> {
         ui.label(egui::RichText::new(note).font(font(13.0)).color(color));
         ui.add_space(10.0);
 
-        heading(ui, "Look");
+        widgets::heading(ui, "Look");
         ui.add_space(6.0);
         let note = match Form::coast_to_coast(self.screen, self.wine).resolution {
             Some((w, h)) => format!("Your screen's {w}×{h}, the tuned set."),
@@ -734,10 +536,8 @@ impl Window<'_> {
         let w = (ui.available_width() - 3.0 * gap) / 4.0;
         // One title size for all four cards: the largest at which every
         // title fits.
-        let title_size = cards
-            .iter()
-            .map(|(_, title, _)| fit_title(ui, title, w - 28.0))
-            .fold(22.0, f32::min);
+        let titles: Vec<&str> = cards.iter().map(|(_, title, _)| *title).collect();
+        let title_size = widgets::fit_title(ui, &titles, w - 28.0);
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = gap;
             for (look, title, note) in cards {
@@ -759,12 +559,12 @@ impl Window<'_> {
         });
         ui.add_space(14.0);
 
-        heading(ui, "Saves");
-        folder_field(
+        widgets::heading(ui, "Saves");
+        widgets::folder_field(
             ui,
             &mut self.form.saves,
             "Saved Games\\OutRun 2006 (the default)",
-            "Choose where your saves are kept",
+            || dialog::pick_folder("Choose where your saves are kept"),
         );
         ui.label(
             egui::RichText::new("Leave empty for the default. Your License.dat and records are copied in before the game starts and back when it ends.")
@@ -779,15 +579,15 @@ impl Window<'_> {
         let resolutions = &self.resolutions;
         let row = |ui: &mut egui::Ui, name: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
             ui.horizontal_top(|ui| {
-                field(ui, name);
+                widgets::field(ui, name);
                 ui.vertical(|ui| add(ui));
             });
         };
         row(ui, "Resolution", &mut |ui| {
-            chips(ui, resolutions, &mut f.resolution);
+            widgets::chips(ui, resolutions, &mut f.resolution, None);
         });
         row(ui, "Frame rate", &mut |ui| {
-            chips(ui, &FRAME_RATES, &mut f.fps_limit);
+            widgets::chips(ui, &FRAME_RATES, &mut f.fps_limit, None);
             if f.fps_limit > 60 || f.fps_limit == 0 {
                 ui.label(
                     egui::RichText::new("Above 60 the picture is interpolated (experimental).")
@@ -797,19 +597,19 @@ impl Window<'_> {
             }
         });
         row(ui, "Vsync", &mut |ui| {
-            chips(ui, &VSYNCS, &mut f.vsync);
+            widgets::chips(ui, &VSYNCS, &mut f.vsync, None);
         });
         row(ui, "Draw distance", &mut |ui| {
-            chips(ui, &DISTANCES, &mut f.draw_distance);
+            widgets::chips(ui, &DISTANCES, &mut f.draw_distance, None);
         });
         row(ui, "Reflections", &mut |ui| {
-            chips(ui, &REFLECTIONS, &mut f.reflections);
+            widgets::chips(ui, &REFLECTIONS, &mut f.reflections, None);
         });
         row(ui, "Anisotropy", &mut |ui| {
-            chips(ui, &ANISOTROPY, &mut f.anisotropy);
+            widgets::chips(ui, &ANISOTROPY, &mut f.anisotropy, None);
         });
         row(ui, "Anti-aliasing", &mut |ui| {
-            chips(ui, &ANTIALIASING, &mut f.antialiasing);
+            widgets::chips(ui, &ANTIALIASING, &mut f.antialiasing, None);
             if f.antialiasing > 0 {
                 ui.label(
                     egui::RichText::new("Smooths edges. On NVIDIA under Windows, trackside cloth and barriers are supersampled too.")
@@ -821,19 +621,19 @@ impl Window<'_> {
         row(ui, "", &mut |ui| {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 18.0;
-                toggle(ui, &mut f.sky_glow, "Sky glow")
+                widgets::toggle(ui, &mut f.sky_glow, "Sky glow", None)
                     .on_hover_text("The console versions' glowing sky (bloom)");
-                toggle(ui, &mut f.xbox_brightness, "Xbox brightness")
+                widgets::toggle(ui, &mut f.xbox_brightness, "Xbox brightness", None)
                     .on_hover_text("The Xbox releases' brighter picture");
             });
-            toggle(ui, &mut f.hd_characters, "Hi-def characters").on_hover_text(
+            widgets::toggle(ui, &mut f.hd_characters, "Hi-def characters", None).on_hover_text(
                 "The hi-def driver and passenger models the PC release shipped unused",
             );
         });
         if self.linux {
             row(ui, "Scaler", &mut |ui| {
                 let options: Vec<_> = form::SCALERS.iter().map(|s| (s.0, s.1)).collect();
-                chips(ui, &options, &mut f.scaler);
+                widgets::chips(ui, &options, &mut f.scaler, None);
                 let note = form::SCALERS
                     .iter()
                     .find(|s| s.0 == f.scaler)
@@ -847,7 +647,7 @@ impl Window<'_> {
     }
 
     fn hd_tab(&mut self, ui: &mut egui::Ui) {
-        heading(ui, "HD texture pack");
+        widgets::heading(ui, "HD texture pack");
         ui.label(
             egui::RichText::new(
                 "The community's redrawn menus, HUD, sprites and button prompts at high resolution \
@@ -865,7 +665,7 @@ impl Window<'_> {
             )
             .clicked()
         {
-            win32::open_url(config::HD_PACK_PAGE);
+            dialog::open_url(config::HD_PACK_PAGE);
         }
         ui.add_space(12.0);
 
@@ -882,13 +682,13 @@ impl Window<'_> {
         }
 
         ui.add_space(18.0);
-        heading(ui, "Already have it?");
+        widgets::heading(ui, "Already have it?");
         let before = self.form.hd_folder.clone();
-        folder_field(
+        widgets::folder_field(
             ui,
             &mut self.form.hd_folder,
             "The folder you unzipped the pack into",
-            "Choose the folder you unzipped the HD texture pack into",
+            || dialog::pick_folder("Choose the folder you unzipped the HD texture pack into"),
         );
         if self.form.hd_folder != before {
             self.hd_result = None;
@@ -905,7 +705,7 @@ impl Window<'_> {
         } else {
             "Download"
         };
-        if primary_button(ui, label).clicked() {
+        if widgets::primary_button(ui, label).clicked() {
             self.start_download(ui.ctx());
         }
         ui.add_space(6.0);
@@ -932,7 +732,12 @@ impl Window<'_> {
         let ours = downloaded
             .as_ref()
             .is_some_and(|dir| Path::new(self.form.hd_folder.trim()) == dir.as_path());
-        toggle(ui, &mut self.form.hd_textures, "Use the HD texture pack");
+        widgets::toggle(
+            ui,
+            &mut self.form.hd_textures,
+            "Use the HD texture pack",
+            None,
+        );
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             let what = if ours {
@@ -943,7 +748,7 @@ impl Window<'_> {
             ui.label(egui::RichText::new(what).font(font(13.5)).color(YELLOW));
             if ours {
                 ui.add_space(10.0);
-                if outline_button(ui, "Remove").clicked() {
+                if widgets::outline_button(ui, "Remove").clicked() {
                     match hdpack::remove(&self.pack, &self.home) {
                         Ok(()) => {
                             self.form.hd_textures = false;
@@ -997,12 +802,12 @@ impl Window<'_> {
             ),
             _ => (0.0, "Connecting…".to_string()),
         };
-        progress_bar(ui, fraction);
+        widgets::progress_bar(ui, fraction);
         ui.add_space(6.0);
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(text).font(font(13.5)).color(INK));
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                if outline_button(ui, "Cancel").clicked() {
+                if widgets::outline_button(ui, "Cancel").clicked() {
                     job.cancel();
                 }
             });
@@ -1014,7 +819,7 @@ impl Window<'_> {
         let worker = job.clone();
         let (pack, home, ctx) = (self.pack.clone(), self.home.clone(), ctx.clone());
         std::thread::spawn(move || {
-            let free = win32::free_space(&home);
+            let free = disk::free_space(&home);
             hdpack::install(&pack, &home, free, &win32::WinHttp, &worker);
             ctx.request_repaint();
         });
@@ -1053,12 +858,12 @@ impl Window<'_> {
         let f = &mut self.form;
         let row = |ui: &mut egui::Ui, name: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
             ui.horizontal_top(|ui| {
-                field(ui, name);
+                widgets::field(ui, name);
                 ui.vertical(|ui| add(ui));
             });
         };
         row(ui, "Deadzone", &mut |ui| {
-            chips(ui, &DEADZONES, &mut f.deadzone);
+            widgets::chips(ui, &DEADZONES, &mut f.deadzone, None);
             ui.label(
                 egui::RichText::new("Steering deadzone; the game's own is 20%.")
                     .font(font(13.0))
@@ -1066,14 +871,17 @@ impl Window<'_> {
             );
         });
         row(ui, "Rumble", &mut |ui| {
-            chips(ui, &FEEDBACK, &mut f.vibration);
+            widgets::chips(ui, &FEEDBACK, &mut f.vibration, None);
             ui.add_space(4.0);
             let mut strength = f.vibration_strength;
-            chips(ui, &STRENGTHS, &mut strength);
+            widgets::chips(ui, &STRENGTHS, &mut strength, None);
             f.vibration_strength = strength;
             ui.add_space(8.0);
-            if f.vibration != Feedback::Off && outline_button(ui, "Test").clicked() {
-                let took = win32::test_rumble(f.vibration_strength * 10);
+            if f.vibration != Feedback::Off && widgets::outline_button(ui, "Test").clicked() {
+                let took = xinput::test_rumble(
+                    f.vibration_strength * 10,
+                    std::time::Duration::from_millis(500),
+                );
                 self.rumble_test = Some(match took {
                     0 => "No pad took the rumble. Under Wine the pad must be in X-input mode; on 8BitDo pads use the X-input switch.".to_string(),
                     _ => "Sent: your pad should have shaken for half a second. In a race it shakes on shifts, drifts and crashes.".to_string(),
@@ -1085,7 +893,7 @@ impl Window<'_> {
         }
         if !self.wine && f.vibration != Feedback::Off {
             row(ui, "Impulse triggers", &mut |ui| {
-                chips(ui, &FEEDBACK, &mut f.impulse_triggers);
+                widgets::chips(ui, &FEEDBACK, &mut f.impulse_triggers, None);
                 ui.label(
                     egui::RichText::new("Xbox One/Series pads on Windows.")
                         .font(font(13.0))
@@ -1094,7 +902,7 @@ impl Window<'_> {
             });
         }
         row(ui, "Input API", &mut |ui| {
-            chips(ui, &BACKENDS, &mut f.input_backend);
+            widgets::chips(ui, &BACKENDS, &mut f.input_backend, None);
             ui.label(
                 egui::RichText::new(
                     "If a pad isn't seen, try another (wgi is Windows.Gaming.Input).",
@@ -1103,7 +911,7 @@ impl Window<'_> {
                 .color(MUTED),
             );
         });
-        toggle(ui, &mut f.manual_gearbox, "Manual gearbox by default");
+        widgets::toggle(ui, &mut f.manual_gearbox, "Manual gearbox by default", None);
         let pads = match self.pads {
             0 => "The Test button checks Xbox-style (XInput) pads; in the game, PlayStation and Switch pads rumble too.".to_string(),
             1 => "One Xbox-style pad connected.".to_string(),
@@ -1118,43 +926,50 @@ impl Window<'_> {
     fn extras_tab(&mut self, ui: &mut egui::Ui) {
         let before = self.form.clone();
         let f = &mut self.form;
-        toggle(
+        widgets::toggle(
             ui,
             &mut f.cd_switcher,
             "Change the music during a race (Back or X = next track, Z = previous)",
+            None,
         );
         if f.cd_switcher {
-            toggle(
+            widgets::toggle(
                 ui,
                 &mut f.music_shuffle,
                 "Shuffle the race music each launch",
+                None,
             );
         }
-        toggle(ui, &mut f.skip_logos, "Skip the boot logos");
-        toggle(
+        widgets::toggle(ui, &mut f.skip_logos, "Skip the boot logos", None);
+        widgets::toggle(
             ui,
             &mut f.free_drive,
             "Free drive: no countdown, coast as long as you like",
+            None,
         );
-        toggle(
+        widgets::toggle(
             ui,
             &mut f.horn,
             "The horn works outside the girlfriend requests",
+            None,
         );
-        toggle(
+        widgets::toggle(
             ui,
             &mut f.random_anims,
             "Roadside animations from any game mode",
+            None,
         );
-        toggle(
+        widgets::toggle(
             ui,
             &mut f.show_miles,
             "OutRun miles next to the menu's sign-in text",
+            None,
         );
-        toggle(
+        widgets::toggle(
             ui,
             &mut f.soundtrack_fix,
             "Restore the first two seconds of “Rush a Difficulty”",
+            None,
         );
         ui.label(
             egui::RichText::new("Online play points at the community server (clarissa.port0.org); pick a user name and password in the game's multiplayer menu.")
@@ -1167,10 +982,6 @@ impl Window<'_> {
     }
 
     fn footer(&mut self, ui: &mut egui::Ui, rect: Rect, ctx: &egui::Context) {
-        let button = Rect::from_min_size(
-            pos2(rect.right() - 170.0, rect.top()),
-            vec2(170.0, rect.height()),
-        );
         let hint = if self.form.resolution.is_some() {
             if self.form.fullscreen {
                 "The game runs at this resolution in exclusive fullscreen."
@@ -1180,43 +991,7 @@ impl Window<'_> {
         } else {
             "Settings are saved when you press Play."
         };
-        let galley = ui.painter().layout(
-            hint.to_string(),
-            font(13.0),
-            MUTED,
-            button.left() - rect.left() - 20.0,
-        );
-        let y = rect.center().y - galley.size().y / 2.0;
-        ui.painter().galley(pos2(rect.left(), y), galley, MUTED);
-
-        let resp = ui.interact(button, ui.scope_id().with("play"), Sense::click());
-        let ready = self.ready();
-        let fill = match (ready, resp.hovered()) {
-            (false, _) => LINE,
-            (true, true) => RED_BRIGHT,
-            (true, false) => RED,
-        };
-        // A slanted plate, like the stripes.
-        let s = 10.0;
-        let plate = vec![
-            pos2(button.left() + s, button.top()),
-            button.right_top(),
-            pos2(button.right() - s, button.bottom()),
-            button.left_bottom(),
-        ];
-        ui.painter()
-            .add(Shape::convex_polygon(plate, fill, Stroke::NONE));
-        ui.painter().text(
-            button.center(),
-            Align2::CENTER_CENTER,
-            "Play",
-            named("decal", 30.0),
-            if ready { ON_RED } else { MUTED },
-        );
-        if resp
-            .on_hover_cursor(egui::CursorIcon::PointingHand)
-            .clicked()
-        {
+        if widgets::footer(ui, rect, hint, self.ready()).clicked() {
             self.play(ctx);
         }
     }
@@ -1262,95 +1037,6 @@ pub const BACKENDS: [(Backend, &str); 4] = [
     (Backend::XInput, "XInput"),
 ];
 
-/// Fades `rect` from clear to the black base: to the right when `horizontal`,
-/// else downwards.
-fn gradient(p: &egui::Painter, rect: Rect, horizontal: bool) {
-    let mut mesh = Mesh::default();
-    let clear = Color32::from_rgba_unmultiplied(BASE.r(), BASE.g(), BASE.b(), 0);
-    let (a, b, c, d) = if horizontal {
-        (clear, BASE, BASE, clear)
-    } else {
-        (clear, clear, BASE, BASE)
-    };
-    mesh.colored_vertex(rect.left_top(), a);
-    mesh.colored_vertex(rect.right_top(), b);
-    mesh.colored_vertex(rect.right_bottom(), c);
-    mesh.colored_vertex(rect.left_bottom(), d);
-    mesh.add_triangle(0, 1, 2);
-    mesh.add_triangle(0, 2, 3);
-    p.add(Shape::mesh(mesh));
-}
-
-/// Two slanted stripes in the top right corner: rosso red with a thinner
-/// yellow one beside it, like racing stripes on a hood.
-fn draw_decal(ui: &egui::Ui, full: Rect) {
-    let p = ui.painter().with_clip_rect(full);
-    for (i, (w, alpha)) in [(30.0, 1.0f32), (16.0, 0.9)].into_iter().enumerate() {
-        let x = full.right() - 120.0 + i as f32 * 40.0;
-        let slant = 60.0;
-        let pts = vec![
-            pos2(x, full.top()),
-            pos2(x + w, full.top()),
-            pos2(x + w - slant, full.top() + 112.0),
-            pos2(x - slant, full.top() + 112.0),
-        ];
-        let color = if i == 0 { RED } else { YELLOW };
-        p.add(Shape::convex_polygon(
-            pts,
-            color.gamma_multiply(alpha),
-            Stroke::NONE,
-        ));
-    }
-}
-
-fn heading(ui: &mut egui::Ui, text: &str) {
-    ui.label(
-        egui::RichText::new(text)
-            .font(named("barlow-semibold", 14.0))
-            .color(MUTED),
-    );
-}
-
-/// A row's label, as tall as a chip. Rows of labels and chips are
-/// top-aligned (`horizontal_top`), so both start on the same line.
-fn field(ui: &mut egui::Ui, text: &str) {
-    let (rect, _) = ui.allocate_exact_size(vec2(118.0, 30.0), Sense::hover());
-    ui.painter().text(
-        rect.left_center(),
-        Align2::LEFT_CENTER,
-        text,
-        font(15.0),
-        INK,
-    );
-}
-
-/// A thin bar on the panel colour, filled from the left.
-fn progress_bar(ui: &mut egui::Ui, fraction: f32) {
-    let width = ui.available_width();
-    let (rect, _) = ui.allocate_exact_size(vec2(width, 10.0), Sense::hover());
-    let painter = ui.painter();
-    painter.rect_filled(rect, CornerRadius::same(5), LINE);
-    let fill = Rect::from_min_size(
-        rect.min,
-        vec2(width * fraction.clamp(0.0, 1.0), rect.height()),
-    );
-    painter.rect_filled(fill, CornerRadius::same(5), RED);
-}
-
-/// The tab's main action: a filled plate, like Play.
-fn primary_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
-    let galley =
-        ui.painter()
-            .layout_no_wrap(text.to_string(), named("barlow-semibold", 15.0), ON_RED);
-    let size = vec2(galley.size().x + 36.0, 34.0);
-    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    let fill = if resp.hovered() { RED_BRIGHT } else { RED };
-    ui.painter().rect_filled(rect, CornerRadius::same(6), fill);
-    ui.painter()
-        .galley(rect.center() - galley.size() / 2.0, galley, ON_RED);
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
-}
-
 /// "about 3 min left".
 fn time_left(seconds: f64) -> String {
     match seconds as u64 {
@@ -1381,149 +1067,9 @@ fn hd_pack_note(folder: &str) -> (String, Color32) {
     }
 }
 
-/// A text field with a Browse button; true when it changed.
-fn folder_field(ui: &mut egui::Ui, value: &mut String, hint: &str, title: &str) -> bool {
-    let mut changed = false;
-    ui.horizontal(|ui| {
-        let w = ui.available_width() - 100.0;
-        let edit = egui::TextEdit::singleline(value)
-            .hint_text(egui::RichText::new(hint).color(MUTED))
-            .font(font(15.0))
-            .margin(vec2(10.0, 8.0))
-            .desired_width(w);
-        changed |= ui.add(edit).changed();
-        if outline_button(ui, "Browse…").clicked()
-            && let Some(dir) = win32::pick_folder(title)
-        {
-            *value = dir.display().to_string();
-            changed = true;
-        }
-    });
-    changed
-}
-
-fn outline_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(92.0, 34.0), Sense::click());
-    let hover = resp.hovered();
-    ui.painter().rect(
-        rect,
-        CornerRadius::same(6),
-        if hover { LINE } else { Color32::TRANSPARENT },
-        Stroke::new(1.5, RED),
-        StrokeKind::Inside,
-    );
-    ui.painter().text(
-        rect.center(),
-        Align2::CENTER_CENTER,
-        text,
-        named("barlow-semibold", 15.0),
-        INK,
-    );
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
-}
-
-/// A row of choices; the chosen one is on the yellow plate.
-fn chips<T: PartialEq + Copy, S: AsRef<str>>(
-    ui: &mut egui::Ui,
-    options: &[(T, S)],
-    current: &mut T,
-) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 6.0;
-        for (value, label) in options {
-            let on = *current == *value;
-            let galley = ui.painter().layout_no_wrap(
-                label.as_ref().to_string(),
-                if on {
-                    named("barlow-semibold", 14.0)
-                } else {
-                    font(14.0)
-                },
-                if on { ON_YELLOW } else { INK },
-            );
-            let size = vec2(galley.size().x + 24.0, 30.0);
-            let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-            let fill = if on {
-                YELLOW
-            } else if resp.hovered() {
-                LINE
-            } else {
-                Color32::TRANSPARENT
-            };
-            ui.painter().rect(
-                rect,
-                CornerRadius::same(6),
-                fill,
-                Stroke::new(1.0, if on { YELLOW } else { LINE }),
-                StrokeKind::Inside,
-            );
-            let at = rect.center() - galley.size() / 2.0;
-            ui.painter().galley(at, galley, INK);
-            if resp
-                .on_hover_cursor(egui::CursorIcon::PointingHand)
-                .clicked()
-            {
-                *current = *value;
-            }
-        }
-    });
-}
-
-/// A switch: knob left and outlined is off, knob right on the yellow plate
-/// is on.
-fn toggle(ui: &mut egui::Ui, on: &mut bool, text: &str) -> egui::Response {
-    let galley = ui
-        .painter()
-        .layout_no_wrap(text.to_string(), font(15.0), INK);
-    let size = vec2(46.0 + 12.0 + galley.size().x, 30.0);
-    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    if resp.clicked() {
-        *on = !*on;
-    }
-    let t = ui.ctx().animate_bool(resp.id, *on);
-    let track = Rect::from_min_size(pos2(rect.left(), rect.center().y - 13.0), vec2(46.0, 26.0));
-    let p = ui.painter();
-    p.rect(
-        track,
-        CornerRadius::same(13),
-        if *on { YELLOW } else { Color32::TRANSPARENT },
-        Stroke::new(1.5, if *on { YELLOW } else { MUTED }),
-        StrokeKind::Inside,
-    );
-    let x = egui::lerp(track.left() + 13.0..=track.right() - 13.0, t);
-    p.circle_filled(
-        pos2(x, track.center().y),
-        9.0,
-        if *on { ON_YELLOW } else { MUTED },
-    );
-    p.galley(
-        pos2(
-            track.right() + 12.0,
-            rect.center().y - galley.size().y / 2.0,
-        ),
-        galley,
-        INK,
-    );
-    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
-}
-
-/// The look card title size (22 at most) at which `title` fits `width`.
-fn fit_title(ui: &egui::Ui, title: &str, width: f32) -> f32 {
-    let mut size = 22.0;
-    while size > 12.0
-        && ui
-            .painter()
-            .layout_no_wrap(title.to_string(), named("condensed", size), INK)
-            .size()
-            .x
-            > width
-    {
-        size -= 0.5;
-    }
-    size
-}
-
-/// One of the looks; true when clicked.
+/// One of the looks; true when clicked. Kept here: the SDK's `look_card`
+/// draws its note smaller and closer to the edge (12 pt padding, 13 pt
+/// note) than OutRun's cards (14, 13.5).
 fn look_card(
     ui: &mut egui::Ui,
     size: Vec2,
@@ -1555,12 +1101,12 @@ fn look_card(
         rect.left_top() + vec2(pad, pad - 2.0),
         Align2::LEFT_TOP,
         title,
-        named("condensed", title_size),
+        condensed(title_size),
         if on { YELLOW } else { INK },
     );
     if recommended {
         // A small red tab on the card's top edge.
-        let galley = p.layout_no_wrap("Recommended".into(), named("barlow-semibold", 12.0), ON_RED);
+        let galley = p.layout_no_wrap("Recommended".into(), semibold(12.0), ON_RED);
         let tab = Rect::from_min_size(
             pos2(
                 rect.right() - pad - galley.size().x - 12.0,

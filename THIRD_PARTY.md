@@ -9,6 +9,7 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 
 | Component | Licence | Source |
 | --- | --- | --- |
+| `rea-launcher`, `rea-launcher-win32`, `rea-launcher-ui`: the shared launcher SDK (runtime copy, saves, INI and settings editing, Win32 helpers, the settings window's kit) | MIT OR Apache-2.0 | https://github.com/akitaonrails/rea-launcher-sdk (tag `v0.1.0`) |
 | `sha2` and its RustCrypto dependencies | MIT OR Apache-2.0 | https://github.com/RustCrypto/hashes |
 | `windows-sys` | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
 | `eframe`, `egui` and their dependencies (`winit`, `glutin`, `glow`, …): the settings window | MIT OR Apache-2.0 (dependencies: MIT, Apache-2.0, Zlib, BSD; see `cargo tree`) | https://github.com/emilk/egui |
@@ -22,7 +23,7 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 | File | Licence | Source |
 | --- | --- | --- |
 | `crates/or-launcher/assets/portrait.jpg`: a sunset coast with a red convertible, an illustration generated for this project (no game artwork) | ours (MIT OR Apache-2.0) | this repository |
-| Barlow and Barlow Condensed (`crates/or-launcher/assets/fonts`) | SIL OFL 1.1 (`OFL.txt`) | https://github.com/jpt/barlow |
+| Barlow and Barlow Condensed, bundled by `rea-launcher-ui` (`crates/rea-launcher-ui/assets/fonts` in the SDK) | SIL OFL 1.1 (`OFL.txt` there) | https://github.com/jpt/barlow |
 
 ## Bundled in the package (fetched by `packaging/package.sh`)
 

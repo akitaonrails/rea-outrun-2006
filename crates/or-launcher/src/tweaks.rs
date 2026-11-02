@@ -8,8 +8,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use rea_launcher::fsx;
+use rea_launcher::ini::Ini;
+
 use crate::config::Settings;
-use crate::ini;
 use crate::soundtrack;
 
 /// Files of the OutRun2006Tweaks build this launcher is wired for, next to
@@ -43,8 +45,8 @@ pub const BASE_INI: &str = concat!(
     include_str!("tracks.ini"),
 );
 
-/// Copies `from` to `to` when their bytes differ. Returns true when a copy
-/// happened.
+/// Copies `from` to `to` (a whole-file swap) when their bytes differ.
+/// Returns true when a copy happened.
 fn freshen(from: &Path, to: &Path) -> Result<bool, String> {
     let same = fs::read(from)
         .ok()
@@ -53,10 +55,7 @@ fn freshen(from: &Path, to: &Path) -> Result<bool, String> {
     if same {
         return Ok(false);
     }
-    if let Some(dir) = to.parent() {
-        fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
-    }
-    fs::copy(from, to).map_err(|e| format!("cannot copy to {}: {e}", to.display()))?;
+    fsx::install_copy(from, to).map_err(|e| format!("cannot copy to {e}"))?;
     Ok(true)
 }
 
@@ -124,19 +123,19 @@ pub fn install(
         };
     }
     let pack = hd_texture_base(settings, launcher_dir, log);
-    let tuned = texture_keys(&settings.apply_tweaks(&base), pack.as_deref());
+    let mut ini = Ini::parse(&base);
+    settings.tweak(&mut ini);
+    texture_keys(&mut ini, pack.as_deref());
     // Without a choice in launcher.cfg, the input API follows the platform.
     let backend = settings.backend_on(linux).ini().to_string();
-    let tuned = ini::set_section_key(&tuned, "Controls", "InputBackend", &backend);
-    fs::write(&ini_path, &tuned)
-        .map_err(|e| format!("cannot write {}: {e}", ini_path.display()))?;
+    ini.set("Controls", "InputBackend", &backend);
+    fsx::install(&ini_path, ini.to_bytes()).map_err(|e| format!("cannot write {e}"))?;
     reset_overlay_keys(&runtime.join(USER_INI), log)?;
 
     // The game's own settings, written whole (the mod deletes stale copies
     // older than three months; ours is fresh every run).
     let game_ini = runtime.join("outrun2006.ini");
-    fs::write(&game_ini, settings.outrun2006_ini())
-        .map_err(|e| format!("cannot write {}: {e}", game_ini.display()))?;
+    fsx::install(&game_ini, settings.outrun2006_ini()).map_err(|e| format!("cannot write {e}"))?;
 
     install_dxvk(runtime, launcher_dir, linux, log)?;
 
@@ -187,7 +186,7 @@ fn install_dxvk(
     if freshen(&source, &destination)? {
         log("dxvk: installed");
     }
-    fs::write(&marker, b"d3d9.dll is managed by OutRunLauncher\n").map_err(|e| e.to_string())
+    fsx::install(&marker, b"d3d9.dll is managed by OutRunLauncher\n").map_err(|e| e.to_string())
 }
 
 /// The folder Tweaks should read HD textures from (`TextureBaseFolder`,
@@ -232,7 +231,10 @@ fn hd_texture_base(
 
 /// The (section, key) pairs the launcher writes to `OutRun2006Tweaks.ini`.
 fn owned_keys() -> Vec<(String, String)> {
-    ini::section_keys(&texture_keys(&Settings::default().apply_tweaks(""), None))
+    let mut ini = Ini::parse("");
+    Settings::default().tweak(&mut ini);
+    texture_keys(&mut ini, None);
+    ini.section_keys()
 }
 
 /// Tweaks reads `OutRun2006Tweaks.user.ini` over the main file (the F11
@@ -242,17 +244,13 @@ fn reset_overlay_keys(user_ini: &Path, log: &mut dyn FnMut(&str)) -> Result<(), 
     let Ok(text) = fs::read_to_string(user_ini) else {
         return Ok(());
     };
-    let mut cleaned = text.clone();
-    let mut removed = 0;
-    for (section, key) in owned_keys() {
-        if ini::section_key(&cleaned, &section, &key).is_some() {
-            cleaned = ini::remove_section_key(&cleaned, &section, &key);
-            removed += 1;
-        }
-    }
+    let mut cleaned = Ini::parse(&text);
+    let removed = owned_keys()
+        .iter()
+        .filter(|(section, key)| cleaned.remove(section, key))
+        .count();
     if removed > 0 {
-        fs::write(user_ini, cleaned)
-            .map_err(|e| format!("cannot write {}: {e}", user_ini.display()))?;
+        fsx::install(user_ini, cleaned.to_bytes()).map_err(|e| format!("cannot write {e}"))?;
         log(&format!(
             "tweaks: {removed} overlay settings the launcher owns were reset"
         ));
@@ -263,15 +261,14 @@ fn reset_overlay_keys(user_ini: &Path, log: &mut dyn FnMut(&str)) -> Result<(), 
 /// Points Tweaks at the HD pack where it was unzipped (no copy), or at the
 /// game's own `textures` folder. The pack draws Clarissa as in the
 /// Japanese release, so she is restored with it.
-pub fn texture_keys(ini: &str, pack: Option<&Path>) -> String {
+pub fn texture_keys(ini: &mut Ini, pack: Option<&Path>) {
     let folder = pack.map_or_else(|| "textures".to_string(), |p| p.display().to_string());
-    let t = ini::set_section_key(ini, "Graphics", "TextureBaseFolder", &folder);
-    ini::set_section_key(
-        &t,
+    ini.set("Graphics", "TextureBaseFolder", &folder);
+    ini.set(
         "Misc",
         "RestoreJPClarissa",
         if pack.is_some() { "true" } else { "false" },
-    )
+    );
 }
 
 /// The DLL overrides the game needs under Wine: the mod's `dinput8.dll`
@@ -279,45 +276,11 @@ pub fn texture_keys(ini: &str, pack: Option<&Path>) -> String {
 /// away (no download prompts).
 pub const WINE_OVERRIDES: &str = "dinput8=n,b;d3d9=n,b;mscoree,mshtml=d";
 
-/// Whether a rule's DLL name is `dll`, in any case, with or without
-/// `.dll` (Wine accepts both).
-fn same_dll(name: &str, dll: &str) -> bool {
-    let len = name.len();
-    let bare = if len > 4
-        && name.is_char_boundary(len - 4)
-        && name[len - 4..].eq_ignore_ascii_case(".dll")
-    {
-        &name[..len - 4]
-    } else {
-        name
-    };
-    bare.eq_ignore_ascii_case(dll)
-}
-
 /// `WINEDLLOVERRIDES` for the game: our rules first, then the player's
 /// own, minus their rules for the DLLs ours cover (Wine doesn't promise
 /// which of two rules for one DLL wins). Everything else they set is kept.
 pub fn wine_overrides(existing: Option<&str>) -> String {
-    const OURS: [&str; 4] = ["dinput8", "d3d9", "mscoree", "mshtml"];
-    let mut result = vec![WINE_OVERRIDES.to_owned()];
-    for rule in existing.into_iter().flat_map(|rules| rules.split(';')) {
-        if rule.trim().is_empty() {
-            continue;
-        }
-        let Some((names, action)) = rule.split_once('=') else {
-            result.push(rule.to_owned());
-            continue;
-        };
-        let kept: Vec<_> = names
-            .split(',')
-            .map(str::trim)
-            .filter(|name| !name.is_empty() && !OURS.iter().any(|o| same_dll(name, o)))
-            .collect();
-        if !kept.is_empty() {
-            result.push(format!("{}={action}", kept.join(",")));
-        }
-    }
-    result.join(";")
+    rea_launcher::wine::merge_dll_overrides(WINE_OVERRIDES, existing)
 }
 
 #[cfg(test)]
@@ -608,11 +571,9 @@ mod tests {
         fs::create_dir_all(launcher_dir.join("linux")).unwrap();
         fs::write(launcher_dir.join("linux").join("d3d9.dll"), b"dxvk").unwrap();
         let backend = |runtime: &Path| {
-            ini::section_key(
-                &fs::read_to_string(runtime.join("OutRun2006Tweaks.ini")).unwrap(),
-                "Controls",
-                "InputBackend",
-            )
+            Ini::parse(&fs::read_to_string(runtime.join("OutRun2006Tweaks.ini")).unwrap())
+                .get("Controls", "InputBackend")
+                .map(str::to_owned)
         };
         let mut quiet = |_: &str| {};
         let unset = Settings::default();

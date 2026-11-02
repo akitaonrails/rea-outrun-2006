@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use rea_launcher::identify::{self, hex as to_hex};
 use sha2::{Digest, Sha256};
 
 const PIN: &str = include_str!("../../../packaging/hd-pack.txt");
@@ -425,21 +426,9 @@ fn remove_other_packs(root: &Path, pack: &Pack) {
 }
 
 fn file_sha256(path: &Path) -> Result<String, String> {
-    let mut file = File::open(path).map_err(|e| e.to_string())?;
-    let mut hasher = Sha256::new();
-    let mut buffer = vec![0; CHUNK];
-    loop {
-        let n = file.read(&mut buffer).map_err(|e| e.to_string())?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buffer[..n]);
-    }
-    Ok(to_hex(&hasher.finalize()))
-}
-
-fn to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    identify::sha256_file(path)
+        .map(|digest| to_hex(&digest))
+        .map_err(|e| e.to_string())
 }
 
 pub fn mb(bytes: u64) -> f64 {

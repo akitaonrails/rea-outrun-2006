@@ -4,12 +4,16 @@
 //! (`outrun2006.ini` for the video mode, `OutRun2006Tweaks.ini` for the
 //! OutRun2006Tweaks mod). The file is plain `key = value` lines with `#`
 //! comments, written once from a commented template so users can edit it;
-//! the launcher later changes only the keys it owns. Unknown keys are
-//! ignored; values it cannot read are reported and ignored.
+//! the launcher later changes only the keys it owns. The file and the
+//! command line share one `apply` (the SDK's `cfg` toolkit); unknown keys
+//! and values it cannot read are reported and ignored.
 
 use std::path::{Path, PathBuf};
 
-use crate::ini;
+use rea_launcher::cfg::{self, Rejected};
+use rea_launcher::ini::Ini;
+
+pub use rea_launcher::cfg::{clear_key, read_file, set_key};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Settings {
@@ -222,19 +226,6 @@ impl Scaler {
 
 pub const FILE_NAME: &str = "launcher.cfg";
 
-/// Reads a settings file: `None` only when there is none (a first run).
-/// Text that isn't UTF-8 (a file saved as ANSI) is decoded with
-/// replacement characters rather than refused; any other error (no
-/// permission, a folder in its place) is returned, so the caller never
-/// mistakes an unreadable file for a missing one and writes over it.
-pub fn read_file(path: &Path) -> std::io::Result<Option<String>> {
-    match std::fs::read(path) {
-        Ok(bytes) => Ok(Some(String::from_utf8_lossy(&bytes).into_owned())),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e),
-    }
-}
-
 /// The file written on first run.
 pub const TEMPLATE: &str = r#"# OutRun 2006 launcher settings.
 #
@@ -415,23 +406,12 @@ OutRunLauncher --download-hd-pack
 Other settings are in launcher.cfg (see the comments in it)."
 );
 
-fn parse_bool(value: &str) -> Option<bool> {
-    match value.to_ascii_lowercase().as_str() {
-        "true" | "yes" | "on" | "1" => Some(true),
-        "false" | "no" | "off" | "0" => Some(false),
-        _ => None,
-    }
-}
-
+/// `resolution` words: `original` and `off` are the game's own 640x480.
 fn parse_resolution(value: &str) -> Option<(u32, u32)> {
-    let lower = value.trim().to_ascii_lowercase();
-    if lower == "original" || lower == "off" {
-        return Some(ORIGINAL);
+    match cfg::parse_resolution(value, (640, 480), (7680, 4320), cfg::ORIGINAL_OR_OFF)? {
+        cfg::Resolution::Size(w, h) => Some((w, h)),
+        _ => Some(ORIGINAL),
     }
-    let (w, h) = lower.split_once('x')?;
-    let w: u32 = w.trim().parse().ok()?;
-    let h: u32 = h.trim().parse().ok()?;
-    ((640..=7680).contains(&w) && (480..=4320).contains(&h)).then_some((w, h))
 }
 
 /// 0 (unlimited) or 10 to 240 frames per second.
@@ -441,17 +421,6 @@ fn valid_fps(n: &u32) -> bool {
 
 /// `resolution` value meaning the game's own 640x480.
 pub const ORIGINAL: (u32, u32) = (640, 480);
-
-/// Splits `key = value`, ignoring comments and blank values.
-fn entry(line: &str) -> Option<(&str, &str)> {
-    let line = line.trim();
-    if line.starts_with('#') {
-        return None;
-    }
-    let (key, value) = line.split_once('=')?;
-    let value = value.trim();
-    (!value.is_empty()).then_some((key.trim(), value))
-}
 
 /// `original` (0 or 128, the game's own) or a size Tweaks can render.
 fn parse_reflections(value: &str) -> Option<u32> {
@@ -472,123 +441,178 @@ fn parse_count(value: &str, max: u32) -> Option<u32> {
     if value.eq_ignore_ascii_case("off") || value.eq_ignore_ascii_case("original") {
         return Some(0);
     }
-    value.parse().ok().filter(|n| *n <= max)
+    cfg::parse_range(value, 0..=max)
+}
+
+/// Every key launcher.cfg and the command line take (`--fps-limit` is
+/// `fps_limit`). `scaler` is only set by the window and the file.
+const FLAG_KEYS: [&str; 30] = [
+    "game",
+    "runtime",
+    "saves",
+    "resolution",
+    "fullscreen",
+    "antialiasing",
+    "fps_limit",
+    "vsync",
+    "draw_distance",
+    "reflections",
+    "anisotropy",
+    "sky_glow",
+    "xbox_brightness",
+    "hd_characters",
+    "hd_textures",
+    "hd_textures_folder",
+    "deadzone",
+    "vibration",
+    "vibration_strength",
+    "impulse_triggers",
+    "input_backend",
+    "manual_gearbox",
+    "cd_switcher",
+    "music_shuffle",
+    "skip_logos",
+    "free_drive",
+    "horn",
+    "random_anims",
+    "show_miles",
+    "soundtrack_fix",
+];
+
+/// Where a value comes from: the file is more forgiving (retired values)
+/// and words its messages for the file.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Source {
+    File,
+    Args,
 }
 
 impl Settings {
     /// Reads a settings file; the second value lists lines it could not use.
     pub fn parse_file(text: &str) -> (Settings, Vec<String>) {
         let mut s = Settings::default();
-        let mut warnings = Vec::new();
-        for (n, line) in text.lines().enumerate() {
-            let Some((key, value)) = entry(line) else {
-                continue;
-            };
-            let mut bad = |what: &str| {
-                warnings.push(format!("{FILE_NAME} line {}: {what} {value:?}", n + 1));
-            };
-            let mut boolean = |slot: &mut Option<bool>, name: &str| match parse_bool(value) {
-                Some(b) => *slot = Some(b),
-                None => bad(&format!("{name} needs true or false, not")),
-            };
-            match key {
-                "game" => s.game = Some(value.into()),
-                "runtime" => s.runtime = Some(value.into()),
-                "saves" => s.saves = Some(value.into()),
-                "resolution" => match parse_resolution(value) {
-                    Some(r) => s.resolution = Some(r),
-                    None => {
-                        bad("resolution needs WIDTHxHEIGHT (640x480 to 7680x4320) or original, not")
-                    }
-                },
-                "fullscreen" => boolean(&mut s.fullscreen, "fullscreen"),
-                "antialiasing" => match value.parse().ok().filter(|n| [0, 2].contains(n)) {
-                    Some(n) => s.antialiasing = Some(n),
-                    None => bad("antialiasing needs 0 or 2, not"),
-                },
-                "fps_limit" => match value.trim().to_ascii_lowercase().as_str() {
-                    "unlimited" | "none" | "off" => s.fps_limit = Some(0),
-                    _ => match value.parse().ok().filter(valid_fps) {
-                        Some(f) => s.fps_limit = Some(f),
-                        None => bad("fps_limit needs 10 to 240 or unlimited, not"),
-                    },
-                },
-                "vsync" => match value.trim().to_ascii_lowercase().as_str() {
-                    "on" | "true" => s.vsync = Some(Vsync::On),
-                    "off" | "false" => s.vsync = Some(Vsync::Off),
-                    "half" => {
-                        s.vsync = Some(Vsync::On);
-                        warnings.push(format!(
-                            "{FILE_NAME} line {}: vsync half is no longer offered; using on",
-                            n + 1
-                        ));
-                    }
-                    _ => bad("vsync needs on or off, not"),
-                },
-                "draw_distance" => match value.parse().ok().filter(|n| *n <= 8) {
-                    Some(n) => s.draw_distance = Some(n),
-                    None => bad("draw_distance needs 0 to 8, not"),
-                },
-                "reflections" => match parse_reflections(value) {
-                    Some(r) => s.reflections = Some(r),
-                    None => bad("reflections needs original (128), 512, 1024 or 2048, not"),
-                },
-                "anisotropy" => match parse_count(value, 16) {
-                    Some(a) => s.anisotropy = Some(a),
-                    None => bad("anisotropy needs 0 to 16, not"),
-                },
-                "sky_glow" => boolean(&mut s.sky_glow, "sky_glow"),
-                "xbox_brightness" => boolean(&mut s.xbox_brightness, "xbox_brightness"),
-                "hd_characters" => boolean(&mut s.hd_characters, "hd_characters"),
-                "hd_textures" => s.set_hd_textures(value),
-                "hd_textures_folder" => {
-                    s.hd_textures_folder = Some(value.trim())
-                        .filter(|v| !v.is_empty())
-                        .map(PathBuf::from)
-                }
-                "deadzone" => match value.parse().ok().filter(|n| *n <= 50) {
-                    Some(d) => s.deadzone = Some(d),
-                    None => bad("deadzone needs 0 to 50, not"),
-                },
-                "vibration" => match Feedback::parse(value) {
-                    Some(m) => s.vibration = Some(m),
-                    None => bad("vibration needs off, on, swapped or merged, not"),
-                },
-                "vibration_strength" => match value.parse().ok().filter(|n| *n <= 10) {
-                    Some(v) => s.vibration_strength = Some(v),
-                    None => bad("vibration_strength needs 0 to 10, not"),
-                },
-                "impulse_triggers" => match Feedback::parse(value) {
-                    Some(m) => s.impulse_triggers = Some(m),
-                    None => bad("impulse_triggers needs off, on, swapped or merged, not"),
-                },
-                "input_backend" => match Backend::parse(value) {
-                    Some(b) => s.input_backend = b,
-                    None => bad("input_backend needs wgi, raw, dinput or xinput, not"),
-                },
-                "manual_gearbox" => boolean(&mut s.manual_gearbox, "manual_gearbox"),
-                "cd_switcher" => boolean(&mut s.cd_switcher, "cd_switcher"),
-                "music_shuffle" => boolean(&mut s.music_shuffle, "music_shuffle"),
-                "skip_logos" => boolean(&mut s.skip_logos, "skip_logos"),
-                "free_drive" => boolean(&mut s.free_drive, "free_drive"),
-                "horn" => boolean(&mut s.horn, "horn"),
-                "random_anims" => boolean(&mut s.random_anims, "random_anims"),
-                "show_miles" => boolean(&mut s.show_miles, "show_miles"),
-                "soundtrack_fix" => boolean(&mut s.soundtrack_fix, "soundtrack_fix"),
-                "scaler" => match Scaler::parse(value) {
-                    Some(f) => s.scaler = Some(f),
-                    None => bad("scaler needs nearest, pixel, fsr or linear, not"),
-                },
-                _ => {}
+        let mut warnings = cfg::parse(text, FILE_NAME, |k, v| s.apply(k, v, Source::File));
+        for e in cfg::entries(text) {
+            if e.key == "vsync" && e.value.eq_ignore_ascii_case("half") {
+                warnings.push(format!(
+                    "{FILE_NAME} line {}: vsync half is no longer offered; using on",
+                    e.line
+                ));
             }
         }
         (s, warnings)
     }
 
+    /// One setting, from the file or a `--flag value` pair.
+    fn apply(&mut self, key: &str, value: &str, from: Source) -> Result<(), Rejected> {
+        let boolean = |slot: &mut Option<bool>| -> Result<(), Rejected> {
+            let needs = match from {
+                Source::File => "true or false",
+                Source::Args => cfg::ON_OFF,
+            };
+            *slot = Some(cfg::need(cfg::parse_bool(value), needs)?);
+            Ok(())
+        };
+        match key {
+            "game" => self.game = Some(value.into()),
+            "runtime" => self.runtime = Some(value.into()),
+            "saves" => self.saves = Some(value.into()),
+            "resolution" => {
+                let needs = match from {
+                    Source::File => "WIDTHxHEIGHT (640x480 to 7680x4320) or original",
+                    Source::Args => "WIDTHxHEIGHT or original",
+                };
+                self.resolution = Some(cfg::need(parse_resolution(value), needs)?);
+            }
+            "fullscreen" => return boolean(&mut self.fullscreen),
+            "antialiasing" => {
+                let aa = cfg::parse_range(value, 0..=2).filter(|n| *n != 1);
+                self.antialiasing = Some(cfg::need(aa, "0 or 2")?);
+            }
+            "fps_limit" => {
+                let fps = match value.trim().to_ascii_lowercase().as_str() {
+                    "unlimited" | "none" | "off" => Some(0),
+                    _ => value.trim().parse().ok().filter(valid_fps),
+                };
+                self.fps_limit = Some(cfg::need(fps, "10 to 240 or unlimited")?);
+            }
+            "vsync" => {
+                let vsync = match value.trim().to_ascii_lowercase().as_str() {
+                    "on" | "true" => Some(Vsync::On),
+                    "off" | "false" => Some(Vsync::Off),
+                    // Retired: read as on (parse_file says so).
+                    "half" if from == Source::File => Some(Vsync::On),
+                    _ => None,
+                };
+                self.vsync = Some(cfg::need(vsync, "on or off")?);
+            }
+            "draw_distance" => {
+                self.draw_distance = Some(cfg::need(cfg::parse_range(value, 0..=8), "0 to 8")?)
+            }
+            "reflections" => {
+                self.reflections = Some(cfg::need(
+                    parse_reflections(value),
+                    "original (128), 512, 1024 or 2048",
+                )?)
+            }
+            "anisotropy" => self.anisotropy = Some(cfg::need(parse_count(value, 16), "0 to 16")?),
+            "sky_glow" => return boolean(&mut self.sky_glow),
+            "xbox_brightness" => return boolean(&mut self.xbox_brightness),
+            "hd_characters" => return boolean(&mut self.hd_characters),
+            "hd_textures" => self.set_hd_textures(value),
+            "hd_textures_folder" => {
+                self.hd_textures_folder = Some(value.trim())
+                    .filter(|v| !v.is_empty())
+                    .map(PathBuf::from)
+            }
+            "deadzone" => {
+                self.deadzone = Some(cfg::need(cfg::parse_range(value, 0..=50), "0 to 50")?)
+            }
+            "vibration" => {
+                self.vibration = Some(cfg::need(
+                    Feedback::parse(value),
+                    "off, on, swapped or merged",
+                )?)
+            }
+            "vibration_strength" => {
+                self.vibration_strength =
+                    Some(cfg::need(cfg::parse_range(value, 0..=10), "0 to 10")?)
+            }
+            "impulse_triggers" => {
+                self.impulse_triggers = Some(cfg::need(
+                    Feedback::parse(value),
+                    "off, on, swapped or merged",
+                )?)
+            }
+            "input_backend" => {
+                self.input_backend = cfg::need(Backend::parse(value), "wgi, raw, dinput or xinput")?
+            }
+            "manual_gearbox" => return boolean(&mut self.manual_gearbox),
+            "cd_switcher" => return boolean(&mut self.cd_switcher),
+            "music_shuffle" => return boolean(&mut self.music_shuffle),
+            "skip_logos" => return boolean(&mut self.skip_logos),
+            "free_drive" => return boolean(&mut self.free_drive),
+            "horn" => return boolean(&mut self.horn),
+            "random_anims" => return boolean(&mut self.random_anims),
+            "show_miles" => return boolean(&mut self.show_miles),
+            "soundtrack_fix" => return boolean(&mut self.soundtrack_fix),
+            "scaler" if from == Source::File => {
+                self.scaler = Some(cfg::need(
+                    Scaler::parse(value),
+                    "nearest, pixel, fsr or linear",
+                )?)
+            }
+            // Options that were removed are ignored without a word.
+            "character_select" | "hot_plug" if from == Source::File => {}
+            _ => return Err(Rejected::Unknown),
+        }
+        Ok(())
+    }
+
     /// `hd_textures`: on or off, or (older files) the pack's folder, which
     /// also turns it on.
     fn set_hd_textures(&mut self, value: &str) {
-        match parse_bool(value) {
+        match cfg::parse_bool(value) {
             Some(on) => self.hd_textures = Some(on),
             None => {
                 self.hd_textures = Some(true);
@@ -708,13 +732,17 @@ impl Settings {
         )
     }
 
-    /// Writes this launcher's keys into an `OutRun2006Tweaks.ini`, keeping
-    /// every other line (comments, keys we do not manage) as it was.
-    pub fn apply_tweaks(&self, ini: &str) -> String {
-        let put = |t: &str, section: &str, key: &str, value: &str| {
-            ini::set_section_key(t, section, key, value)
-        };
-        let mut t = ini.to_string();
+    /// Writes this launcher's keys into an `OutRun2006Tweaks.ini`'s text,
+    /// keeping every other line (comments, keys we do not manage) as it was.
+    pub fn apply_tweaks(&self, text: &str) -> String {
+        let mut ini = Ini::parse(text);
+        self.tweak(&mut ini);
+        ini.to_text().expect("parsed from text")
+    }
+
+    /// Sets this launcher's keys in an `OutRun2006Tweaks.ini`.
+    pub fn tweak(&self, ini: &mut Ini) {
+        let mut put = |section: &str, key: &str, value: &str| ini.set(section, key, value);
         // Exclusive fullscreen turns the cap into a refresh-rate request.
         let cap = match self.fps_cap() {
             0 => 0,
@@ -722,15 +750,13 @@ impl Settings {
             n => n,
         };
         let interp = cap == 0 || cap > 60;
-        t = put(&t, "Performance", "FramerateLimit", &cap.to_string());
-        t = put(
-            &t,
+        put("Performance", "FramerateLimit", &cap.to_string());
+        put(
             "Performance",
             "FramerateInterpolation",
             if interp { "true" } else { "false" },
         );
-        t = put(
-            &t,
+        put(
             "Performance",
             "VSync",
             &match self.vsync.unwrap_or(Vsync::On) {
@@ -740,22 +766,19 @@ impl Settings {
             .to_string(),
         );
 
-        t = put(&t, "Controls", "UseNewInput", "true");
-        t = put(
-            &t,
+        put("Controls", "UseNewInput", "true");
+        put(
             "Controls",
             "InputBackend",
             &self.backend().ini().to_string(),
         );
-        t = put(
-            &t,
+        put(
             "Controls",
             "SteeringDeadZone",
             &format!("{:.2}", f64::from(self.deadzone_percent()) / 100.0),
         );
-        t = put(&t, "Controls", "ControllerHotPlug", "false");
-        t = put(
-            &t,
+        put("Controls", "ControllerHotPlug", "false");
+        put(
             "Controls",
             "DefaultManualTransmission",
             if self.manual_gearbox.unwrap_or(false) {
@@ -764,33 +787,28 @@ impl Settings {
                 "false"
             },
         );
-        t = put(
-            &t,
+        put(
             "Controls",
             "VibrationMode",
             &self.feedback().ini().to_string(),
         );
-        t = put(
-            &t,
+        put(
             "Controls",
             "VibrationStrength",
             &self.vibration_strength.unwrap_or(7).to_string(),
         );
-        t = put(
-            &t,
+        put(
             "Controls",
             "ImpulseVibrationMode",
             &self.impulse().ini().to_string(),
         );
 
-        t = put(
-            &t,
+        put(
             "Graphics",
             "AnisotropicFiltering",
             &self.anisotropy.unwrap_or(16).to_string(),
         );
-        t = put(
-            &t,
+        put(
             "Graphics",
             "ReflectionResolution",
             &match self.reflections.unwrap_or(2048) {
@@ -799,14 +817,12 @@ impl Settings {
             }
             .to_string(),
         );
-        t = put(
-            &t,
+        put(
             "Graphics",
             "DrawDistanceIncrease",
             &self.draw_distance.unwrap_or(4).to_string(),
         );
-        t = put(
-            &t,
+        put(
             "Graphics",
             "UseHiDefCharacters",
             if self.on(&self.hd_characters) {
@@ -815,8 +831,7 @@ impl Settings {
                 "false"
             },
         );
-        t = put(
-            &t,
+        put(
             "Graphics",
             "RestoreXboxBrightness",
             if self.xbox_brightness.unwrap_or(false) {
@@ -825,15 +840,13 @@ impl Settings {
                 "false"
             },
         );
-        t = put(
-            &t,
+        put(
             "Graphics",
             "SkyGlowFactor",
             if self.on(&self.sky_glow) { "4" } else { "0" },
         );
 
-        t = put(
-            &t,
+        put(
             "Window",
             "WindowedBorderless",
             if self.fullscreen.unwrap_or(false) {
@@ -842,14 +855,13 @@ impl Settings {
                 "true"
             },
         );
-        t = put(&t, "Window", "WindowPositionX", "0");
-        t = put(&t, "Window", "WindowPositionY", "0");
-        t = put(&t, "Window", "WindowedHideMouseCursor", "true");
-        t = put(&t, "Window", "DisableDPIScaling", "true");
-        t = put(&t, "Window", "AutoDetectResolution", "false");
+        put("Window", "WindowPositionX", "0");
+        put("Window", "WindowPositionY", "0");
+        put("Window", "WindowedHideMouseCursor", "true");
+        put("Window", "DisableDPIScaling", "true");
+        put("Window", "AutoDetectResolution", "false");
 
-        t = put(
-            &t,
+        put(
             "CDSwitcher",
             "SwitcherEnable",
             if self.on(&self.cd_switcher) {
@@ -858,8 +870,7 @@ impl Settings {
                 "false"
             },
         );
-        t = put(
-            &t,
+        put(
             "CDSwitcher",
             "SwitcherShuffleTracks",
             if self.music_shuffle.unwrap_or(false) {
@@ -869,8 +880,7 @@ impl Settings {
             },
         );
 
-        t = put(
-            &t,
+        put(
             "Misc",
             "SkipIntroLogos",
             if self.on(&self.skip_logos) {
@@ -879,8 +889,7 @@ impl Settings {
                 "false"
             },
         );
-        t = put(
-            &t,
+        put(
             "Misc",
             "DisableCountdownTimer",
             if self.on(&self.free_drive) {
@@ -889,14 +898,12 @@ impl Settings {
                 "false"
             },
         );
-        t = put(
-            &t,
+        put(
             "Audio",
             "AllowHorn",
             if self.on(&self.horn) { "true" } else { "false" },
         );
-        t = put(
-            &t,
+        put(
             "Misc",
             "RandomHighwayAnimSets",
             if self.on(&self.random_anims) {
@@ -905,9 +912,8 @@ impl Settings {
                 "false"
             },
         );
-        t = put(&t, "Misc", "AllowCharacterSelection", "false");
-        t = put(
-            &t,
+        put("Misc", "AllowCharacterSelection", "false");
+        put(
             "Misc",
             "ShowOutRunMilesOnMenu",
             if self.on(&self.show_miles) {
@@ -916,187 +922,18 @@ impl Settings {
                 "false"
             },
         );
-        t
     }
 
+    /// Command-line values (`--fps-limit 120`); the launcher's own switches
+    /// (`--no-window`, ...) are taken out before.
     pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Settings, String> {
         let mut s = Settings::default();
-        let mut args = args.into_iter();
-        while let Some(arg) = args.next() {
-            let mut value = |name: &str| {
-                args.next()
-                    .ok_or_else(|| format!("{name} needs a value\n\n{USAGE}"))
-            };
-            match arg.as_str() {
-                "--game" => s.game = Some(value("--game")?.into()),
-                "--runtime" => s.runtime = Some(value("--runtime")?.into()),
-                "--saves" => s.saves = Some(value("--saves")?.into()),
-                "--resolution" => {
-                    let v = value("--resolution")?;
-                    s.resolution = Some(parse_resolution(&v).ok_or_else(|| {
-                        format!("--resolution needs WIDTHxHEIGHT or original, not {v}\n\n{USAGE}")
-                    })?);
-                }
-                "--antialiasing" => {
-                    let v = value("--antialiasing")?;
-                    s.antialiasing = Some(
-                        v.parse()
-                            .ok()
-                            .filter(|n| [0, 2].contains(n))
-                            .ok_or_else(|| {
-                                format!("--antialiasing needs 0 or 2, not {v}\n\n{USAGE}")
-                            })?,
-                    );
-                }
-                "--fps-limit" => {
-                    let v = value("--fps-limit")?;
-                    let lower = v.trim().to_ascii_lowercase();
-                    s.fps_limit = Some(if lower == "unlimited" || lower == "off" {
-                        0
-                    } else {
-                        v.parse().ok().filter(valid_fps).ok_or_else(|| {
-                            format!("--fps-limit needs 10 to 240 or unlimited, not {v}\n\n{USAGE}")
-                        })?
-                    });
-                }
-                "--draw-distance" => {
-                    let v = value("--draw-distance")?;
-                    s.draw_distance =
-                        Some(v.parse().ok().filter(|n| *n <= 8).ok_or_else(|| {
-                            format!("--draw-distance needs 0 to 8, not {v}\n\n{USAGE}")
-                        })?);
-                }
-                "--reflections" => {
-                    let v = value("--reflections")?;
-                    s.reflections = Some(parse_reflections(&v).ok_or_else(|| {
-                        format!("--reflections needs original (128), 512, 1024 or 2048, not {v}\n\n{USAGE}")
-                    })?);
-                }
-                "--anisotropy" => {
-                    let v = value("--anisotropy")?;
-                    s.anisotropy = Some(parse_count(&v, 16).ok_or_else(|| {
-                        format!("--anisotropy needs 0 to 16, not {v}\n\n{USAGE}")
-                    })?);
-                }
-                "--deadzone" => {
-                    let v = value("--deadzone")?;
-                    s.deadzone =
-                        Some(v.parse().ok().filter(|n| *n <= 50).ok_or_else(|| {
-                            format!("--deadzone needs 0 to 50, not {v}\n\n{USAGE}")
-                        })?);
-                }
-                "--vibration-strength" => {
-                    let v = value("--vibration-strength")?;
-                    s.vibration_strength =
-                        Some(v.parse().ok().filter(|n| *n <= 10).ok_or_else(|| {
-                            format!("--vibration-strength needs 0 to 10, not {v}\n\n{USAGE}")
-                        })?);
-                }
-                "--vibration" | "--impulse-triggers" => {
-                    let v = value(&arg)?;
-                    let mode = Feedback::parse(&v).ok_or_else(|| {
-                        format!(
-                            "{} needs off, on, swapped or merged, not {v}\n\n{USAGE}",
-                            arg
-                        )
-                    })?;
-                    if arg == "--vibration" {
-                        s.vibration = Some(mode);
-                    } else {
-                        s.impulse_triggers = Some(mode);
-                    }
-                }
-                "--input-backend" => {
-                    let v = value("--input-backend")?;
-                    s.input_backend = Backend::parse(&v).ok_or_else(|| {
-                        format!(
-                            "--input-backend needs wgi, raw, dinput or xinput, not {v}\n\n{USAGE}"
-                        )
-                    })?;
-                }
-                "--hd-textures" => s.set_hd_textures(&value("--hd-textures")?),
-                "--hd-textures-folder" => {
-                    s.hd_textures_folder = Some(value("--hd-textures-folder")?.into())
-                }
-                "--vsync" => {
-                    let v = value("--vsync")?;
-                    s.vsync = Some(match v.trim().to_ascii_lowercase().as_str() {
-                        "on" | "true" => Vsync::On,
-                        "off" | "false" => Vsync::Off,
-                        _ => {
-                            return Err(format!("--vsync needs on or off, not {v}\n\n{USAGE}"));
-                        }
-                    });
-                }
-                flag @ ("--fullscreen" | "--sky-glow" | "--xbox-brightness" | "--hd-characters"
-                | "--manual-gearbox" | "--cd-switcher" | "--music-shuffle"
-                | "--skip-logos" | "--free-drive" | "--horn" | "--random-anims"
-                | "--show-miles" | "--soundtrack-fix") => {
-                    let v = value(flag)?;
-                    let b = parse_bool(&v)
-                        .ok_or_else(|| format!("{flag} needs on or off, not {v}\n\n{USAGE}"))?;
-                    match flag {
-                        "--fullscreen" => s.fullscreen = Some(b),
-                        "--sky-glow" => s.sky_glow = Some(b),
-                        "--xbox-brightness" => s.xbox_brightness = Some(b),
-                        "--hd-characters" => s.hd_characters = Some(b),
-                        "--manual-gearbox" => s.manual_gearbox = Some(b),
-                        "--cd-switcher" => s.cd_switcher = Some(b),
-                        "--music-shuffle" => s.music_shuffle = Some(b),
-                        "--skip-logos" => s.skip_logos = Some(b),
-                        "--free-drive" => s.free_drive = Some(b),
-                        "--horn" => s.horn = Some(b),
-                        "--random-anims" => s.random_anims = Some(b),
-                        "--show-miles" => s.show_miles = Some(b),
-                        _ => s.soundtrack_fix = Some(b),
-                    }
-                }
-                "--help" | "-h" | "/?" => return Err(USAGE.into()),
-                other => return Err(format!("unknown argument {other}\n\n{USAGE}")),
-            }
+        match cfg::parse_args(args, &FLAG_KEYS, &[], |k, v| s.apply(k, v, Source::Args)) {
+            Ok(_) => Ok(s),
+            Err(cfg::ArgError::Help) => Err(USAGE.into()),
+            Err(e) => Err(format!("{e}\n\n{USAGE}")),
         }
-        Ok(s)
     }
-}
-
-/// Sets `key` in a settings file, keeping every other line (and comments)
-/// as it was: replaces the first active or empty `key =` line, else appends.
-pub fn set_key(text: &str, key: &str, value: &str) -> String {
-    let is_key = |line: &str| {
-        let line = line.trim();
-        !line.starts_with('#') && line.split_once('=').is_some_and(|(k, _)| k.trim() == key)
-    };
-    let mut out = String::with_capacity(text.len() + key.len() + value.len() + 4);
-    let mut done = false;
-    for line in text.lines() {
-        if !done && is_key(line) {
-            out.push_str(&format!("{key} = {value}"));
-            done = true;
-        } else {
-            out.push_str(line);
-        }
-        out.push('\n');
-    }
-    if !done {
-        out.push_str(&format!("{key} = {value}\n"));
-    }
-    out
-}
-
-/// Turns `key` off in a settings file: its active line becomes a comment,
-/// so the default applies; other lines are kept.
-pub fn clear_key(text: &str, key: &str) -> String {
-    let mut out = String::with_capacity(text.len() + 2);
-    for line in text.lines() {
-        let t = line.trim();
-        if !t.starts_with('#') && t.split_once('=').is_some_and(|(k, _)| k.trim() == key) {
-            out.push_str(&format!("#{key} ="));
-        } else {
-            out.push_str(line);
-        }
-        out.push('\n');
-    }
-    out
 }
 
 #[cfg(test)]
@@ -1214,6 +1051,34 @@ mod tests {
     }
 
     #[test]
+    fn tweaks_ini_written_by_older_launchers_is_kept_byte_for_byte() {
+        // What the launcher wrote before the SDK (LF, spaced keys, comments):
+        // rewriting it with the same settings changes nothing, and a new
+        // value changes only its own line.
+        let before = Settings::default().apply_tweaks(&format!(
+            "# OutRun2006Tweaks\n\n# comment stays\n{}",
+            crate::tweaks::BASE_INI
+        ));
+        assert_eq!(Settings::default().apply_tweaks(&before), before);
+        let faster = Settings::parse_file("fps_limit = 120\n")
+            .0
+            .apply_tweaks(&before);
+        assert_eq!(
+            faster,
+            before
+                .replace("FramerateLimit = 60\n", "FramerateLimit = 120\n")
+                .replace(
+                    "FramerateInterpolation = false\n",
+                    "FramerateInterpolation = true\n"
+                )
+        );
+        // An unspaced line the player wrote is rewritten in our spelling,
+        // in place.
+        let mine = before.replace("VibrationStrength = 7", "vibrationstrength=7");
+        assert_eq!(Settings::default().apply_tweaks(&mine), before);
+    }
+
+    #[test]
     fn parses_arguments() {
         let s = args(&[
             "--game",
@@ -1244,6 +1109,31 @@ mod tests {
         assert!(args(&["--vsync", "half"]).is_err());
         assert!(args(&["--antialiasing", "4"]).is_err());
         assert!(args(&["--reflections", "256"]).is_err());
+        assert!(
+            args(&["--scaler", "fsr"]).is_err(),
+            "the window's setting only"
+        );
+        assert!(args(&["--character-select", "on"]).is_err());
+        // The messages name the flag and end with the usage.
+        let bad = args(&["--resolution", "big"]).unwrap_err();
+        assert!(bad.starts_with("--resolution needs WIDTHxHEIGHT or original, not big\n\n"));
+        assert!(bad.ends_with(USAGE));
+        let bad = args(&["--horn", "loud"]).unwrap_err();
+        assert!(bad.starts_with("--horn needs on or off, not loud\n\n"));
+        assert!(
+            args(&["--game"])
+                .unwrap_err()
+                .starts_with("--game needs a value\n\n")
+        );
+        assert!(
+            args(&["--bogus"])
+                .unwrap_err()
+                .starts_with("unknown argument --bogus\n\n")
+        );
+        assert_eq!(
+            args(&["--resolution", "off"]).unwrap().resolution,
+            Some(ORIGINAL)
+        );
     }
 
     #[test]
@@ -1313,8 +1203,22 @@ mod tests {
         );
         assert_eq!(s.game, Some(PathBuf::from(r"C:\G")));
         assert_eq!(s.runtime, None);
-        assert_eq!(warnings.len(), 2, "{warnings:?}");
-        assert!(warnings[0].contains("line 6"));
+        assert_eq!(warnings.len(), 3, "{warnings:?}");
+        // An unknown key is reported and kept in the file.
+        assert!(warnings[0].contains("line 2: unknown setting \"future\""));
+        assert_eq!(
+            warnings[1],
+            "launcher.cfg line 6: resolution needs WIDTHxHEIGHT (640x480 to 7680x4320) or original, not \"8000x100\""
+        );
+        assert_eq!(
+            warnings[2],
+            "launcher.cfg line 7: deadzone needs 0 to 50, not \"99\""
+        );
+        let (_, warnings) = Settings::parse_file("fullscreen = maybe\n");
+        assert_eq!(
+            warnings,
+            ["launcher.cfg line 1: fullscreen needs true or false, not \"maybe\""]
+        );
     }
 
     #[test]
@@ -1326,7 +1230,11 @@ mod tests {
         assert_eq!(s.game, Some(PathBuf::from(r"D:\OutRun 2006")));
         let again = set_key(&filled, "game", r"E:\OutRun 2006");
         assert_eq!(again.matches("game =").count(), 1);
-        assert!(set_key("#game = x\n", "game", "y").ends_with("#game = x\ngame = y\n"));
+        // A commented-out example becomes the line, under its comment.
+        assert_eq!(
+            set_key("# The game\n#game = x\n", "game", "y"),
+            "# The game\ngame = y\n"
+        );
     }
 
     #[test]
