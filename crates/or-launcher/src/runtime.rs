@@ -162,10 +162,72 @@ pub fn native(root: &Path, rel: &str) -> PathBuf {
         .fold(root.to_path_buf(), |p, part| p.join(part))
 }
 
-/// Refuses runtime folders that overlap the game folder.
-pub fn check_separate(game: &Path, runtime: &Path) -> Result<(), String> {
-    let g = fs::canonicalize(game).map_err(|e| format!("game folder {}: {e}", game.display()))?;
-    let r = fs::canonicalize(runtime).unwrap_or_else(|_| runtime.to_path_buf());
+/// Drops `.` and folds `..` into the component before it, as text.
+fn normalize(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                if !normalized.pop() && !normalized.has_root() {
+                    normalized.push("..");
+                }
+            }
+            _ => normalized.push(component.as_os_str()),
+        }
+    }
+    normalized
+}
+
+/// The absolute, real form of `path`, even when its last components don't
+/// exist yet: the nearest existing ancestor is canonicalized (links and
+/// Windows path aliases resolved), then the rest is appended with `.` and
+/// `..` handled as text. Relative paths start at `cwd`.
+pub fn resolve(path: &Path, cwd: &Path) -> Result<PathBuf, String> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        cwd.join(path)
+    };
+    let mut ancestor = absolute.as_path();
+    let mut suffix = Vec::new();
+    loop {
+        match fs::canonicalize(ancestor) {
+            Ok(base) => {
+                let mut resolved = base;
+                for component in suffix.iter().rev() {
+                    resolved.push(component);
+                }
+                return Ok(normalize(&resolved));
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                let Some(component) = ancestor.components().next_back() else {
+                    return Err(format!("cannot resolve {}", path.display()));
+                };
+                match component {
+                    std::path::Component::Normal(name) => suffix.push(name.to_os_string()),
+                    std::path::Component::ParentDir => suffix.push("..".into()),
+                    std::path::Component::CurDir => {}
+                    _ => return Err(format!("cannot resolve {}: {error}", path.display())),
+                }
+                ancestor = ancestor
+                    .parent()
+                    .ok_or_else(|| format!("cannot resolve {}: {error}", path.display()))?;
+            }
+            Err(error) => return Err(format!("cannot resolve {}: {error}", path.display())),
+        }
+    }
+}
+
+fn check_separate_from(game: &Path, runtime: &Path, cwd: &Path) -> Result<(), String> {
+    let absolute_game = if game.is_absolute() {
+        game.to_path_buf()
+    } else {
+        cwd.join(game)
+    };
+    let g = fs::canonicalize(&absolute_game)
+        .map_err(|e| format!("game folder {}: {e}", game.display()))?;
+    let r = resolve(runtime, cwd)?;
     if r.starts_with(&g) || g.starts_with(&r) {
         return Err(format!(
             "the runtime folder {} must be outside the game folder {}",
@@ -174,6 +236,14 @@ pub fn check_separate(game: &Path, runtime: &Path) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+/// Refuses runtime folders that overlap the game folder, also when the
+/// runtime folder doesn't exist yet, is relative, or is reached through a
+/// link.
+pub fn check_separate(game: &Path, runtime: &Path) -> Result<(), String> {
+    let cwd = std::env::current_dir().map_err(|e| format!("current directory: {e}"))?;
+    check_separate_from(game, runtime, &cwd)
 }
 
 fn make_writable(path: &Path) -> io::Result<()> {
@@ -487,5 +557,42 @@ mod tests {
         assert!(check_separate(&game, &game.join("rt")).is_err());
         assert!(check_separate(&game, &temp("elsewhere")).is_ok());
         fs::remove_dir_all(&game).unwrap();
+    }
+
+    #[test]
+    fn relative_dotdot_and_missing_runtime_folders_are_checked_too() {
+        let game = temp("relative-overlap");
+        fs::create_dir_all(&game).unwrap();
+        let accepted = resolve(Path::new("../outside-runtime"), &game).unwrap();
+        assert!(accepted.is_absolute());
+        assert_eq!(
+            accepted,
+            fs::canonicalize(game.parent().unwrap())
+                .unwrap()
+                .join("outside-runtime")
+        );
+        assert!(!accepted.exists());
+        assert!(check_separate_from(&game, Path::new("child"), &game).is_err());
+        assert!(check_separate_from(&game, Path::new("missing/../child"), &game).is_err());
+        assert!(check_separate_from(&game, Path::new("a/b/c"), &game).is_err());
+        assert!(!game.join("child").exists(), "nothing is created");
+        assert!(check_separate_from(&game, Path::new("../outside"), &game).is_ok());
+        // The game folder itself, and a folder holding it.
+        assert!(check_separate_from(&game, Path::new("."), &game).is_err());
+        assert!(check_separate_from(&game, Path::new(".."), &game).is_err());
+        fs::remove_dir_all(game).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_runtime_folder_reached_through_a_link_is_checked() {
+        let game = temp("alias-game");
+        let alias = temp("alias-link");
+        fs::create_dir_all(&game).unwrap();
+        std::os::unix::fs::symlink(&game, &alias).unwrap();
+        assert!(check_separate(&game, &alias.join("new-runtime")).is_err());
+        assert!(!game.join("new-runtime").exists());
+        fs::remove_file(alias).unwrap();
+        fs::remove_dir_all(game).unwrap();
     }
 }

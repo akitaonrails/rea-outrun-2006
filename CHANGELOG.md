@@ -31,6 +31,9 @@ All notable changes to this project. The format follows
   keys match without regard to case, so a key typed in another case is
   replaced in place instead of added a second time. Files written by
   earlier versions come out the same.
+- The runtime folder is refused inside the game folder (or around it) also
+  when it doesn't exist yet, is a relative path, or is reached through a
+  link.
 
 ### Changed
 
