@@ -16,14 +16,19 @@ What was checked by running the game, newest first. Paths use
 
 ## Unverified options (in the window, effect not yet seen in the game)
 
-- Frame rates above 60 (Tweaks' interpolation) and `unlimited`.
+- Frame rates above 60: reached (119.6 fps at 120, uncapped with `unlimited`,
+  2026-11-02 headless pass); how smooth the interpolation looks needs eyes.
 - Impulse triggers (needs Windows and an Xbox One/Series pad).
-- Input APIs other than XInput and WGI under Wine (RawInput, DirectInput),
-  and WGI on native Windows.
+- Input APIs other than XInput and WGI under Wine (RawInput, DirectInput)
+  with a pad, and WGI on native Windows (each one starts and quits cleanly
+  without a pad: 2026-11-02 headless pass).
 - The HD pack drawn in a race (the download and unpack were checked).
 - `DX/FOG = 1` versus 0 (a side-by-side wasn't captured).
 
 ## SDK v0.3.0 pass — to check by running the game
+
+(The two or-play items were verified on 2026-11-02; the Windows one is
+pending.)
 
 - `or-play --play --scaler fsr --resolution 1280x720`: `play.log` shows
   gamescope `-W 1280 -H 720 … -F fsr`; a plain `or-play --play` afterwards
@@ -34,6 +39,10 @@ What was checked by running the game, newest first. Paths use
   Direct3D 9 (unit-tested with fake files).
 
 ## Clean exit and single instance — pending real-game checks
+
+Under Wine + or-play, all but the game's own Quit and Steam's Stop were
+checked with the game on 2026-11-02 (see that section); still pending
+there: the game's Quit, Proton, native Windows.
 
 Unit- and Wine-tested with fakes only (the instance mutex under
 `wine-test`, or-play's stop/interrupt/lock in `linux/tests/`). To check
@@ -63,7 +72,7 @@ confirming afterwards that no `OR2006C2C.exe`, `OutRunLauncher.exe`,
 - The settings window's new layout (a note under every row, grouped
   Picture tab, 13 pt caption plate on the photo, lighter control borders):
   judge it by eye on Windows and under Wine, at 1280×800 and 4K. The
-  README screenshots (`docs/images/launcher-*.jpg`) predate it: retake them.
+  README screenshots were retaken with it (2026-11-02).
 - `--check`, `--help` and errors printed to the terminal on Windows
   (`console::attach_parent`) and a dialog when double-clicked.
 - `or-play --play --scaler fsr` picks FSR for one run.
@@ -96,6 +105,80 @@ tests but not yet seen with the game:
   the settings window (OutRun2006Tweaks reads pads through SDL). Check the
   pad in menus and in a race with XInput and WGI, and that nothing reads
   it twice.
+
+## 2026-11-02 — real-game verification, headless (agent)
+
+Setup: the `gaming` distrobox (Wine 11.21, gamescope 3.17.0, DXVK 3.1.1,
+RTX 5090), the release build of this commit range
+(`cargo build --release --locked --target i686-pc-windows-gnu`, packaged
+with `packaging/package.sh` from the pinned cache), the owner's install
+(`$OR2006_GAME_DIR`, read only; the Tweaks EXE edition `68ceb386…`), a
+throwaway prefix, `HOME`/`XDG_*` and logs under `.work/realgame/`, the
+process environment scrubbed (`env -i`). A supervisor inside the box ran
+`linux/or-play --play --game 'Z:\…' <flags>` with a `gamescope` shim on
+`PATH` that adds `--backend headless`, a private PipeWire with a null sink
+(`rea-null`, ALSA/Bluetooth monitors off; the game's audio went there),
+waited for `OR2006C2C.exe`, took `gamescopectl screenshot`, did the
+action, then checked every task carrying the run's tag (and gamescope by
+pid), and ended whatever was left (TERM, then KILL). Every run ended with
+no task left; no zombie of ours. Evidence: `.work/realgame/logs/<time>-<scenario>/`
+(`supervisor.txt`, `launcher.log`, `play.log`, the INIs at start and
+exit, process lists) and `.work/realgame/shots/`.
+
+Within 20–40 s the game shows its boot logos or its attract video; menus
+and races need input, so every screenshot is the attract mode.
+
+| Check | Result | Evidence (`logs/…`, `shots/…`) |
+| --- | --- | --- |
+| First run: runtime (3,553 files), saves, Tweaks, VC++, DXVK, soundtrack fix, winebus baseline; game renders | VERIFIED | `134212-stop` |
+| `--look original`: `outrun2006.ini` 640×480, `OutRun2006Tweaks.ini` = snapshot `look-original-wine.txt` (comments aside), boot logos shown, original "Rush a Difficulty" restored | VERIFIED | `135107-wmclose` |
+| `--look steam_deck`: 1280×800, Tweaks INI = snapshot | VERIFIED | `135203-sigint` |
+| `--look coast_to_coast`: the screen's 1920×1080 (gamescope's), Tweaks INI = snapshot | VERIFIED | `135309-sigterm` |
+| `WM_CLOSE` (`wine taskkill /im OR2006C2C.exe`, no `/f`) | VERIFIED: the game honours it; `game exited with 0`, everything gone in 2.8 s | `135107-wmclose` |
+| `or-play stop` | VERIFIED: gone in 1.2–3.0 s, or-play exits 0 | `134212-stop`, `135527-stop`, `140621-stop` |
+| SIGINT to `or-play` (Ctrl+C) | VERIFIED: gone in 1.1 s, exit 143 | `135203-sigint` |
+| SIGTERM to `or-play` | VERIFIED: gone in 1.1 s, exit 143 | `135309-sigterm` |
+| gamescope ended (SIGTERM) | VERIFIED: gone in 2.6 s | `135408-gamescope` |
+| The game's own Quit | NOT CHECKABLE HEADLESS: needs the menus; a person picks Exit and checks the same | — |
+| Second `or-play --play` while the game runs | VERIFIED: "already running", exit 0, no second game | `135638-second` |
+| Second `OutRunLauncher.exe --no-window` while the game runs | VERIFIED: the "already running" message on stdout and in `launcher.log` (`GameRunning`), exit 0, no second game | `135638-second` |
+| Second `--download-hd-pack` / `--settings --linux` while the game runs | VERIFIED as far as headless goes: same message and log line, then a dialog waits for OK (both started without `--no-window`); exit codes after OK not seen (unit-tested) | `135638-second` |
+| Launcher killed (SIGKILL) while the game runs, under or-play | VERIFIED: or-play's inner script then runs `wineserver -k`, so the game ends with it (no orphan game); a new launcher afterwards starts normally. Native Windows not checked | `140005-killlauncher` |
+| Saves written back on exit | Partly: `game exited with 0` after `WM_CLOSE`; no save was made in the attract mode, so nothing to copy. After `or-play stop`/signals the launcher is killed before its write-back (by design the next start syncs) | `135107-wmclose` |
+| Frame rate 120 (`--fps-limit 120`, vsync on, gamescope `-r 144`) | VERIFIED: `FramerateLimit = 120`, `FramerateInterpolation = true` read by Tweaks; DXVK HUD 119.6 fps, frame times 6.3–10.4 ms. Smoothness of the interpolated frames: screenshot for the owner | `135408-gamescope`, `shots/135408-gamescope-shot-gamescopectl.jpg` |
+| `--fps-limit unlimited --vsync off` | VERIFIED: `FramerateLimit = 0`, `VSync = 0`; DXVK HUD 4,363 fps in the attract video (the GPU runs flat out) | `135527-stop` |
+| Input API `wgi`/`raw`/`dinput` (and `xinput`, the Wine default, every other run) without a pad | VERIFIED as far as it goes: `InputBackend` 0/1/2(/3) written and read, the new input hook applied, the game runs 20 s and quits cleanly, no CrashDumps. Reading a pad through each: NOT CHECKABLE HEADLESS (needs a pad and a person in the menus) | `140241-stop`, `140321-stop`, `140400-stop` |
+| `outrun2006.ini` keeps `LANGUAGE`, `DX/FOG`, `DX/ADAPTER` | VERIFIED: set to 2/0/1 in the runtime copy, the launcher rewrote only the size (1920×1080) and kept them, the game kept them on exit, and its messages came up in German (`LANGUAGE = 2`) | `140130-wmclose` |
+| `DX/ADAPTER = 1` on this machine | FAILED (the game's, kept by design): DXVK under or-play shows the game one adapter (NVIDIA only), so the game stops with "Direct3D kann mit den aktuellen Einstellungen nicht eingerichtet werden" (Direct3D can't be set up). A copy whose INI names a second GPU won't start here; for the owner to decide whether the launcher should reset an adapter that isn't there | `shots/140130-wmclose-shot-gamescopectl.jpg` |
+| `or-play --play --scaler fsr --resolution 1280x720` | VERIFIED: gamescope `-W 1280 -H 720 -w 1280 -h 720 … -F fsr`, the game at 1280×720, `launcher.cfg` unchanged (same MD5) | `140451-stop` |
+| `or-play --play --resolution off` | VERIFIED: gamescope 640×480, the game 640×480 | `140526-stop` |
+| SDL background-events variables reach the game | VERIFIED: `SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS=1`, `SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1` in the game's environment | `140451-stop/mid.txt` |
+| Settings window under Wine at DPI 144 and 192 | VERIFIED (screenshots for the owner): 1188×1026 at 144 and 1232×1064 at 192 on a 1920×1080 screen (shrunk to fit), 1760×1520 (2×) at 192 on 3840×2160; fully drawn each time | `shots/134951-win-dpi144-first.jpg`, `135011-win-dpi192-first.jpg`, `135032-win-dpi192-4k-first.jpg` |
+| README screenshots | Retaken with this build at 96 DPI (commit `docs: retake the settings-window screenshots`) | `docs/images/launcher-*.jpg` |
+
+Found on the way:
+
+- **Fixed:** a `look =` line in `launcher.cfg` played that look, but the
+  settings window opened on Custom at 640×480 and Play saved 640×480 over
+  it (`fix(form): open the window on the look launcher.cfg names`).
+- `or-play --play --look …` (and `look =` without a `resolution`) sizes
+  gamescope at 1920×1080 whatever the look's race size: or-play reads only
+  `resolution` and `scaler`. With `-S fit` gamescope scales the game's
+  window (a 1280×800 Steam Deck race shows letterboxed in 16:9). Not
+  changed; for the owner.
+- A `launcher.cfg` holding only `game =` (what `--play --game` writes on
+  a first run) plays 640×480 (the documented exception for an unset
+  resolution) while or-play still starts gamescope at 1920×1080, and the
+  window shows Custom.
+- gamescope 3.17.0's headless backend segfaults when it shuts down after
+  its child exits (or-play then exits 139; a core dump is recorded by the
+  host). Nothing is left behind; seen in the other launchers' runs too.
+  Not seen with a real display yet.
+
+Still pending: the game's own Quit, a pad through each input API, the HD
+pack in a race, fog 0 vs 1 side by side, `or-play stop` through
+`OR_RUN="distrobox enter gaming --"` from the host, native Windows,
+Proton (Steam's Stop), the AppImage's Wine.
 
 ## 2026-11-02 — the owner's play-test before v0.1.0
 
