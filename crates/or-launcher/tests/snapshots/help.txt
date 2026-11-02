@@ -1,4 +1,4 @@
-OutRunLauncher 0.1.0
+OutRunLauncher <version>
 
 OutRunLauncher [options]
   Without options the settings window opens first, then the game.

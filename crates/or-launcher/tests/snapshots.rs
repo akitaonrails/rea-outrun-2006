@@ -49,7 +49,11 @@ fn run(file: &str, flags: &[&str], wine: bool) -> Settings {
 
 #[test]
 fn help_and_template() {
-    snapshot("help.txt", &config::usage());
+    // The version changes every release; the snapshot keeps a placeholder.
+    snapshot(
+        "help.txt",
+        &config::usage().replace(env!("CARGO_PKG_VERSION"), "<version>"),
+    );
     snapshot("launcher.cfg", &config::template());
 }
 
