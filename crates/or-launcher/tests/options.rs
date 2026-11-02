@@ -240,6 +240,34 @@ fn the_defaults_are_the_coast_to_coast_set() {
 }
 
 #[test]
+fn every_bundled_dll_wine_also_ships_loads_native_under_wine() {
+    // Wine ignores WINEDLLOVERRIDES in the game's environment block (SDK
+    // v0.3.3): the per-program AppDefaults key is what reaches the loader.
+    let w = plan(&Settings::default(), true, None);
+    let mut names: Vec<&str> = w.app_dll_overrides.iter().map(|(d, _)| *d).collect();
+    names.sort_unstable();
+    assert_eq!(
+        names,
+        ["d3d9", "dinput8", "msvcp140", "vcomp140", "vcruntime140"]
+    );
+    assert!(
+        w.app_dll_overrides
+            .iter()
+            .all(|(_, mode)| *mode == "native,builtin")
+    );
+    // Every VC++ DLL the runtime copy gets is covered.
+    for dll in or_launcher::tweaks::VC_DLLS {
+        assert!(names.contains(&dll.trim_end_matches(".dll")), "{dll}");
+    }
+    // Windows loads the program folder's copies anyway: nothing to write.
+    assert!(
+        plan(&Settings::default(), false, None)
+            .app_dll_overrides
+            .is_empty()
+    );
+}
+
+#[test]
 fn a_look_flag_sets_every_value_and_single_flags_win() {
     let preset = |look: &str| form::look_settings(look, Some((2560, 1440)), false);
     let saved = file("fps_limit = 120\ndraw_distance = 8\n");

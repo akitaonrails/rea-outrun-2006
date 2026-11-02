@@ -383,6 +383,26 @@ pub fn texture_keys(ini: &mut Ini, pack: Option<&Path>) {
 /// away (no download prompts).
 pub const WINE_OVERRIDES: &str = "dinput8=n,b;d3d9=n,b;mscoree,mshtml=d";
 
+/// How Wine loads each of [`app_dll_overrides`]: the bundled copy, else
+/// Wine's (`rea_launcher_win32::wine::DllMode::NativeThenBuiltin`).
+pub const APP_DLL_MODE: &str = "native,builtin";
+
+/// The bundled DLLs Wine also ships, by the names Wine's overrides use:
+/// the mod's `dinput8`, DXVK's `d3d9` and the VC++ runtime ([`VC_DLLS`]).
+/// Under Wine they load as the runtime copy's (`native,builtin`) through
+/// Wine's per-program key for the game's EXE
+/// (`rea_launcher_win32::wine::app_dll_overrides`): Wine ignores a
+/// `WINEDLLOVERRIDES` in the game's environment block, so without the key
+/// a launcher started by plain Proton got Wine's own VC++ runtime.
+pub fn app_dll_overrides(wine: bool) -> Vec<&'static str> {
+    if !wine {
+        return Vec::new();
+    }
+    let mut dlls = vec!["dinput8", "d3d9"];
+    dlls.extend(VC_DLLS.iter().map(|dll| dll.trim_end_matches(".dll")));
+    dlls
+}
+
 /// `WINEDLLOVERRIDES` for the game: our rules first, then the player's
 /// own, minus their rules for the DLLs ours cover (Wine doesn't promise
 /// which of two rules for one DLL wins). Everything else they set is kept.
@@ -977,6 +997,42 @@ mod tests {
             wine_overrides(Some("odd;;foo=n")),
             format!("{WINE_OVERRIDES};odd;foo=n")
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_app_dll_mode_is_the_sdks_native_then_builtin() {
+        use rea_launcher_win32::wine::DllMode;
+        assert_eq!(DllMode::NativeThenBuiltin.value(), APP_DLL_MODE);
+    }
+
+    /// Under Wine (wine-test's private prefix): our list reaches the
+    /// per-program key, a second run keeps it, and it can be taken out.
+    #[cfg(windows)]
+    #[test]
+    fn app_dll_overrides_round_trip_through_wines_registry() {
+        use rea_launcher_win32::reg::{Hive, Key};
+        use rea_launcher_win32::wine::{self, DllMode};
+        if !wine::is_wine() {
+            return;
+        }
+        let exe = format!("or-launcher-test-{}.exe", std::process::id());
+        let dlls: Vec<_> = app_dll_overrides(true)
+            .into_iter()
+            .map(|dll| (dll, DllMode::NativeThenBuiltin))
+            .collect();
+        let first = wine::app_dll_overrides(&exe, &dlls).unwrap();
+        assert_eq!(first.written.len(), dlls.len());
+        let key = Key::open_read(Hive::CurrentUser, &wine::app_defaults_key(&exe))
+            .unwrap()
+            .unwrap();
+        for (dll, _) in &dlls {
+            assert_eq!(key.string(dll).unwrap().as_deref(), Some(APP_DLL_MODE));
+        }
+        let again = wine::app_dll_overrides(&exe, &dlls).unwrap();
+        assert!(again.written.is_empty() && again.ours.len() == dlls.len());
+        let removed = wine::remove_app_dll_overrides(&exe, &dlls).unwrap();
+        assert_eq!(removed.len(), dlls.len());
     }
 
     #[test]

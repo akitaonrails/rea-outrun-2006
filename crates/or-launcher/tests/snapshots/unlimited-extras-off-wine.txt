@@ -17,6 +17,13 @@ DisableInput = dword:1
 Enable SDL = dword:1
 Map Controllers = dword:0
 
+## app DLL overrides (Wine: AppDefaults\OR2006C2C.exe\DllOverrides, where absent)
+dinput8 = native,builtin
+d3d9 = native,builtin
+msvcp140 = native,builtin
+vcruntime140 = native,builtin
+vcomp140 = native,builtin
+
 ## runtime components
 OR2006C2C.exe <- tweaks/OR2006C2C.exe (OutRun2006Tweaks, DRM-free)
 dinput8.dll <- tweaks/dinput8.dll (OutRun2006Tweaks)

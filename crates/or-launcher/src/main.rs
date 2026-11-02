@@ -504,6 +504,26 @@ mod app {
             }
         } else {
             log_line(&format!("wine: DLL overrides {}", wine_overrides()));
+            // The environment value above only reaches Wine through
+            // or-play; the per-program key works under plain Wine/Proton.
+            let dlls: Vec<_> = tweaks::app_dll_overrides(true)
+                .into_iter()
+                .map(|dll| (dll, wine::DllMode::NativeThenBuiltin))
+                .collect();
+            match wine::app_dll_overrides(EXE, &dlls) {
+                Ok(applied) => {
+                    if !applied.written.is_empty() {
+                        log_line(&format!(
+                            "wine: {EXE} loads the bundled {} (AppDefaults)",
+                            applied.written.join(", ")
+                        ));
+                    }
+                    for (dll, value) in &applied.player {
+                        log_line(&format!("wine: {dll} kept as the player set it ({value})"));
+                    }
+                }
+                Err(error) => log_line(&format!("warning: Wine DLL overrides: {error}")),
+            }
         }
 
         let mut command = Command::new(runtime_dir.join(EXE));

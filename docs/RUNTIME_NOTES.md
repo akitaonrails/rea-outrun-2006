@@ -106,6 +106,31 @@ tests but not yet seen with the game:
   pad in menus and in a race with XInput and WGI, and that nothing reads
   it twice.
 
+## 2026-11-02 — SDK v0.3.3: Wine DLL overrides through AppDefaults
+
+Same headless setup as the verification below. The launcher started with
+plain `wine` inside a headless gamescope (no or-play, nothing exported but
+the prefix, `WINEDEBUG=+loaddll`), `--no-window --look coast_to_coast`,
+then closed with `WM_CLOSE`; `loaddll` lines for the bundled DLLs:
+
+| DLL (runtime copy) | Before (v0.3.2 build) | After (AppDefaults written) |
+| --- | --- | --- |
+| `dinput8.dll` (Tweaks) | native | native |
+| `d3d9.dll` (DXVK) | native | native |
+| `msvcp140.dll` | **builtin** (Wine's, despite the copy) | native |
+| `vcruntime140.dll` | **builtin** | native |
+| `vcomp140.dll` | not loaded | not loaded |
+
+(The game also loads Wine's `system32\dinput8.dll` builtin: Tweaks'
+`dinput8` forwards to the real one.) `launcher.log`: "wine: OR2006C2C.exe
+loads the bundled dinput8, d3d9, msvcp140, vcruntime140, vcomp140
+(AppDefaults)"; `user.reg` holds the five `native,builtin` values. The game
+ran and exited 0. Through `or-play --play` the same five lines read
+native. Evidence: `.work/realgame/logs/151258-wmclose` (before),
+`151719-wmclose` (after, plain wine), `151806-wmclose` (after, or-play).
+Wine already prefers a program folder's `dinput8`/`d3d9`, so the visible
+change is the VC++ runtime.
+
 ## 2026-11-02 — real-game verification, headless (agent)
 
 Setup: the `gaming` distrobox (Wine 11.21, gamescope 3.17.0, DXVK 3.1.1,

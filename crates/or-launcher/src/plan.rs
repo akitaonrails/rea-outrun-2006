@@ -29,6 +29,9 @@ pub struct Plan {
     pub args: Vec<String>,
     /// gamescope's `-F` filter (Linux helper).
     pub gamescope_filter: &'static str,
+    /// Wine's per-program DLL overrides for `OR2006C2C.exe` (DLL, mode),
+    /// written where absent; none on Windows.
+    pub app_dll_overrides: Vec<(&'static str, &'static str)>,
 }
 
 /// The plan for `settings` on Windows (`wine` false) or Wine/Proton;
@@ -67,6 +70,10 @@ pub fn plan(settings: &Settings, wine: bool, pack: Option<&Path>) -> Plan {
         components,
         args: Vec::new(),
         gamescope_filter: settings.scaler.unwrap_or(Scaler::Linear).key(),
+        app_dll_overrides: tweaks::app_dll_overrides(wine)
+            .into_iter()
+            .map(|dll| (dll, tweaks::APP_DLL_MODE))
+            .collect(),
     }
 }
 
@@ -82,6 +89,16 @@ impl Plan {
         let _ = writeln!(out, "\n## registry (winebus, Wine only, where absent)");
         for (name, value) in &self.winebus {
             let _ = writeln!(out, "{name} = dword:{value}");
+        }
+        if !self.app_dll_overrides.is_empty() {
+            let _ = writeln!(
+                out,
+                "\n## app DLL overrides (Wine: AppDefaults\\{}\\DllOverrides, where absent)",
+                crate::edition::EXE
+            );
+            for (dll, mode) in &self.app_dll_overrides {
+                let _ = writeln!(out, "{dll} = {mode}");
+            }
         }
         let _ = writeln!(out, "\n## runtime components");
         for line in &self.components {

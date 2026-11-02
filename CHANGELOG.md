@@ -60,6 +60,7 @@ All notable changes to this project. The format follows
 
 ### Changed
 
+- Built on rea-launcher-sdk v0.3.3.
 - The issue forms are the rea launchers' shared pair: a bug report and an
   unknown-edition form (with OutRun's questions about repacks and
   `play.log`). An unknown `OR2006C2C.exe` links to the unknown-edition
@@ -155,6 +156,14 @@ All notable changes to this project. The format follows
 
 ### Fixed
 
+- Under Wine the game now loads the bundled VC++ runtime (`msvcp140`,
+  `vcruntime140`, `vcomp140`) as well as Tweaks' `dinput8` and DXVK's
+  `d3d9` from its copy whatever started the launcher: the launcher writes
+  Wine's per-program overrides for `OR2006C2C.exe`
+  (`HKCU\Software\Wine\AppDefaults\OR2006C2C.exe\DllOverrides`, only
+  where no value exists; SDK v0.3.3). Wine ignores the
+  `WINEDLLOVERRIDES` the launcher passes to the game, so until now it used
+  its own VC++ runtime. The launch plan and snapshots list them.
 - A `look =` line in `launcher.cfg` now shows in the settings window: it
   opened on Custom at 640×480 although the game played the look's values,
   and pressing Play saved 640×480 over them (seen with the real game,
