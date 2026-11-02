@@ -54,6 +54,9 @@ All notable changes to this project. The format follows
 
 ### Changed
 
+- Updated rea-launcher-sdk to v0.3.0. Screen readers now name the folder
+  fields by their heading ("Game folder", "Saves", "Pack folder") and read
+  the hint as their description.
 - Updated rea-launcher-sdk to v0.2.0. The settings window's look cards,
   selection colour and widget sizes now come from the SDK (`Metrics`),
   with OutRun's values; the look cards gain a focus ring and report their

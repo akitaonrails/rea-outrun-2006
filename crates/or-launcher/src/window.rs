@@ -513,9 +513,13 @@ impl Window {
             format!("The folder with your installed {}", edition::EXE)
         };
         let platform = &self.platform;
-        if widgets::folder_field(ui, &mut self.form.game, &game_hint, || {
-            platform.pick_folder(&format!("Choose the folder with your {}", edition::EXE))
-        }) {
+        if widgets::folder_field(
+            ui,
+            &mut self.form.game,
+            option("game").label,
+            &game_hint,
+            || platform.pick_folder(&format!("Choose the folder with your {}", edition::EXE)),
+        ) {
             self.error = None;
         }
         let (note, color) = match &self.check {
@@ -576,6 +580,7 @@ impl Window {
                     selected: self.form.look == look,
                     badge: (look == best).then_some("Recommended"),
                     title_size,
+                    disabled: None,
                 };
                 if widgets::look_card(ui, vec2(w, 104.0), &card).clicked() {
                     self.form.set_look(look, self.screen, self.wine);
@@ -593,6 +598,7 @@ impl Window {
         widgets::folder_field(
             ui,
             &mut self.form.saves,
+            option("saves").label,
             "Saved Games\\OutRun 2006 (the default)",
             || platform.pick_folder("Choose where your saves are kept"),
         );
@@ -719,6 +725,7 @@ impl Window {
         widgets::folder_field(
             ui,
             &mut self.form.hd_folder,
+            option("hd_textures_folder").label,
             "The folder you unzipped the pack into",
             || platform.pick_folder("Choose the folder you unzipped the HD texture pack into"),
         );
@@ -1279,11 +1286,18 @@ mod tests {
         for look in ["Original 2006", "Coast to Coast", "Steam Deck", "Custom"] {
             ui.get_by_label(look);
         }
-        // Shown for or-play: the hint names a Wine path.
-        ui.get_by_label(
-            "The folder with your OR2006C2C.exe, e.g. Z:\\home\\you\\Games\\OutRun 2006",
-        );
-        ui.get_by_label("Saved Games\\OutRun 2006 (the default)");
+        // Each folder field is named by its heading; the hint is its
+        // description (shown for or-play: it names a Wine path).
+        for (label, hint) in [
+            (
+                "Game folder",
+                "The folder with your OR2006C2C.exe, e.g. Z:\\home\\you\\Games\\OutRun 2006",
+            ),
+            ("Saves", "Saved Games\\OutRun 2006 (the default)"),
+        ] {
+            let field = ui.get_by_role_and_label(egui::accesskit::Role::TextInput, label);
+            assert_eq!(testing::description(&field).as_deref(), Some(hint));
+        }
     }
 
     #[test]
