@@ -558,7 +558,6 @@ impl Window<'_> {
             );
         } else {
             // Without the artwork: a black-to-red-to-yellow sky.
-            let mut mesh = Mesh::default();
             let colors = [BASE, RED.gamma_multiply(0.45), RED, YELLOW];
             let n = colors.len() as f32;
             for (i, &color) in colors.iter().enumerate() {
@@ -573,7 +572,6 @@ impl Window<'_> {
                 m.add_triangle(0, 1, 2);
                 m.add_triangle(0, 2, 3);
                 p.add(Shape::mesh(m));
-                let _ = &mut mesh;
             }
         }
         // Fades to black join the photo to the page.
@@ -1323,7 +1321,6 @@ fn field(ui: &mut egui::Ui, text: &str) {
     );
 }
 
-/// A text field with a Browse button; true when it changed.
 /// A thin bar on the panel colour, filled from the left.
 fn progress_bar(ui: &mut egui::Ui, fraction: f32) {
     let width = ui.available_width();
@@ -1381,6 +1378,7 @@ fn hd_pack_note(folder: &str) -> (String, Color32) {
     }
 }
 
+/// A text field with a Browse button; true when it changed.
 fn folder_field(ui: &mut egui::Ui, value: &mut String, hint: &str, title: &str) -> bool {
     let mut changed = false;
     ui.horizontal(|ui| {
