@@ -19,7 +19,7 @@ pub const ALREADY_RUNNING: u32 = 5;
 /// the first launcher is waiting for the game, or is still starting, or
 /// runs without a window.
 pub const GAME_RUNNING: &str =
-    "OutRun 2006 is already running. Quit the game first, then start the launcher again.";
+    "OutRun 2006 or its launcher is already running. Quit it first, then start the launcher again.";
 
 /// What `--download-hd-pack` says when the settings window is open: that
 /// window may be downloading the same pack right now.
@@ -114,6 +114,13 @@ mod tests {
         let second = SecondStart::of(false, || unreachable!(), || false);
         assert_eq!(second.message(), Some(GAME_RUNNING));
         assert_eq!(second.exit_code(false, true, 3), 3);
+    }
+
+    #[test]
+    fn the_message_does_not_claim_the_game_is_what_runs() {
+        // No window yet can also be a launcher still starting, or one
+        // running --no-window or --download-hd-pack.
+        assert!(GAME_RUNNING.starts_with("OutRun 2006 or its launcher is already running"));
     }
 
     #[test]

@@ -9,8 +9,8 @@ All notable changes to this project. The format follows
 ### Added
 
 - One launcher at a time. Starting it again while it is open brings its
-  window forward; while the game runs it says so ("OutRun 2006 is
-  already running…") instead of starting a second game from the same
+  window forward; while the game runs it says so ("OutRun 2006 or its
+  launcher is already running…") instead of starting a second game from the same
   copy. `--check` still runs alongside; `or-play --settings` exits with 3
   (nothing started).
 - One option table (`config::OPTIONS`) declares every setting once: its

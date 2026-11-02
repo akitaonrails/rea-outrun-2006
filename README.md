@@ -259,9 +259,10 @@ start, so your saves folder always has them.
   EXE isn't one of the known builds. Report the SHA-256 it shows and where
   your copy comes from with the
   [unknown edition form](https://github.com/akitaonrails/rea-outrun-2006/issues/new?template=unknown-edition.yml).
-- **"OutRun 2006 is already running."** The launcher you started first is
-  still waiting for the game. Quit the game, then start the launcher
-  again.
+- **"OutRun 2006 or its launcher is already running."** The launcher you
+  started first is still waiting for the game, or is running without a
+  window. Quit the game (or let that launcher finish), then start the
+  launcher again.
 - **The pad isn't seen, or the d-pad doesn't move the menus.** Try another
   Input API in the Controls tab (XInput under Wine and Proton, then
   DirectInput). On 8BitDo pads use the X-input mode switch.
