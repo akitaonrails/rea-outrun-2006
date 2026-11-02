@@ -57,6 +57,14 @@ All notable changes to this project. The format follows
 - Updated rea-launcher-sdk to v0.3.0. Screen readers now name the folder
   fields by their heading ("Game folder", "Saves", "Pack folder") and read
   the hint as their description.
+- Old spellings (`fps_limit = unlimited`, `anisotropy = off`,
+  `reflections = 128`) and the removed `character_select` and `hot_plug`
+  are read by the SDK's option table (value aliases, removed keys) instead
+  of the launcher's own code. Saving from the window comments out a
+  removed key, and `--character-select`/`--hot-plug` are now taken and
+  ignored like the file's keys (they were refused). `--help` shows
+  `--fps-limit <10-240|unlimited>` and `launcher.cfg` "Values: 10 to 240
+  or unlimited (0)" (it said 0 to 240, though 1 to 9 were refused).
 - Updated rea-launcher-sdk to v0.2.0. The settings window's look cards,
   selection colour and widget sizes now come from the SDK (`Metrics`),
   with OutRun's values; the look cards gain a focus ring and report their

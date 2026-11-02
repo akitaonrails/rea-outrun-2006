@@ -9,7 +9,7 @@ OutRunLauncher [options]
   --look original|coast_to_coast|steam_deck   Look
   --resolution <WxH>                          Resolution
   --fullscreen on|off                         Exclusive fullscreen
-  --fps-limit <0-240>                         Frame rate
+  --fps-limit <10-240|unlimited>              Frame rate
   --vsync on|off                              Vsync
   --draw-distance <0-8>                       Draw distance
   --reflections original|512|1024|2048        Reflections

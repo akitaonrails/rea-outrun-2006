@@ -9,6 +9,7 @@
 
 use std::path::PathBuf;
 
+use rea_launcher::cfg::spec;
 use rea_launcher::display::{self, landscape};
 
 use crate::config::{self, Backend, Feedback, Settings, Vsync};
@@ -322,7 +323,8 @@ impl Form {
     pub fn save(&self, text: &str) -> String {
         // The values below hold the whole look; a `look` line from the
         // file would only shadow later edits.
-        let mut t = config::clear_key(text, "look");
+        // Keys the launcher removed are commented out.
+        let mut t = config::clear_key(&spec::retire_removed(text, config::OPTIONS), "look");
         let mut put = |key: &str, value: Option<String>| {
             t = match &value {
                 Some(v) => config::set_key(&t, key, v),

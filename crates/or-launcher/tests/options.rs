@@ -8,7 +8,7 @@ use std::path::Path;
 use or_launcher::config::{self, OPTIONS, Settings};
 use or_launcher::form;
 use or_launcher::plan::{Plan, plan};
-use rea_launcher::cfg::KeyStyle;
+use rea_launcher::cfg::{KeyStyle, spec};
 
 fn args(list: &[&str]) -> Result<Settings, String> {
     Settings::parse_args(list.iter().map(|s| s.to_string())).map(|(s, _)| s)
@@ -194,7 +194,7 @@ fn lands(s: &Settings, key: &str, value: &str, lands: &Lands, how: &str) {
 
 #[test]
 fn every_option_reaches_the_game_by_flag_and_by_file() {
-    for spec in OPTIONS {
+    for spec in spec::active(OPTIONS) {
         assert!(
             CASES.iter().any(|(key, ..)| *key == spec.key),
             "{} has no end-to-end case",
@@ -290,7 +290,7 @@ fn a_look_flag_sets_every_value_and_single_flags_win() {
 fn help_lists_every_flag_from_the_table() {
     let help = args(&["--help"]).unwrap_err();
     assert_eq!(help, config::usage());
-    for spec in OPTIONS {
+    for spec in spec::active(OPTIONS) {
         assert!(
             help.contains(&spec.flag_name(KeyStyle::Underscore)),
             "{}",
@@ -314,7 +314,7 @@ fn bad_values_say_what_they_need() {
         ),
         (
             &["--fps-limit", "300"],
-            "--fps-limit needs 0 to 240, not 300",
+            "--fps-limit needs 10 to 240 or unlimited (0), not 300",
         ),
         (&["--vsync", "half"], "--vsync needs on or off, not half"),
         (
@@ -344,8 +344,8 @@ fn bad_values_say_what_they_need() {
         ),
         (&["--game"], "--game needs a value"),
         (
-            &["--character-select", "on"],
-            "unknown argument --character-select",
+            &["--no-such-option", "on"],
+            "unknown argument --no-such-option",
         ),
     ] {
         let error = args(argv).unwrap_err();

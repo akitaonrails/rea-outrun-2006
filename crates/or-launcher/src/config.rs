@@ -287,10 +287,13 @@ pub const OPTIONS: &[OptionSpec] = &[
     .with_example("off"),
     OptionSpec::new(
         "fps_limit",
-        Kind::Range { min: 0, max: 240 },
+        Kind::Range { min: 10, max: 240 },
         "Frame rate",
         "Frames per second: 10 to 240, or 0 (unlimited). Above 60 the picture is interpolated between the game's 60 ticks a second (experimental).",
     )
+    .with_value_aliases(&[("unlimited", "0"), ("none", "0"), ("off", "0")])
+    .with_needs(FPS_NEEDS)
+    .with_placeholder("<10-240|unlimited>")
     .with_example("60"),
     OptionSpec::new(
         "vsync",
@@ -317,6 +320,7 @@ pub const OPTIONS: &[OptionSpec] = &[
         "Reflections",
         "How sharp the reflections on the car are, in pixels (original is 128).",
     )
+    .with_value_aliases(&[("0", "original"), ("128", "original"), ("off", "original")])
     .with_example("2048"),
     OptionSpec::new(
         "anisotropy",
@@ -324,6 +328,7 @@ pub const OPTIONS: &[OptionSpec] = &[
         "Anisotropy",
         "Keeps the road's texture sharp into the distance (0 is the game's own filtering).",
     )
+    .with_value_aliases(&[("off", "0"), ("original", "0")])
     .with_example("16"),
     OptionSpec::new(
         "antialiasing",
@@ -493,6 +498,14 @@ pub const OPTIONS: &[OptionSpec] = &[
         "Restores the first two seconds of \"Rush a Difficulty\" (an official patch to the launcher's copy of the song).",
     )
     .with_example("on"),
+    OptionSpec::removed(
+        "character_select",
+        "Removed by the options audit: the mod's character select can crash the game.",
+    ),
+    OptionSpec::removed(
+        "hot_plug",
+        "Removed by the options audit: the mod's new input ignores it; hot-plug is always off.",
+    ),
 ];
 
 /// The row for `key`.
@@ -541,19 +554,6 @@ Every option is described in launcher.cfg.
     )
 }
 
-/// Spellings older launchers wrote or took that the table no longer
-/// lists, turned into the table's own (`unlimited` frames is 0).
-fn legacy_value<'a>(key: &str, value: &'a str) -> std::borrow::Cow<'a, str> {
-    let word = value.trim().to_ascii_lowercase();
-    let new = match (key, word.as_str()) {
-        ("fps_limit", "unlimited" | "none" | "off") => "0",
-        ("anisotropy", "off" | "original") => "0",
-        ("reflections", "0" | "128" | "off") => "original",
-        _ => return value.into(),
-    };
-    new.into()
-}
-
 /// What a frame-rate cap may be, for messages.
 const FPS_NEEDS: &str = "10 to 240 or unlimited (0)";
 
@@ -562,8 +562,6 @@ impl Settings {
     pub fn parse_file(text: &str) -> (Settings, Vec<String>) {
         let mut s = Settings::default();
         let mut warnings = cfg::parse(text, FILE_NAME, |key, value| match key {
-            // Options that were removed are ignored without a word.
-            "character_select" | "hot_plug" => Ok(()),
             // Older files named the pack's folder in hd_textures itself.
             "hd_textures" if cfg::parse_bool(value).is_none() => {
                 s.hd_textures = Some(true);
@@ -575,9 +573,7 @@ impl Settings {
                 s.vsync = Some(Vsync::On);
                 Ok(())
             }
-            _ => spec::dispatch(OPTIONS, key, &legacy_value(key, value), &mut |k, v| {
-                s.apply(k, v)
-            }),
+            _ => spec::dispatch(OPTIONS, key, value, &mut |k, v| s.apply(k, v)),
         });
         for e in cfg::entries(text) {
             if e.key == "vsync" && e.value.eq_ignore_ascii_case("half") {
@@ -605,12 +601,7 @@ impl Settings {
                     _ => ORIGINAL,
                 })
             }
-            ("fps_limit", Value::Number(n)) => {
-                if (1..10).contains(&n) {
-                    return Err(Rejected::needs(FPS_NEEDS));
-                }
-                self.fps_limit = Some(n);
-            }
+            ("fps_limit", Value::Number(n)) => self.fps_limit = Some(n),
             ("vsync", Value::Toggle(on)) => {
                 self.vsync = Some(if on { Vsync::On } else { Vsync::Off })
             }
@@ -968,20 +959,6 @@ impl Settings {
     pub fn parse_args<I: IntoIterator<Item = String>>(
         args: I,
     ) -> Result<(Settings, Vec<String>), String> {
-        let mut args: Vec<String> = args.into_iter().collect();
-        let mut i = 0;
-        while i + 1 < args.len() {
-            match OPTIONS
-                .iter()
-                .find(|o| o.flag_name(KeyStyle::Underscore) == args[i])
-            {
-                Some(row) => {
-                    args[i + 1] = legacy_value(row.key, &args[i + 1]).into_owned();
-                    i += 2;
-                }
-                None => i += 1,
-            }
-        }
         let mut s = Settings::default();
         match spec::parse_args(args, KeyStyle::Underscore, OPTIONS, &SWITCHES, |k, v| {
             s.apply(k, v)
@@ -1189,7 +1166,12 @@ mod tests {
             Some(Scaler::Fsr)
         );
         assert!(args(&["--scaler", "bicubic"]).is_err());
-        assert!(args(&["--character-select", "on"]).is_err());
+        // A removed option is taken and ignored, as in launcher.cfg.
+        assert_eq!(
+            args(&["--character-select", "on"]).unwrap(),
+            Settings::default()
+        );
+        assert!(!usage().contains("--character-select"));
         // The messages name the flag and end with the usage.
         let bad = args(&["--resolution", "big"]).unwrap_err();
         assert!(bad.starts_with("--resolution needs WIDTHxHEIGHT, original or off, not big\n\n"));
