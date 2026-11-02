@@ -26,7 +26,7 @@ use rea_launcher_ui::egui::{
     self, Color32, Key, Mesh, Rect, Shape, TextureHandle, Vec2, pos2, vec2,
 };
 use rea_launcher_ui::pad::{self, Nav, PadNav};
-use rea_launcher_ui::spec::{mark_rendered, spec_row};
+use rea_launcher_ui::spec::{RowOptions, mark_rendered, spec_row, spec_row_with};
 use rea_launcher_ui::theme::{
     ButtonText, CardMetrics, Metrics, Palette, body as font, condensed, decal, tint,
 };
@@ -621,13 +621,13 @@ impl Window {
         chip_row(ui, "resolution", &resolutions, &mut f.resolution, None);
         bool_row(ui, "fullscreen", &mut f.fullscreen, None);
         let rates = with_current(&FRAME_RATES, f.fps_limit, |n| n.to_string());
-        chip_row(ui, "fps_limit", &rates, &mut f.fps_limit, None);
+        step_row(ui, "fps_limit", &rates, &mut f.fps_limit);
         let mut vsync = f.vsync == Vsync::On;
         bool_row(ui, "vsync", &mut vsync, None);
         f.vsync = if vsync { Vsync::On } else { Vsync::Off };
         group(ui, "Detail");
         let distances = with_current(&DISTANCES, f.draw_distance, |n| n.to_string());
-        chip_row(ui, "draw_distance", &distances, &mut f.draw_distance, None);
+        step_row(ui, "draw_distance", &distances, &mut f.draw_distance);
         let mut reflections = match f.reflections {
             0 => "original".to_string(),
             n => n.to_string(),
@@ -636,7 +636,7 @@ impl Window {
             f.reflections = reflections.parse().unwrap_or(0);
         }
         let anisotropy = with_current(&ANISOTROPY, f.anisotropy, |n| format!("{n}×"));
-        chip_row(ui, "anisotropy", &anisotropy, &mut f.anisotropy, None);
+        step_row(ui, "anisotropy", &anisotropy, &mut f.anisotropy);
         let mut aa = f.antialiasing.to_string();
         if spec_row(ui, option("antialiasing"), &mut aa).changed() {
             f.antialiasing = aa.parse().unwrap_or(0);
@@ -852,7 +852,7 @@ impl Window {
     fn controls_tab(&mut self, ui: &mut egui::Ui) {
         let f = &mut self.form;
         let deadzones = with_current(&DEADZONES, f.deadzone, |n| format!("{n}%"));
-        chip_row(ui, "deadzone", &deadzones, &mut f.deadzone, None);
+        step_row(ui, "deadzone", &deadzones, &mut f.deadzone);
         let mut vibration = f.vibration.key().to_string();
         if spec_row(ui, option("vibration"), &mut vibration).changed()
             && let Some(v) = Feedback::ALL.into_iter().find(|v| v.key() == vibration)
@@ -965,9 +965,28 @@ fn group(ui: &mut egui::Ui, title: &str) {
     widgets::heading(ui, title);
 }
 
+/// The SDK's row for the `Range` option `key`, as chips with `steps`.
+fn step_row(ui: &mut egui::Ui, key: &'static str, steps: &[(u32, String)], value: &mut u32) {
+    let steps: Vec<(u32, &str)> = steps.iter().map(|(v, l)| (*v, l.as_str())).collect();
+    let mut text = value.to_string();
+    let options = RowOptions {
+        disabled: None,
+        steps: Some(&steps),
+    };
+    if spec_row_with(ui, option(key), &mut text, options).changed()
+        && let Ok(n) = text.parse()
+    {
+        *value = n;
+    }
+    ui.add_space(6.0);
+}
+
 /// A row of chips for `key`: its label on the left, its description under
 /// it (both also the row's accessible name and description). `disabled`
-/// greys every chip out and says why.
+/// greys every chip out and puts why in the description's place, where a
+/// pad player sees it (the SDK's `RowOptions::disabled` says it on hover
+/// only). Also for the rows the SDK has no chips for: a resolution, and
+/// the input API without its "auto" value.
 fn chip_row<T: PartialEq + Clone, S: AsRef<str>>(
     ui: &mut egui::Ui,
     key: &'static str,
@@ -1173,17 +1192,16 @@ mod tests {
         }
     }
 
-    /// `testing::harness` lays out at the SDK's 880×640, where the long
-    /// tabs scroll and a click misses rows below the fold; this one is
-    /// tall enough to show every row of every tab.
+    /// The window at its own width, tall enough to show every row of
+    /// every tab (the long tabs scroll at 880×760).
     fn harness(window: Window) -> Harness<'static, Window> {
-        let mut ui = Harness::builder()
-            .with_size(vec2(SIZE.x, 1400.0))
-            .with_theme(egui::Theme::Dark)
-            .with_context_setup(|ctx| theme::install_with(ctx, &PALETTE, &METRICS))
-            .build_ui_state(|ui, w: &mut Window| w.draw(ui), window);
-        ui.run();
-        ui
+        testing::harness_sized(
+            &PALETTE,
+            &METRICS,
+            vec2(SIZE.x, 1400.0),
+            window,
+            |ui, w: &mut Window| w.draw(ui),
+        )
     }
 
     fn open(dirs: &Dirs, saved: Option<&str>, linux: bool, wine: bool) -> Harness<'static, Window> {

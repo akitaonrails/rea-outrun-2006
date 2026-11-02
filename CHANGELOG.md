@@ -62,6 +62,9 @@ All notable changes to this project. The format follows
   existing runtime has converted on its next run. On Windows it is still
   taken out without bringing back a repack's SpecialK `d3d9.dll`; a
   `d3d9.dll` that isn't the launcher's is now left alone.
+- The frame rate, draw distance, anisotropy and deadzone rows are the
+  SDK's option rows (Range steps as chips); they look and behave as
+  before. The window's tests use the SDK's `harness_sized`.
 - Old spellings (`fps_limit = unlimited`, `anisotropy = off`,
   `reflections = 128`) and the removed `character_select` and `hot_plug`
   are read by the SDK's option table (value aliases, removed keys) instead
