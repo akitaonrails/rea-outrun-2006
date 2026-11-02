@@ -33,8 +33,9 @@ It needs `wine` and `gamescope`. Optional environment variables:
 | `OR_LAUNCHER` | path to `OutRunLauncher.exe` | next to `or-play`, or one folder up |
 | `OR_RUN` | a wrapper that runs wine and gamescope, e.g. `distrobox enter gaming --` | none |
 
-`or-play` refuses to start a second game while one is running or still
-loading. Inside a gamescope session (a Steam Deck in Game Mode), or when
+`or-play` stays open until the game ends (a distrobox or AppImage session
+would otherwise end the game with it), and refuses to start a second game
+while one is running or still loading. Inside a gamescope session (a Steam Deck in Game Mode), or when
 gamescope isn't installed, it runs the game directly.
 
 ## Steam / Proton
@@ -49,5 +50,4 @@ DLL overrides itself.
 `OutRunLauncher-x86_64.AppImage`: the launcher with its components,
 `or-play` and a portable Wine (Kron4ek's 11.20 WoW64 build, checked by
 SHA-256), so players need no Wine. Its `AppRun` puts that Wine first on the
-`PATH` and runs `or-play`, which waits for the game (`OR_WAIT`) because the
-AppImage is unmounted when it returns. CI builds it with every package.
+`PATH` and runs `or-play`. CI builds it with every package.

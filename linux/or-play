@@ -15,7 +15,6 @@
 #   OR_LAUNCHER  OutRunLauncher.exe   (default: next to this script, or one folder up)
 #   OR_RUN       a wrapper that runs wine and gamescope, e.g.
 #                 "distrobox enter gaming --" when they live in a container
-#   OR_WAIT      set: wait for the game to end (the AppImage sets it)
 set -u
 HERE=$(dirname "$(readlink -f "$0")")
 PREFIX=${OR_PREFIX:-$HOME/.local/share/or-launcher/prefix}
@@ -109,15 +108,14 @@ INNER
   fi
 }
 
-# Runs a command in the prefix: in the background, or with OR_WAIT (the
-# AppImage, unmounted when its script ends) until it exits.
+# Runs a command in the prefix and waits for it, so the game outlives
+# nothing that started it (distrobox and the AppImage end their session,
+# and everything in it, when or-play returns). The lock holds or-play's
+# own pid meanwhile, for `or-play stop` and `status`.
 launch() {
-  if [ -n "${OR_WAIT:-}" ]; then
-    $RUN env WINEPREFIX="$PREFIX" $GPU "$@" > "$STATE/play.log" 2>&1
-  else
-    setsid $RUN env WINEPREFIX="$PREFIX" $GPU "$@" > "$STATE/play.log" 2>&1 < /dev/null &
-    echo $! > "$LOCK"
-  fi
+  echo $$ > "$LOCK"
+  $RUN env WINEPREFIX="$PREFIX" $GPU "$@" > "$STATE/play.log" 2>&1 < /dev/null
+  rm -f "$LOCK"
 }
 
 # The settings window; its exit code says what to do next.

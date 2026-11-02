@@ -4,8 +4,6 @@
 HERE=$(dirname "$(readlink -f "$0")")
 export PATH="$HERE/usr/lib/wine/bin:$PATH"
 export OR_LAUNCHER="$HERE/usr/lib/or/OutRunLauncher.exe"
-# The AppImage is unmounted when this script ends: or-play waits for the game.
-export OR_WAIT=1
 # No prompts to download Wine's .NET and HTML engines; the game needs neither.
 export WINEDLLOVERRIDES="mscoree,mshtml=${WINEDLLOVERRIDES:+;$WINEDLLOVERRIDES}"
 export WINEDEBUG="${WINEDEBUG:--all}"

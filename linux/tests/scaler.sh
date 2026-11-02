@@ -5,7 +5,7 @@ set -u
 unset GAMESCOPE_WAYLAND_DISPLAY DRI_PRIME __NV_PRIME_RENDER_OFFLOAD
 HERE=$(dirname "$(readlink -f "$0")")
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-export HOME=$T OR_PREFIX=$T/prefix OR_WAIT=1 OR_SYSFS=$T/nosys
+export HOME=$T OR_PREFIX=$T/prefix OR_SYSFS=$T/nosys
 CFGDIR=$OR_PREFIX/drive_c/users/me/AppData/Local/OutRunLauncher
 mkdir -p "$CFGDIR"; : > "$T/OutRunLauncher.exe"
 # The wrapper: "gamescope is installed", and records the command it runs.
