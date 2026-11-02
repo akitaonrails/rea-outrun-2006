@@ -476,6 +476,10 @@ mod app {
             &settings,
             &mut |line| log_line(line),
         )?;
+        // An outrun2006.ini naming a display adapter that isn't attached
+        // (another PC, a laptop off its dock) stops the game: use the first.
+        let attached = display::adapters().iter().filter(|a| a.attached).count();
+        tweaks::check_adapter(&runtime_dir, attached, &mut |line| log_line(line))?;
         if wine {
             match wine::seed_winebus(&rea_launcher::wine::SDL_ONLY) {
                 Ok(true) => log_line(

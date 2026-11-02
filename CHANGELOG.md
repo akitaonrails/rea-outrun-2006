@@ -156,6 +156,12 @@ All notable changes to this project. The format follows
 
 ### Fixed
 
+- A game whose `outrun2006.ini` names a display adapter that isn't
+  attached (`DX/ADAPTER = 1` from a two-screen PC, or under or-play,
+  where DXVK shows one GPU) stopped with "Direct3D can't be set up". The
+  launcher now uses adapter 0 for that start and logs a warning; the
+  player's value comes back once that adapter is attached again (recorded
+  in the runtime's `.or-game-ini-owned`). A valid adapter is left alone.
 - `or-play` sizes gamescope from the look when no resolution is set
   (`look =` in `launcher.cfg`, or `--play --look …` for one run): Steam
   Deck 1280×800, Coast to Coast the screen, Original 640×480. Nothing set

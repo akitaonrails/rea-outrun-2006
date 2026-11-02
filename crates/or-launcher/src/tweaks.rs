@@ -383,6 +383,79 @@ pub fn texture_keys(ini: &mut Ini, pack: Option<&Path>) {
 /// away (no download prompts).
 pub const WINE_OVERRIDES: &str = "dinput8=n,b;d3d9=n,b;mscoree,mshtml=d";
 
+/// The launcher's record of the `outrun2006.ini` values it wrote over the
+/// game's (`rea_launcher::ini::Owned`), in the runtime copy.
+pub const GAME_INI_OWNED: &str = ".or-game-ini-owned";
+
+/// What [`fix_adapter`] did to `DX/ADAPTER`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdapterFix {
+    /// Valid, or nothing to judge it by: the game's value stays.
+    Kept,
+    /// It named an adapter that isn't attached (index `was`): now 0, the
+    /// first one, so Direct3D can start.
+    Reset { was: u32 },
+    /// The player's adapter is attached again: their value is back.
+    Restored,
+}
+
+/// The game's `DX/ADAPTER` against the `attached` display adapters (owner
+/// decision 2026-11-02): an index past them stops the game with "Direct3D
+/// can't be set up" (DXVK under or-play shows it one GPU), so it becomes 0,
+/// recorded in `owned` so the player's value returns once that adapter is
+/// back. A valid index, a value that isn't a number, or no count (0) is
+/// left alone.
+pub fn fix_adapter(
+    ini: &mut Ini,
+    owned: &mut rea_launcher::ini::Owned,
+    attached: usize,
+) -> AdapterFix {
+    use rea_launcher::ini::{Released, release, set_owned};
+    const KEY: &str = "DX/ADAPTER";
+    if attached == 0 {
+        return AdapterFix::Kept;
+    }
+    let released =
+        owned.written("", KEY).is_some() && release(ini, owned, "", KEY) == Released::Restored;
+    match ini.get("", KEY).and_then(|v| v.trim().parse::<u32>().ok()) {
+        Some(index) if index as usize >= attached => {
+            set_owned(ini, owned, "", KEY, "0");
+            AdapterFix::Reset { was: index }
+        }
+        _ if released => AdapterFix::Restored,
+        _ => AdapterFix::Kept,
+    }
+}
+
+/// [`fix_adapter`] on the runtime's `outrun2006.ini`, logging a reset.
+pub fn check_adapter(
+    runtime: &Path,
+    attached: usize,
+    log: &mut dyn FnMut(&str),
+) -> Result<(), String> {
+    let path = runtime.join("outrun2006.ini");
+    let Ok(text) = fs::read_to_string(&path) else {
+        return Ok(());
+    };
+    let ledger = runtime.join(GAME_INI_OWNED);
+    let mut owned = rea_launcher::ini::Owned::load(&ledger).map_err(|e| e.to_string())?;
+    let mut ini = Ini::parse(&text);
+    let fix = fix_adapter(&mut ini, &mut owned, attached);
+    match fix {
+        AdapterFix::Kept => {}
+        AdapterFix::Reset { was } => log(&format!(
+            "warning: outrun2006.ini: DX/ADAPTER = {was} but only {attached} display adapter(s) attached; using 0 (your value returns when that adapter is back)"
+        )),
+        AdapterFix::Restored => {
+            log("outrun2006.ini: DX/ADAPTER is yours again (that adapter is back)")
+        }
+    }
+    if let Some(new) = ini.to_text().filter(|new| *new != text) {
+        fsx::install(&path, new).map_err(|e| format!("cannot write {e}"))?;
+    }
+    owned.save(&ledger).map_err(|e| e.to_string())
+}
+
 /// How Wine loads each of [`app_dll_overrides`]: the bundled copy, else
 /// Wine's (`rea_launcher_win32::wine::DllMode::NativeThenBuiltin`).
 pub const APP_DLL_MODE: &str = "native,builtin";
@@ -997,6 +1070,81 @@ mod tests {
             wine_overrides(Some("odd;;foo=n")),
             format!("{WINE_OVERRIDES};odd;foo=n")
         );
+    }
+
+    mod adapter {
+        use super::super::*;
+        use rea_launcher::ini::Owned;
+
+        const GAME: &str = "DX/ADAPTER = 1\nDX/RES/WIDTH = 1920\nDX/RES/HEIGHT = 1080\nDX/ANTIALIASING = 0\nDX/FOG = 1\nLANGUAGE = 2\nDX/WINDOWED = 1\n";
+
+        fn run(text: &str, owned: &mut Owned, attached: usize) -> (String, AdapterFix) {
+            let mut ini = Ini::parse(text);
+            let fix = fix_adapter(&mut ini, owned, attached);
+            (ini.to_text().unwrap(), fix)
+        }
+
+        #[test]
+        fn an_adapter_that_is_not_there_becomes_0() {
+            let mut owned = Owned::default();
+            let (text, fix) = run(GAME, &mut owned, 1);
+            assert_eq!(fix, AdapterFix::Reset { was: 1 });
+            assert_eq!(text, GAME.replace("DX/ADAPTER = 1", "DX/ADAPTER = 0"));
+            // Every other key stays the game's.
+            assert!(text.contains("LANGUAGE = 2"));
+        }
+
+        #[test]
+        fn a_valid_adapter_is_left_alone() {
+            let mut owned = Owned::default();
+            assert_eq!(
+                run(GAME, &mut owned, 2),
+                (GAME.to_string(), AdapterFix::Kept)
+            );
+            let first = GAME.replace("DX/ADAPTER = 1", "DX/ADAPTER = 0");
+            assert_eq!(
+                run(&first, &mut owned, 1),
+                (first.clone(), AdapterFix::Kept)
+            );
+            // No count (enumeration failed) or no number: not ours to judge.
+            assert_eq!(
+                run(GAME, &mut owned, 0),
+                (GAME.to_string(), AdapterFix::Kept)
+            );
+            let odd = GAME.replace("DX/ADAPTER = 1", "DX/ADAPTER = x");
+            assert_eq!(run(&odd, &mut owned, 1), (odd.clone(), AdapterFix::Kept));
+            assert!(owned.is_empty());
+        }
+
+        #[test]
+        fn the_players_adapter_comes_back_when_it_is_there_again() {
+            let mut owned = Owned::default();
+            let (reset, _) = run(GAME, &mut owned, 1);
+            // Still one screen next time: still 0, still reported.
+            assert_eq!(
+                run(&reset, &mut owned, 1),
+                (reset.clone(), AdapterFix::Reset { was: 1 })
+            );
+            // The second screen is back: the player's 1 returns.
+            let (text, fix) = run(&reset, &mut owned, 2);
+            assert_eq!((text.as_str(), fix), (GAME, AdapterFix::Restored));
+            assert!(owned.is_empty());
+        }
+
+        #[test]
+        fn a_choice_made_in_the_game_after_the_reset_is_kept() {
+            let mut owned = Owned::default();
+            let (reset, _) = run(GAME, &mut owned, 3);
+            assert_eq!(reset, GAME);
+            let mut owned = Owned::default();
+            let (reset, _) = run(&GAME.replace("= 1\n", "= 4\n"), &mut owned, 2);
+            // The player picks adapter 1 in the game's own setup since.
+            let picked = reset.replace("DX/ADAPTER = 0", "DX/ADAPTER = 1");
+            assert_eq!(
+                run(&picked, &mut owned, 2),
+                (picked.clone(), AdapterFix::Kept)
+            );
+        }
     }
 
     #[cfg(windows)]
