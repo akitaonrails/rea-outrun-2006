@@ -60,11 +60,12 @@ with its own catch:
 
 ![The Picture tab: resolution, frame rate, vsync, draw distance, reflections, anisotropy, anti-aliasing and effects](docs/images/launcher-picture.png)
 
-- Resolution: 640×480, your screen's size, 1080p, 1440p or 4K, as a
-  borderless window (exclusive fullscreen is a `launcher.cfg` setting).
+- Screen: resolution (640×480, your screen's size, 1080p, 1440p or 4K,
+  as a borderless window), exclusive fullscreen (holds the frame rate at
+  60), the frame-rate cap and vsync.
 - Frame-rate cap: 60, 90, 120, 144 or unlimited. Above 60 the picture is
   interpolated between the game's 60 logic ticks (Tweaks marks this
-  experimental). Vsync on or off.
+  experimental).
 - Draw distance: the game's own, 4 or 8 sections further (further out,
   scenery starts to pop in).
 - Car reflections at 128 (original), 512, 1024 or 2048 pixels; anisotropic
@@ -93,15 +94,17 @@ unzipped. Details: [docs/HD_TEXTURES.md](docs/HD_TEXTURES.md).
 
 - Steering deadzone (0 to 40 %, the game's own is 20 %).
 - Rumble off, on, with the motors swapped, or merged; four strengths; a
-  **Test** button for Xbox-style pads.
+  **Test rumble** button for Xbox-style pads.
 - Impulse triggers for Xbox One/Series pads (Windows only).
-- Input API: Windows.Gaming.Input, RawInput, DirectInput or XInput. The
-  default is Windows.Gaming.Input on Windows and XInput under Wine and
-  Proton.
+- Input API: Windows.Gaming.Input, RawInput, DirectInput or XInput, for a
+  pad that isn't seen. Unset, it is Windows.Gaming.Input on Windows and
+  XInput under Wine and Proton.
 - Start races with the manual gearbox.
 
 The window itself works with a pad: the d-pad moves, A presses, LB/RB
-change tabs, Start plays.
+change tabs, Start plays. Every row says in one line what it changes, and
+a control that can't be used right now (impulse triggers under Wine,
+shuffle without the CD switcher) is greyed out with the reason.
 
 **Extras**
 
@@ -187,17 +190,23 @@ Everything the window shows is saved in one commented text file,
 - A `launcher.cfg` next to `OutRunLauncher.exe` is used instead when it
   exists (a portable install).
 
-Settings are saved when you press Play. On every start the launcher writes
-the game's `outrun2006.ini` whole, and the keys it manages in
-`OutRun2006Tweaks.ini`, keeping that file's comments and other keys.
+Settings are saved when you press Play. On every start the launcher sets
+the keys it manages in the game's `outrun2006.ini` (resolution,
+anti-aliasing, windowed) and in `OutRun2006Tweaks.ini`, keeping every
+other line of both (the game's language, comments, keys it doesn't
+manage). An unset setting gets the launcher's default, the Coast to Coast
+value shown in its `#key =` line. `OutRunLauncher --help` lists every
+option with its values; the window, the command line and `launcher.cfg`
+come from one table, so each window option has the same key and flag.
 
 | `launcher.cfg` key | Command line | Values (default first or marked) | In the window |
 | --- | --- | --- | --- |
 | `game` | `--game <folder>` (remembered) | the folder with `OR2006C2C.exe` | Play |
 | `saves` | `--saves <folder>` | default `Saved Games\OutRun 2006` | Play |
 | `runtime` | `--runtime <folder>` | the launcher's copy of the game; default `%LOCALAPPDATA%\OutRunLauncher\OutRun2006` | — |
+| `look` | `--look <name>` | `original`, `coast_to_coast`, `steam_deck`: every value of a look at once; settings given on their own win | Play (the cards) |
 | `resolution` | `--resolution WxH` | unset = the game's 640×480 (the window picks your screen's size on first run); `original`, or e.g. `1920x1080` | Picture |
-| `fullscreen` | `--fullscreen on\|off` | off (borderless window); exclusive fullscreen holds the frame rate at 60 | — |
+| `fullscreen` | `--fullscreen on\|off` | off (borderless window); exclusive fullscreen holds the frame rate at 60 | Picture |
 | `fps_limit` | `--fps-limit` | 60; 10 to 240, or `unlimited` (0) | Picture |
 | `vsync` | `--vsync on\|off` | on | Picture |
 | `draw_distance` | `--draw-distance` | 4; 0 (the game's own) to 8 | Picture |
@@ -207,14 +216,14 @@ the game's `outrun2006.ini` whole, and the keys it manages in
 | `sky_glow` | `--sky-glow on\|off` | on | Picture |
 | `xbox_brightness` | `--xbox-brightness on\|off` | off | Picture |
 | `hd_characters` | `--hd-characters on\|off` | on | Picture |
-| `scaler` | — (Linux, `or-play`) | `linear` (smooth), `nearest`, `pixel`, `fsr` | Picture |
+| `scaler` | `--scaler` (Linux helper) | `linear` (smooth), `nearest`, `pixel`, `fsr` | Picture (Linux) |
 | `hd_textures` | `--hd-textures on\|off` | off | HD Pack |
 | `hd_textures_folder` | `--hd-textures-folder <folder>` | the unzipped pack; default: the downloaded one, or `textures-pack` next to the launcher | HD Pack |
 | `deadzone` | `--deadzone` | 20; 0 to 50 % | Controls |
 | `vibration` | `--vibration` | `on`; `off`, `swapped`, `merged` | Controls |
 | `vibration_strength` | `--vibration-strength` | 7; 0 to 10 | Controls |
 | `impulse_triggers` | `--impulse-triggers` | `swapped`; `off`, `on`, `merged` (Xbox One/Series pads, Windows) | Controls |
-| `input_backend` | `--input-backend` | unset or `auto` = by platform; `wgi`, `raw`, `dinput`, `xinput` | Controls |
+| `input_backend` | `--input-backend` | `auto` (by platform); `wgi`, `raw`, `dinput`, `xinput` | Controls |
 | `manual_gearbox` | `--manual-gearbox on\|off` | off | Controls |
 | `cd_switcher` | `--cd-switcher on\|off` | on | Extras |
 | `music_shuffle` | `--music-shuffle on\|off` | off | Extras |
@@ -234,9 +243,10 @@ OutRunLauncher                      the settings window, then the game
 OutRunLauncher --no-window [opts]   play with the saved settings (and any options)
 OutRunLauncher --settings [--linux] only the window (exit 0: play, 3: closed,
                                     4: no window could be shown)
-OutRunLauncher --check              is this game folder supported?
+OutRunLauncher --check              would it play? (game, bundled files, runtime
+                                    folder, launcher.cfg; report in launcher.log)
 OutRunLauncher --download-hd-pack   download the HD pack and switch it on
-OutRunLauncher --help               all options
+OutRunLauncher --help               all options (printed to the terminal)
 ```
 
 ## 4. Troubleshooting
@@ -256,6 +266,28 @@ OutRunLauncher --help               all options
   dumps land in the runtime copy's `CrashDumps` folder.
 - **Start over.** Delete the `OutRun2006` folder next to `launcher.cfg`;
   the next start copies the game again. Your saves are kept separately.
+- **Report a problem** with the
+  [bug form](https://github.com/akitaonrails/rea-outrun-2006/issues/new?template=bug.yml):
+  it asks for `launcher.log` and your EXE's SHA-256. Run
+  `OutRunLauncher --check` first; its report lands in the log.
+
+## Uninstall
+
+Saves first: they live in `%USERPROFILE%\Saved Games\OutRun 2006` (or
+the `saves` folder you chose), and the uninstall steps below leave them
+alone. Back them up if you're unsure. Your game folder was never changed.
+
+- **The launcher:** delete the folder you unpacked (or the AppImage).
+- **Its data:** delete `%LOCALAPPDATA%\OutRunLauncher`: `launcher.cfg`,
+  `launcher.log`, the private copy of the game (`OutRun2006`, about 1 GB)
+  and the downloaded HD pack (`hd-pack`, 3.2 GB).
+- **Linux (AppImage, or-play):** the Wine prefix
+  `~/.local/share/or-launcher/prefix` holds all of the above under
+  `drive_c/users/<you>/`, *and* your saves (`Saved Games\OutRun 2006`
+  inside it): copy them out before deleting the prefix. `or-play` keeps its
+  logs and lock in `~/.config/or-launcher`.
+- **Proton:** the prefix is Steam's compatdata folder for the non-Steam
+  game; removing the shortcut in Steam offers to delete it (saves included).
 
 ## How it works
 
@@ -289,19 +321,47 @@ sdk/packaging/appimage-wine.sh --app or --exe OutRunLauncher.exe \
   --optional-payload soundtrack dist/OutRunLauncher dist   # the AppImage
 ```
 
-`sdk/` holds the shared play library and packaging scripts vendored from
-[rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk) (see
-AGENTS.md); the Rust crates come from it as git dependencies.
+Windows-target tests, the settings window's headless GUI tests included,
+run under Wine with no window: `sdk/scripts/wine-test --locked --workspace`
+(needs Wine and MinGW; the `gaming` distrobox has them).
+
+## Built on rea-launcher-sdk
+
+The runtime copy, saves, settings file and option table, INI editing,
+downloads, Win32 helpers, the settings window's widgets, `rea-play.sh`,
+the AppImage builder and CI come from the shared
+[rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk)
+(v0.2.0): the Rust crates as git dependencies, the shell and packaging
+scripts vendored in `sdk/` by its `sdk-sync`. This repository holds what
+is OutRun's: the edition table, the two INI generators, the Tweaks, DXVK,
+HD pack and soundtrack steps, the window's tabs, palette and art, and
+`or-play`'s settings.
+
+## Contributing
+
+- **Game-specific** problems and changes (OutRun's settings, Tweaks
+  wiring, the HD pack, the window's tabs, `or-play`'s settings): issues
+  and pull requests here.
+- **Shared code** (the runtime folder, the settings-window widgets, the
+  option table, downloads, `rea-play.sh`, packaging, the CI workflows,
+  anything under `sdk/`): issues and pull requests at
+  [rea-launcher-sdk](https://github.com/akitaonrails/rea-launcher-sdk/issues).
+  If the code you'd change comes from a `rea_launcher*` crate or `sdk/`,
+  it is shared.
+- Never edit `sdk/` here or copy SDK code into this repository; fix it in
+  the SDK and bump the tag. Not sure which? Open the issue here and it
+  will be moved.
 
 The Windows targets link with lld (`.cargo/config.toml`): GNU ld 2.47
 drops one of the two `kernel32.dll` import groups and the launcher would
 crash at start ([docs/RUNTIME_NOTES.md](docs/RUNTIME_NOTES.md)).
 
 Third-party components are downloaded at package time from the URLs and
-SHA-256 digests in `packaging/*.txt` (Wine and the AppImage tools in
+SHA-256 digests in `packaging/mirrored.txt` and `packaging/*.txt` (Wine and the AppImage tools in
 `sdk/packaging/appimage/tools.pins`). CI (`.github/workflows/build.yml`,
 on the SDK's reusable workflows) tests, lints, audits, builds and packages
-every push and pull request, checks the zip against
+every push and pull request, runs the Windows-target tests under Wine,
+checks the zip against
 `packaging/package.allow`, uploading the Windows zip and the AppImage as
 artifacts; a `v*` tag publishes both as a GitHub release. The
 `tweaks-update` workflow looks for newer OutRun2006Tweaks builds every

@@ -3,6 +3,43 @@
 What was checked by running the game, newest first. Paths use
 `$OR2006_GAME_DIR` for the player's game folder.
 
+## Platform matrix (as of 2026-11-02)
+
+| Platform | Status |
+| --- | --- |
+| Linux, `or-play` with Wine 11.21 + gamescope | played by the owner (2026-11-02) |
+| Linux, the AppImage's bundled Wine | **pending** |
+| Native Windows 10/11 | **pending** (never played; the window and the download only ran under Wine) |
+| Proton (Steam, non-Steam game), without `or-play` | **pending** |
+| Steam Deck, Game Mode, as a non-Steam game (controller, 1280×800, suspend/resume) | **pending**; the Steam Deck look is made of individually verified values |
+| Multi-monitor, HiDPI/4K, ultrawide | 4K under Wine played; the others **pending** |
+
+## Unverified options (in the window, effect not yet seen in the game)
+
+- Frame rates above 60 (Tweaks' interpolation) and `unlimited`.
+- Impulse triggers (needs Windows and an Xbox One/Series pad).
+- Input APIs other than XInput and WGI under Wine (RawInput, DirectInput),
+  and WGI on native Windows.
+- The HD pack drawn in a race (the download and unpack were checked).
+- `DX/FOG = 1` versus 0 (a side-by-side wasn't captured).
+
+## SDK v0.2.0 pass — to check by running the game
+
+- `outrun2006.ini` now keeps the game's `LANGUAGE`, `DX/ADAPTER` and
+  `DX/FOG`: check a non-English install keeps its language (a runtime
+  copy from v0.1.0 already holds `LANGUAGE = 0`; edit it in the game to
+  check it then stays).
+- The settings window's new layout (a note under every row, grouped
+  Picture tab, 13 pt caption plate on the photo, lighter control borders):
+  judge it by eye on Windows and under Wine, at 1280×800 and 4K. The
+  README screenshots (`docs/images/launcher-*.png`) predate it.
+- `--check`, `--help` and errors printed to the terminal on Windows
+  (`console::attach_parent`) and a dialog when double-clicked.
+- `or-play --play --scaler fsr` picks FSR for one run.
+- `--look original` with `--no-window` plays the 2006 look.
+- The HD pack download through the SDK's WinHTTP client and download row
+  (same files as before; resume after Cancel).
+
 ## Unreleased — to check by running the game
 
 Changes made after v0.1.0 from the cross-launcher audit, covered by unit

@@ -2,7 +2,8 @@
 
 Everything bundled with or compiled into the package, with its licence and
 source. Binary components are never committed: `packaging/package.sh`
-fetches them from the URLs pinned in `packaging/*.txt` and checks each one
+fetches them from the URLs pinned in `packaging/mirrored.txt` and
+`packaging/*.txt` and checks each one
 by SHA-256. Add a row (and a pin) before bundling anything new.
 
 ## Compiled into OutRunLauncher.exe
@@ -40,8 +41,8 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 | `tweaks/` | OutRun2006Tweaks by emoose, CI build of commit `08e5efb4`, repacked as a release of this repository with its `LICENSE.md` and `SOURCE.txt` (docs/TWEAKS.md): `dinput8.dll`, the DRM-free replacement `OR2006C2C.exe`, `OutRun2006Tweaks.ini`, `OutRun2006Tweaks.lods.ini` | MIT at this commit (the project moved to GPL-3.0 at `021e4bf5`; the release also carries the source); the replacement EXE is derived from SEGA's game EXE | `packaging/tweaks.txt`, https://github.com/emoose/OutRun2006Tweaks |
 | `soundtrack/` | OutRun2006Tweaks Soundtrack Fix 1.0: `14_Rush_a_Difficulty_1989.ogg.vcdiff` | no licence of its own (published with OutRun2006Tweaks, then MIT); the patch restores SEGA audio | `packaging/soundtrack.txt` |
 | `soundtrack/` | xdelta3 3.1.0 (i686), shipped in the Soundtrack Fix as `xdelta3-3.1.0-i686.exe`, renamed `xdelta3.exe` | GPL-2.0 | https://github.com/jmacd/xdelta-gpl |
-| `linux/` | DXVK 3.1.1, 32-bit `d3d9.dll` (used under Wine and Proton only) | zlib | `packaging/dxvk.txt`, https://github.com/doitsujin/dxvk |
-| `vc/` | Microsoft Visual C++ 2015–2022 runtime 14.44.35211.0 (x86): `msvcp140.dll`, `vcruntime140.dll`, `vcomp140.dll`, deployed app-local | Microsoft Visual Studio Distributable Code | `packaging/vcredist.txt`, https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist |
+| `linux/` | DXVK 3.1.1, 32-bit `d3d9.dll` (used under Wine and Proton only) | zlib (mirrored in this repository's `thirdparty` release) | `packaging/mirrored.txt`, https://github.com/doitsujin/dxvk |
+| `vc/` | Microsoft Visual C++ 2015–2022 runtime 14.44.35211.0 (x86): `msvcp140.dll`, `vcruntime140.dll`, `vcomp140.dll`, deployed app-local | Microsoft Visual Studio Distributable Code (the redistributable package; mirrored in the `thirdparty` release) | `packaging/mirrored.txt`, https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist |
 
 ## Bundled in the Linux AppImage (`packaging/appimage`)
 
@@ -50,6 +51,14 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 | Wine 11.20 (amd64, WoW64), Kron4ek's build of the unmodified WineHQ sources; licence and source notes inside the AppImage under `usr/share/doc/wine` | LGPL-2.1-or-later | `sdk/packaging/appimage/tools.pins` (rea-launcher-sdk), https://dl.winehq.org/wine/source/11.x/wine-11.20.tar.xz, build scripts https://github.com/Kron4ek/Wine-Builds |
 | AppImage type2 runtime, release `20251108` (added by `appimagetool` 1.9.1) | MIT | `sdk/packaging/appimage/tools.pins`, https://github.com/AppImage/type2-runtime/releases/tag/20251108 |
 | The AppImage icon `packaging/appimage/outrun-launcher.png` | ours (see Images) | this repository |
+
+## Owner decisions
+
+- **2026-11-02:** OutRun2006Tweaks' DRM-free replacement `OR2006C2C.exe`
+  (derived from SEGA's EXE, published by the maintained OutRun2006Tweaks
+  project) is bundled and dropped into the launcher's private copy of the
+  game. Approved by the owner on 2026-11-02 as a maintained community fix
+  (rea-launcher-sdk `docs/STANDARDS.md`, "DRM"); also in `AGENTS.md`.
 
 ## Not bundled
 

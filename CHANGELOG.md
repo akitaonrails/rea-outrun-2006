@@ -36,6 +36,18 @@ All notable changes to this project. The format follows
   value's message, a `launcher.cfg` written by v0.1.0, and runtime and
   saves folders with spaces, apostrophes and accents.
 
+- `docs/RESEARCH.md` (the community projects this launcher builds on and
+  why), `docs/CONTRIBUTIONS.md` (the Wine d-pad finding drafted for
+  PCGamingWiki and OutRun2006Tweaks), a bug report form asking for
+  `launcher.log` and the EXE's SHA-256, a README uninstall section and a
+  Contributing section (game issues here, shared code at rea-launcher-sdk).
+- DXVK and the VC++ redistributable are mirrored in this repository's
+  `thirdparty` release (`packaging/mirrored.txt`, `mirror` workflow) as
+  fallbacks for the package build.
+- The owner's decision of 2026-11-02 approving OutRun2006Tweaks'
+  DRM-free replacement EXE is recorded in `AGENTS.md` and
+  `THIRD_PARTY.md`.
+
 ### Changed
 
 - Updated rea-launcher-sdk to v0.2.0. The settings window's look cards,
