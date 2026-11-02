@@ -155,6 +155,9 @@ All notable changes to this project. The format follows
 
 ### Fixed
 
+- A runtime folder without its own `outrun2006.ini` gets one again: when
+  the game folder's copy already held the launcher's settings, the file
+  was never written to the runtime.
 - `THIRD_PARTY.md` lists every image in the window, the package and the
   README (the icon, the screenshots and the showcase video were missing);
   the origin of the generated hero art and icon is marked as to be

@@ -135,13 +135,16 @@ pub fn install(
 
     // The game's own settings: the runtime's copy (else the game folder's)
     // with the video keys set; the language and the rest stay the game's.
+    // Compared with the runtime's own copy: when it has none, the game
+    // folder's may already hold the same text, and it is still written.
     let game_ini = runtime.join("outrun2006.ini");
-    let existing = fs::read_to_string(&game_ini).ok().or_else(|| {
+    let current = fs::read_to_string(&game_ini).ok();
+    let existing = current.clone().or_else(|| {
         rea_launcher::paths::find_ignoring_case(game, "outrun2006.ini")
             .and_then(|path| fs::read_to_string(path).ok())
     });
     let text = settings.outrun2006_ini(existing.as_deref());
-    if existing.as_deref() != Some(text.as_str()) {
+    if current.as_deref() != Some(text.as_str()) {
         fsx::install(&game_ini, text).map_err(|e| format!("cannot write {e}"))?;
     }
 
@@ -495,6 +498,29 @@ mod tests {
         .unwrap();
         install(&game, &runtime, &launcher_dir, false, &s, &mut |_| {}).unwrap();
         assert!(ini().contains("LANGUAGE = 4"));
+        fs::remove_dir_all(&at).unwrap();
+    }
+
+    #[test]
+    fn a_runtime_without_outrun2006_ini_gets_one() {
+        // The game folder's copy already holds what the launcher would
+        // write: the runtime must still get its own copy.
+        let at = temp("gameini-same");
+        let launcher_dir = launcher(&at);
+        let game = at.join("game");
+        fs::create_dir_all(&game).unwrap();
+        let s = Settings::default();
+        let games = s.outrun2006_ini(Some(
+            "DX/ADAPTER = 0\nDX/RES/WIDTH = 800\nDX/RES/HEIGHT = 600\nDX/ANTIALIASING = 0\nDX/FOG = 1\nLANGUAGE = 2\nDX/WINDOWED = 1\n",
+        ));
+        fs::write(game.join("outrun2006.ini"), &games).unwrap();
+        let runtime = at.join("runtime");
+        fs::create_dir_all(&runtime).unwrap();
+        install(&game, &runtime, &launcher_dir, false, &s, &mut |_| {}).unwrap();
+        assert_eq!(
+            fs::read_to_string(runtime.join("outrun2006.ini")).ok(),
+            Some(games)
+        );
         fs::remove_dir_all(&at).unwrap();
     }
 
