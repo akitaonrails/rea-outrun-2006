@@ -8,13 +8,15 @@
 set -eu
 version=${1#v}
 changelog=${2:-CHANGELOG.md}
-notes=$(awk -v v="$version" '
-  /^## \[/ {
+# Plain string functions, no bracket expressions: the same in gawk, mawk
+# and busybox awk. A "[x]: url" link line ends the last section.
+notes=$(${AWK:-awk} -v v="$version" '
+  substr($0, 1, 4) == "## [" {
     if (take) exit
-    head = $0; sub(/^## \[/, "", head); sub(/\].*/, "", head)
+    head = substr($0, 5); head = substr(head, 1, index(head, "]") - 1)
     if (head == v) { take = 1; next }
   }
-  /^\[[^]]*\]: / { if (take) exit }
+  substr($0, 1, 1) == "[" && index($0, "]: ") > 1 { if (take) exit }
   take { print }
 ' "$changelog")
 # Drop leading and trailing blank lines.
