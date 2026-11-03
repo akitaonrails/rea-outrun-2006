@@ -37,10 +37,11 @@ mod app {
     use or_launcher::{edition, form, hdpack, runtime, tweaks};
     use rea_launcher::fsx;
     use rea_launcher::log::Log;
+    use rea_launcher_win32::gpu::{self, Glx};
     use rea_launcher_win32::http::WinHttp;
     use rea_launcher_win32::instance::{self as win32_instance, SecondStart, Window};
     use rea_launcher_win32::report::{self, Mode, Run};
-    use rea_launcher_win32::{disk, display, gpu, process, wine, xinput};
+    use rea_launcher_win32::{disk, display, process, wine, xinput};
 
     use crate::ui;
 
@@ -320,7 +321,7 @@ mod app {
         // ended: a second start raises this launcher's window (exit 0) or
         // says the game runs (exit 5, which or-play reads as "nothing
         // started"). --check only reads and runs alongside.
-        let _instance = if !instance::needs_instance(&switches) {
+        let mut instance = if !instance::needs_instance(&switches) {
             None
         } else {
             match win32_instance::single(instance::NAME) {
@@ -343,11 +344,22 @@ mod app {
             return download_hd_pack(&settings_path);
         }
         if config::opens_window(&args, &switches) {
-            if wine::is_wine() {
-                match gpu::prefer_glx() {
-                    Ok(true) => log_line("Wine settings window: OpenGL through GLX (UseEGL=N)"),
-                    Ok(false) => {}
-                    Err(error) => log_line(&format!("warning: {error}")),
+            // A fresh Wine prefix draws eframe windows through EGL, which
+            // fails on many drivers: switch it to GLX and run the launcher
+            // once more, so this first start already gets its window.
+            match gpu::prefer_glx_or_restart(instance.take()) {
+                Glx::Restarted { exit_code } => {
+                    log_line("Wine settings window: GLX set (UseEGL=N), started again");
+                    return Ok(exit_code);
+                }
+                Glx::Ready {
+                    instance: guard,
+                    warning,
+                } => {
+                    instance = guard;
+                    if let Some(warning) = warning {
+                        log_line(&format!("warning: {warning}"));
+                    }
                 }
             }
             // No launcher.cfg yet: the window opens on the recommended look.
@@ -564,6 +576,8 @@ mod app {
                 saves.display()
             )),
         }
+        // Held until the game ended and the saves are back.
+        drop(instance);
         Ok(code)
     }
 }
