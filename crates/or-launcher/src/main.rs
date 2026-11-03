@@ -32,7 +32,7 @@ mod app {
     use std::sync::OnceLock;
 
     use or_launcher::config::{self, Settings};
-    use or_launcher::instance::{self, SecondStart};
+    use or_launcher::instance;
     use or_launcher::window::{self, Outcome};
     use or_launcher::{edition, form, hdpack, runtime, tweaks};
     use rea_launcher::fsx;
@@ -317,30 +317,25 @@ mod app {
         let settings_only = switch("--settings");
         let check_only = switch("--check");
         // One launcher at a time, held until the game this run starts has
-        // ended: a second start raises the window or says the game runs
-        // (`instance`). --check only reads and runs alongside.
+        // ended: a second start raises this launcher's window (exit 0) or
+        // says the game runs (exit 5, which or-play reads as "nothing
+        // started"). --check only reads and runs alongside.
         let _instance = if !instance::needs_instance(&switches) {
             None
         } else {
             match win32_instance::single(instance::NAME) {
                 Ok(guard) => Some(guard),
                 Err(running) => {
-                    let window = Window::Title(window::TITLE);
                     let action = instance::is_action(&switches);
-                    let second = SecondStart::of(
-                        action,
-                        || running.is_window_found(window),
-                        || running.bring_to_front(window),
-                    );
-                    log_line(&format!("another launcher is running: {second:?}"));
-                    match second.message() {
+                    let second = running.second_start(action, Window::Own(window::TITLE));
+                    log_line(second.log_line());
+                    match instance::message(second) {
                         // An action's outcome goes where its output goes.
                         Some(message) if action => command(message, true),
                         Some(message) => play_note(message),
                         None => {}
                     }
-                    // or-play --settings: nothing was started.
-                    return Ok(second.exit_code(action, settings_only, WINDOW_CLOSED));
+                    return Ok(second.exit_code() as u32);
                 }
             }
         };
