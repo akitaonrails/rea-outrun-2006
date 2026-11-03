@@ -987,10 +987,9 @@ fn step_row(ui: &mut egui::Ui, key: &'static str, steps: &[(u32, String)], value
 
 /// A row of chips for `key`: its label on the left, its description under
 /// it (both also the row's accessible name and description). `disabled`
-/// greys every chip out and puts why in the description's place, where a
-/// pad player sees it (the SDK's `RowOptions::disabled` says it on hover
-/// only). Also for the rows the SDK has no chips for: a resolution, and
-/// the input API without its "auto" value.
+/// greys every chip out; the SDK's chip row writes why under the chips,
+/// where a pad player sees it. Also for the rows the SDK has no chips
+/// for: a resolution, and the input API without its "auto" value.
 fn chip_row<T: PartialEq + Clone, S: AsRef<str>>(
     ui: &mut egui::Ui,
     key: &'static str,
@@ -1012,20 +1011,21 @@ fn chip_row<T: PartialEq + Clone, S: AsRef<str>>(
             })
             .inner;
         widgets::name_control(&response, Some(row.label), Some(row.description));
-        widgets::note(ui, disabled.unwrap_or(row.description));
+        widgets::note(ui, row.description);
         ui.add_space(6.0);
     });
 }
 
 /// A switch for `key` with its description under it; `disabled` says
-/// why it can't be changed now.
+/// why it can't be changed now (the SDK's switch writes it under its
+/// label).
 fn bool_row(ui: &mut egui::Ui, key: &'static str, on: &mut bool, disabled: Option<&str>) {
     let row = option(key);
     mark_rendered(ui.ctx(), key);
     ui.vertical(|ui| {
         let response = widgets::toggle(ui, on, row.label, disabled);
         widgets::name_control(&response, Some(row.label), Some(row.description));
-        widgets::note(ui, disabled.unwrap_or(row.description));
+        widgets::note(ui, row.description);
         ui.add_space(6.0);
     });
 }
@@ -1414,6 +1414,25 @@ mod tests {
         assert!(testing::disabled(
             &ui.get_by_label("Use the HD texture pack")
         ));
+    }
+
+    /// A pad player reads why a row is disabled on the window, once (the
+    /// SDK's chip row writes it under the chips, the switch under its
+    /// label), and the row's own description stays under it.
+    #[test]
+    fn a_disabled_row_says_why_once_and_keeps_its_description() {
+        let dirs = Dirs::new("disabled-once");
+        let mut ui = open(&dirs, None, false, true);
+        show(&mut ui, Tab::Controls);
+        let why = "Impulse triggers work on Windows only.";
+        assert_eq!(ui.get_all_by_label(why).count(), 1, "{why}");
+        let _ = ui.get_by_label(option("impulse_triggers").description);
+        show(&mut ui, Tab::Extras);
+        ui.get_by_label("CD switcher").click();
+        ui.run();
+        // The switch paints its reason; no note under it repeats it.
+        assert_eq!(ui.query_all_by_label("Needs the CD switcher.").count(), 0);
+        let _ = ui.get_by_label(option("music_shuffle").description);
     }
 
     #[test]

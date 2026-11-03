@@ -66,9 +66,10 @@ This file holds only what is specific to OutRun.
   the runtime's ledger (`.or-components`) and taken out on Windows without
   bringing the game folder's `d3d9.dll` back: repacks ship SpecialK there,
   which would hijack Direct3D (`runtime.rs` never copies it either).
-- **Disabled reasons stay visible.** Rows with a disabled reason show it in
-  the note's place (`chip_row`, `bool_row` in `window.rs`) so a pad player
-  sees it; the SDK's `RowOptions::disabled` says it on hover only. Keep the
+- **Disabled reasons stay visible.** A pad player never hovers: the SDK's
+  chip rows and switches write a disabled control's reason on the window
+  (from v0.4.0), so `chip_row` and `bool_row` in `window.rs` keep the
+  row's description under it and never repeat the reason. Keep the
   window's palette, the sunset-coast photo and the solid caption plate.
 - Example game paths use `$OR2006_GAME_DIR`.
 
