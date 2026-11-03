@@ -25,30 +25,39 @@ What was checked by running the game, newest first. Paths use
 - The HD pack drawn in a race (the download and unpack were checked).
 - `DX/FOG = 1` versus 0 (a side-by-side wasn't captured).
 
-## SDK v0.4.1 pass — to check by running the game
+## 2026-11-03 — SDK v0.4.1, real game, headless (agent)
 
-Headless (`gamescope --backend headless`), as the 2026-11-02 verification
-below:
+Setup: the `gaming` distrobox (Wine 11.21, gamescope 3.17.0), the release
+build of this branch packaged with `packaging/package.sh`, the owner's
+install (`$OR2006_GAME_DIR`, read only; the Tweaks EXE edition
+`68ceb386…`), a fresh throwaway prefix, `HOME`/`XDG_*` and logs under
+`.work/realgame/` (`bin/rg.sh`, `bin/win.sh`), audio to a private
+PipeWire null sink with device monitors off, every process started from
+`env -i`. Our processes were found by working folder, our prefix's
+wineserver folder or a silent match of our own path; no other process's
+command line or environment was read out. "Gone" is the time until none
+of our processes (game, launcher, Wine, gamescope, or-play) is left.
 
-- each look (`--look original|coast_to_coast|steam_deck`) still reaches
-  the game, with gamescope sized by `REA_LOOK_SIZES` (1280×800, the
-  screen, 640×480);
-- a Play-time error under or-play (an unknown `OR2006C2C.exe`, a missing
-  game folder) now shows a dialog (`report::audience`: the game run's
-  `--no-window` has a player watching under Wine);
-- a second start while the game runs is refused with exit 5 (was 0), for
-  `or-play --play`, `OutRunLauncher.exe --no-window` and `--settings
-  --linux`; the log says `second start: the game or another launcher run
-  is in progress; refused`;
-- a launcher killed while the game runs on Windows/Proton (no or-play
-  `wineserver -k`): the next Play is refused (`process::find_running`)
-  instead of syncing under the running game;
-- the first settings window on a fresh prefix opens at once
-  (`gpu::prefer_glx_or_restart`);
-- disabled rows (rumble strength with rumble off, impulse triggers under
-  Wine, shuffle without the CD switcher, the HD pack switch) show their
-  reason once and keep their description;
-- the quit paths below leave nothing behind.
+| Check | Result | Evidence (`logs/1103-…`) |
+| --- | --- | --- |
+| First run on a fresh prefix, `--look steam_deck`: runtime (3,553 files), Tweaks, VC++, DXVK, soundtrack fix; game renders | VERIFIED: gamescope 1280×800, `outrun2006.ini` 1280×800; `or-play stop` exit 0, nothing left | `000935-stop` |
+| `--look original` | VERIFIED: gamescope and the game 640×480 | `001440-wmclose` |
+| `--look coast_to_coast` | VERIFIED after a fix: with no screen to read (headless) `REA_LOOK_SIZES` gave 640×480; or-play keeps 1920×1080 for it again (`fix(or-play): …`); the game 1920×1080 | `001910-sigint` (before), `002417-stop` (after) |
+| WM_CLOSE (`wine taskkill /im OR2006C2C.exe`) | VERIFIED: `game exited with 0`, gone in 1.5 s | `001440-wmclose` |
+| Alt+F4 (XTest into gamescope's X) | VERIFIED: the game quits (`game exited with 0`), gone in 2.1 s | `001818-altf4` |
+| `or-play stop` | VERIFIED: exit 0, gone in 0.4 s | `002417-stop` |
+| SIGINT / SIGTERM to `or-play` | VERIFIED: gone in 0.9 / 0.6 s, exit 143 | `001910-sigint`, `001654-sigterm` |
+| gamescope ended (SIGTERM) | VERIFIED: gone in 0.6 s | `001737-gamescope` |
+| The game's own Quit | NOT CHECKABLE HEADLESS (needs the menus); a person picks Exit | — |
+| Play-time error under or-play (an unknown `OR2006C2C.exe` in a scratch folder) | VERIFIED: a dialog in gamescope with the SHA-256 and the unknown-edition link (`report::audience`); OK ends the launcher, nothing left | `002101-error` (`shot-dialog.png`) |
+| Second start while the game runs | VERIFIED: `or-play --play` exit 5 (or-play's lock); `OutRunLauncher.exe --settings --linux` exit 5, no dialog; `--no-window` and `--download-hd-pack` show "OutRun 2006 or its launcher is already running." and exit 5 after OK; the log says `second start: … refused` | `001952-second` |
+| Launcher killed while the game runs, plain Wine (no or-play's `wineserver -k`) | VERIFIED: the game keeps running; a new `--no-window` is refused before any sync (`process::find_running`), dialog, exit 5 | `002300-killplain` |
+| Settings window on a fresh prefix | VERIFIED: it opens on the first start (the launcher ran itself again for GLX: two start lines in `launcher.log`); Alt+F4 closes it with exit 3 | `002504-win-first`, `002617-win-tabs` |
+| Disabled rows | VERIFIED: impulse triggers under Wine and the HD pack switch show the reason once and keep their description; README screenshots retaken | `002617-win-tabs` |
+
+Known, not ours: headless gamescope 3.17.0 often ends with a segmentation
+fault after its child has quit, so `or-play` returns 139 in those runs
+(also in the 2026-11-02 runs); nothing is left behind.
 
 ## SDK v0.3.0 pass — to check by running the game
 

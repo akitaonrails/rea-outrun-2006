@@ -4,6 +4,34 @@ All notable changes to this project. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Under Linux (or-play, the AppImage) and Proton, an error while starting
+  the game, like a wrong game folder or an EXE the launcher doesn't know,
+  now shows a message. Before, it went only to the log, and it looked as
+  if the game never started.
+- If the launcher was closed while the game kept running, the next start
+  copied files under the running game and started a second one. It now
+  says the game is already running.
+- On a new Wine prefix the settings window opens on the first start, not
+  only on the second.
+- A greyed-out setting says why once, under the setting, and its own
+  description stays visible. It used to show the reason twice and hide the
+  description.
+- A second start finds only this launcher's window. A folder window named
+  "OutRun 2006" could be taken for it.
+
+### Changed
+
+- A start refused because the launcher or the game is already running
+  exits with code 5 (it was 0, or 3 with `--settings`). or-play says
+  "nothing started".
+- The bug report form asks what worked (settings window, game, pad, sound,
+  quitting).
+- Updated rea-launcher-sdk to v0.4.1.
+
 ## [0.2.1] - 2026-11-02
 
 ### Fixed
