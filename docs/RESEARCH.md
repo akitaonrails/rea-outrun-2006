@@ -18,6 +18,15 @@ page, the projects' own repositories, ProtonDB/WineHQ for Linux.
 | SpecialK `d3d9.dll` (shipped by some repacks) | General D3D tweaks | GPL-3.0 | yes | **Not used**: it loads before the real D3D9 and fights Tweaks/DXVK; the runtime copy never takes the game folder's `d3d9.dll` |
 | Community online server (clarissa.port0.org) | Online play after SEGA's servers closed | — | yes | **Configured** through Tweaks' `DemonwareServerOverride` (Tweaks' default) |
 
+## Owner decisions
+
+- **2026-11-02: OutRun2006Tweaks' DRM-free replacement `OR2006C2C.exe` is
+  approved** (recorded in `AGENTS.md` and `THIRD_PARTY.md` that day). The
+  2006 EXE is wrapped in disc DRM that fails on modern Windows; the
+  launcher drops the maintained mod's replacement EXE into its private
+  copy verbatim and never writes its own crack or patches the game's EXE.
+  Waived for `launcher-check` in `.rea-check-waivers`.
+
 ## What we built ourselves
 
 Nothing that patches the game: the launcher only arranges and configures
