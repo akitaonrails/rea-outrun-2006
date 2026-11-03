@@ -38,9 +38,9 @@ mod app {
     use rea_launcher::fsx;
     use rea_launcher::log::Log;
     use rea_launcher_win32::http::WinHttp;
-    use rea_launcher_win32::instance::{self as win32_instance, Window};
+    use rea_launcher_win32::instance::{self as win32_instance, SecondStart, Window};
     use rea_launcher_win32::report::{self, Mode, Run};
-    use rea_launcher_win32::{disk, display, gpu, wine, xinput};
+    use rea_launcher_win32::{disk, display, gpu, process, wine, xinput};
 
     use crate::ui;
 
@@ -417,6 +417,15 @@ mod app {
             return Ok(check(&game, &detected, &runtime_dir, wine, &warnings));
         }
         runtime::check_separate(&game, &runtime_dir)?;
+        // A launcher that was killed while it played released the
+        // instance, but its game may still run from this runtime copy:
+        // never sync under it or start a second one.
+        if !process::find_running(&runtime_dir.join(EXE)).is_empty() {
+            let busy = SecondStart::Busy;
+            log_line(busy.log_line());
+            play_note(instance::GAME_RUNNING);
+            return Ok(busy.exit_code() as u32);
+        }
         let saves_state = runtime_dir.join(runtime::SAVES_STATE);
         // Temp files left by launchers before the SDK (`name.tmp`).
         runtime::remove_old_temps(&[

@@ -157,4 +157,15 @@ mod tests {
         drop(first);
         drop(instance::single(&name).expect("free once the first ended"));
     }
+
+    /// Under Wine: no game runs from a runtime copy that doesn't exist,
+    /// so Play goes ahead.
+    #[cfg(windows)]
+    #[test]
+    fn no_game_runs_from_an_unused_runtime_copy() {
+        let exe = std::env::temp_dir()
+            .join(format!("{NAME}-no-runtime-{}", std::process::id()))
+            .join(crate::edition::EXE);
+        assert!(rea_launcher_win32::process::find_running(&exe).is_empty());
+    }
 }
