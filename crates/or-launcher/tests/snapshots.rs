@@ -7,7 +7,7 @@
 //! only then, with `UPDATE_SNAPSHOTS=1 cargo test --test snapshots`.
 //! No game bytes: only what the launcher writes.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use or_launcher::config::{self, Settings};
 use or_launcher::form;
@@ -15,22 +15,14 @@ use or_launcher::plan::plan;
 
 const SCREEN: Option<(u32, u32)> = Some((2560, 1440));
 
+/// The SDK's comparison (`rea_launcher::testing`): the crate version
+/// becomes `<version>`, CRLF reads as LF, a diff names its first line.
+/// `REA_UPDATE_SNAPSHOTS=1` (or this repository's `UPDATE_SNAPSHOTS=1`)
+/// writes them instead.
 fn snapshot(name: &str, actual: &str) {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/snapshots")
-        .join(name);
-    if std::env::var_os("UPDATE_SNAPSHOTS").is_some() {
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, actual).unwrap();
-        return;
-    }
-    let expected = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("{}: {e} (UPDATE_SNAPSHOTS=1 creates it)", path.display()))
-        .replace("\r\n", "\n");
-    assert!(
-        expected == actual,
-        "{name} differs from its snapshot; review the change, then UPDATE_SNAPSHOTS=1.\n--- actual ---\n{actual}"
-    );
+    rea_launcher::snapshots!()
+        .update_var("UPDATE_SNAPSHOTS")
+        .assert(name, actual);
 }
 
 fn args(list: &[&str]) -> Settings {
@@ -49,11 +41,8 @@ fn run(file: &str, flags: &[&str], wine: bool) -> Settings {
 
 #[test]
 fn help_and_template() {
-    // The version changes every release; the snapshot keeps a placeholder.
-    snapshot(
-        "help.txt",
-        &config::usage().replace(env!("CARGO_PKG_VERSION"), "<version>"),
-    );
+    // The version changes every release; the helper keeps a placeholder.
+    snapshot("help.txt", &config::usage());
     snapshot("launcher.cfg", &config::template());
 }
 
