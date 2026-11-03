@@ -12,6 +12,8 @@
 /// The instance name (`Local\rea-launcher-rea-outrun-2006`).
 pub const NAME: &str = "rea-outrun-2006";
 
+use rea_launcher_win32::report::Run;
+
 /// Exit code of an action flag that another launcher kept from running.
 pub const ALREADY_RUNNING: u32 = 5;
 
@@ -24,6 +26,18 @@ pub const GAME_RUNNING: &str =
 /// What `--download-hd-pack` says when the settings window is open: that
 /// window may be downloading the same pack right now.
 pub const WINDOW_OPEN: &str = "The launcher window is open: download the pack from its HD Pack tab, or close the window and run --download-hd-pack again.";
+
+/// The switches whose output is their result: a command for the SDK's
+/// audience rule (`--help` is one too, read before the switches).
+pub const COMMANDS: &[&str] = &["--check", "--download-hd-pack"];
+
+/// The family flags of a run with these (parsed) switches, for
+/// `rea_launcher_win32::report::audience`. Never decide who is watching
+/// from `--no-window` or `--linux` alone: or-play starts the game run with
+/// `--no-window` for a player in front of the screen.
+pub fn run(switches: &[String]) -> Run {
+    Run::from_args(switches, COMMANDS)
+}
 
 /// Whether a run with these switches is an action that does its work
 /// without the window.
@@ -98,6 +112,7 @@ impl SecondStart {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rea_launcher_win32::report::Audience;
 
     fn switches(list: &[&str]) -> Vec<String> {
         list.iter().map(|s| s.to_string()).collect()
@@ -139,6 +154,32 @@ mod tests {
         // Other runs are no action; --check takes no instance.
         assert!(!is_action(&switches(&["--linux", "--no-window"])));
         assert!(!needs_instance(&switches(&["--check"])));
+    }
+
+    /// Who sees a message is the SDK's rule (`report::Audience`), for the
+    /// command lines or-play, the AppImage, Proton and a player use.
+    #[test]
+    fn the_helpers_runs_have_the_sdks_audience() {
+        let watching =
+            |list: &[&str], wine: bool| Audience::of(run(&switches(list)), wine).interactive;
+        // or-play's game run (REA_PLAY_ARGS) under Wine: a player is in
+        // front of the screen and nobody reads stdout, so errors are
+        // dialogs.
+        assert!(watching(&["--no-window"], true));
+        assert!(watching(&["--no-window", "--linux"], true));
+        // Proton or a double-click: the window, then the game.
+        assert!(watching(&[], true));
+        assert!(watching(&[], false));
+        // or-play's settings window shows its own messages; or-play reads
+        // --check's output and exit code itself.
+        assert!(!watching(&["--settings", "--linux"], true));
+        assert!(!watching(&["--check", "--linux"], true));
+        // A script on Windows.
+        assert!(!watching(&["--no-window"], false));
+        // Commands answer on the terminal.
+        assert!(run(&switches(&["--check"])).command);
+        assert!(run(&switches(&["--download-hd-pack", "--no-window"])).command);
+        assert!(!run(&switches(&["--no-window", "--linux"])).command);
     }
 
     /// Under Wine (`sdk/scripts/wine-test`): while one launcher holds the

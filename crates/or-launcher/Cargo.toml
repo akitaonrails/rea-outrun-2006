@@ -15,8 +15,8 @@ path = "src/main.rs"
 rea-launcher = { workspace = true, features = ["zip"] }
 # The settings window (drawn and tested on any host).
 rea-launcher-ui.workspace = true
-
-[target.'cfg(windows)'.dependencies]
+# Its Windows parts are cfg(windows); who sees a message and what a second
+# start does are portable (tested on the host).
 rea-launcher-win32.workspace = true
 
 [dev-dependencies]

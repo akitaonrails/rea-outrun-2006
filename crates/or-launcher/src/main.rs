@@ -29,7 +29,7 @@ mod app {
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::OnceLock;
 
     use or_launcher::config::{self, Settings};
     use or_launcher::instance::{self, SecondStart};
@@ -39,7 +39,7 @@ mod app {
     use rea_launcher::log::Log;
     use rea_launcher_win32::http::WinHttp;
     use rea_launcher_win32::instance::{self as win32_instance, Window};
-    use rea_launcher_win32::report::{self, Mode};
+    use rea_launcher_win32::report::{self, Mode, Run};
     use rea_launcher_win32::{disk, display, gpu, wine, xinput};
 
     use crate::ui;
@@ -116,38 +116,32 @@ mod app {
 
     const TITLE: &str = "OutRun 2006 launcher";
 
-    /// Set once the flags are read: `--no-window` (a script, nobody
-    /// watching).
-    static NO_WINDOW: AtomicBool = AtomicBool::new(false);
+    /// Who may see this run's messages, set once the command line is read
+    /// (the SDK's `report::audience`: under Wine or-play's `--no-window`
+    /// game run has a player watching; a `--no-window` script on Windows
+    /// has none).
+    static SAYS: OnceLock<Mode> = OnceLock::new();
 
-    fn interactive() -> bool {
-        !NO_WINDOW.load(Ordering::Relaxed)
+    /// The run's message mode; before the command line is read, a play run
+    /// a person may be watching.
+    fn says() -> Mode {
+        SAYS.get()
+            .copied()
+            .unwrap_or(Mode::Play { interactive: true })
     }
 
     /// An error the launcher stops on: a dialog when a person may be
     /// watching, and stdout, which or-play, the AppImage and Proton keep
     /// in a log (SDK `report`, so it reaches the player under Wine too).
     pub fn fatal(text: &str) {
-        report::fatal(
-            TITLE,
-            text,
-            Mode::Play {
-                interactive: interactive(),
-            },
-        );
+        report::fatal(TITLE, text, says());
     }
 
-    /// A message while preparing to play (another launcher is running).
+    /// A message while preparing to play (another launcher, or the game,
+    /// is running).
     fn play_note(text: &str) {
         log_lines(text);
-        report::note(
-            TITLE,
-            text,
-            Mode::Play {
-                interactive: interactive(),
-            },
-            true,
-        );
+        report::note(TITLE, text, says(), true);
     }
 
     /// Output of a command (`--help`, `--check`, a bad flag): the
@@ -155,13 +149,10 @@ mod app {
     /// one. Always logged.
     fn command(text: &str, error: bool) {
         log_lines(text);
-        let mode = Mode::Command {
-            interactive: interactive(),
-        };
         if error {
-            report::fatal(TITLE, text, mode);
+            report::fatal(TITLE, text, says());
         } else {
-            report::note(TITLE, text, mode, false);
+            report::note(TITLE, text, says(), false);
         }
     }
 
@@ -300,26 +291,30 @@ mod app {
         log_line(concat!("OutRunLauncher ", env!("CARGO_PKG_VERSION")));
         let settings_path = settings_path();
         let cli: Vec<String> = std::env::args().skip(1).collect();
+        // --help and a bad command line answer like a command.
+        let as_command = Run {
+            command: true,
+            ..Run::from_args(&cli, instance::COMMANDS)
+        };
         if cli
             .iter()
             .any(|a| matches!(a.as_str(), "--help" | "-h" | "/?"))
         {
-            NO_WINDOW.store(cli.iter().any(|a| a == "--no-window"), Ordering::Relaxed);
+            let _ = SAYS.set(report::audience(as_command).mode());
             command(&config::usage(), false);
             return Ok(0);
         }
         let (args, switches) = match Settings::parse_args(cli.clone()) {
             Ok(parsed) => parsed,
             Err(message) => {
-                NO_WINDOW.store(cli.iter().any(|a| a == "--no-window"), Ordering::Relaxed);
+                let _ = SAYS.set(report::audience(as_command).mode());
                 command(&message, true);
                 return Ok(2);
             }
         };
+        let _ = SAYS.set(report::audience(instance::run(&switches)).mode());
         let switch = |name: &str| switches.iter().any(|s| s == name);
         let settings_only = switch("--settings");
-        let no_window = switch("--no-window");
-        NO_WINDOW.store(no_window, Ordering::Relaxed);
         let check_only = switch("--check");
         // One launcher at a time, held until the game this run starts has
         // ended: a second start raises the window or says the game runs
