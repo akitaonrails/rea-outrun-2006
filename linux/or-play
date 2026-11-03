@@ -65,38 +65,15 @@ REA_LEGACY_LOCK=keep
 # `or-play --play --scaler fsr --resolution 1280x720`: the flags still go
 # to the launcher, and for that run the helper reads them over
 # launcher.cfg (gamescope's filter and size); the file is not written.
-REA_HELPER_KEYS="scaler resolution look"
+# --look and --resolution are read without being listed here.
+REA_HELPER_KEYS="scaler"
 
-# The race size a look gives (form::look_settings): Steam Deck 1280x800,
-# Coast to Coast the screen (the launcher inside sees gamescope's screen),
-# Original the game's 640x480.
-or_look_size() {
-  case $1 in
-    steam_deck) echo 1280x800 ;;
-    coast_to_coast) rea_screen_size || echo 1920x1080 ;;
-    original) echo 640x480 ;;
-    *) return 1 ;;
-  esac
-}
-
-# As Settings::combine: launcher.cfg's look fills the resolution the file
-# leaves unset; a --look for this run wins over the file's resolution; a
-# --resolution wins over both. The size goes into this run's values, which
-# rea_game_size reads first.
-rea_hook_before_start() {
-  [ -n "$(REA_CFG=; rea_get_key resolution)" ] && return 0
-  _or_size=
-  _or_look=$(REA_CFG=; rea_get_value look)
-  if [ -n "$_or_look" ]; then
-    _or_size=$(or_look_size "$_or_look") || _or_size=
-  elif [ -n "$REA_CFG" ] && [ -z "$(rea_get_key resolution "$REA_CFG")" ]; then
-    _or_look=$(rea_get_value look "$REA_CFG")
-    [ -n "$_or_look" ] && { _or_size=$(or_look_size "$_or_look") || _or_size=; }
-  fi
-  [ -n "$_or_size" ] || return 0
-  REA_ONE_RUN="${REA_ONE_RUN:+$REA_ONE_RUN
-}resolution=$_or_size"
-}
+# The race size a look gives (form::look_settings), sized as the launcher
+# resolves it (Settings::combine: this run's --resolution, its --look, the
+# file's resolution, its look): Steam Deck 1280x800, Coast to Coast the
+# screen (the launcher inside sees gamescope's screen), Original the
+# game's 640x480 (REA_ORIGINAL_SIZE).
+REA_LOOK_SIZES="original=original coast_to_coast=screen steam_deck=1280x800"
 REA_FLAG_SWITCHES="--no-window --settings --linux --check --download-hd-pack --help"
 
 rea_init || exit 1
