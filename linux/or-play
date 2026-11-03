@@ -74,6 +74,12 @@ REA_HELPER_KEYS="scaler"
 # screen (the launcher inside sees gamescope's screen), Original the
 # game's 640x480 (REA_ORIGINAL_SIZE).
 REA_LOOK_SIZES="original=original coast_to_coast=screen steam_deck=1280x800"
+# With no screen to read (no X display), "screen" would be the helper's
+# 640x480 default; Coast to Coast keeps or-play's 1920x1080 for it. The
+# screen is only read for the look's size here (no REA_FULLSCREEN_SIZE).
+rea_hook_before_start() {
+  [ -n "$REA_SCREEN" ] || rea_screen_size > /dev/null || REA_SCREEN=1920x1080
+}
 REA_FLAG_SWITCHES="--no-window --settings --linux --check --download-hd-pack --help"
 
 rea_init || exit 1

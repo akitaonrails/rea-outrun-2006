@@ -20,6 +20,7 @@ case "$*" in *"command -v gamescope"*) [ ! -e "$T/no-gamescope" ]; exit ;; esac
 echo "$*" > "$T/ran"
 FAKE
 chmod +x "$T/fake-run"
+mkdir -p "$T/no-xrandr"; printf '#!/bin/sh\nexit 1\n' > "$T/no-xrandr/xrandr"; chmod +x "$T/no-xrandr/xrandr"
 export OR_RUN=$T/fake-run OR_LAUNCHER=$T/OutRunLauncher.exe
 REA_FUNCTIONS_ONLY=1 REA_PLAY_HERE=$PLAY_DIR . "$PLAY_DIR/or-play"
 REA_GPU= REA_TEST=1 REA_SYSFS=$T/nosys
@@ -88,6 +89,9 @@ size_of 'look = steam_deck\nresolution = 1920x1080\n' 1920 1080 "the file's own 
 rea_start --look steam_deck > /dev/null
 check "--look wins over the file's resolution" "gamescope -W 1280 -H 800 -w 1280 -h 800"
 check "--look still reaches the launcher" "--no-window --look steam_deck"
+# No screen to read (no X display, xrandr missing): Coast to Coast is
+# 1920x1080, as or-play sized it before REA_LOOK_SIZES (never 640x480).
+REA_SCREEN= PATH=$T/no-xrandr:$PATH size_of 'look = coast_to_coast\n' 1920 1080 "coast_to_coast without a known screen: 1920x1080"
 REA_SCREEN=3840x2160 rea_start --look=coast_to_coast > /dev/null
 check "--look=coast_to_coast: the screen" "gamescope -W 3840 -H 2160"
 rea_start --look steam_deck --resolution 2560x1440 > /dev/null
