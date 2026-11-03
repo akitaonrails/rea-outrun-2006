@@ -974,8 +974,8 @@ fn step_row(ui: &mut egui::Ui, key: &'static str, steps: &[(u32, String)], value
     let steps: Vec<(u32, &str)> = steps.iter().map(|(v, l)| (*v, l.as_str())).collect();
     let mut text = value.to_string();
     let options = RowOptions {
-        disabled: None,
         steps: Some(&steps),
+        ..RowOptions::default()
     };
     if spec_row_with(ui, option(key), &mut text, options).changed()
         && let Ok(n) = text.parse()
