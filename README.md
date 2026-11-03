@@ -228,7 +228,7 @@ launcher's own switches:
 | Switch | What it does |
 | --- | --- |
 | `--no-window` | play with the saved settings (and any options given) |
-| `--settings` | only the settings window; exit code 0 when Play was pressed, 3 when it was closed, 4 when no window could be shown (`--linux` adds the Linux scaler, for `or-play`) |
+| `--settings` | only the settings window; exit code 0 when Play was pressed, 3 when it was closed, 4 when no window could be shown, 5 when another launcher or its game is running (`--linux` adds the Linux scaler, for `or-play`) |
 | `--check` | checks the game folder and the launcher's files without playing; the report goes to `launcher.log`; exit code 0 ready, 1 not |
 | `--download-hd-pack` | downloads the HD texture pack and switches it on; exit code 5 when another launcher is open (the window, or the game) |
 | `--help` | every option and its values |
@@ -261,8 +261,9 @@ start, so your saves folder always has them.
   [unknown edition form](https://github.com/akitaonrails/rea-outrun-2006/issues/new?template=unknown-edition.yml).
 - **"OutRun 2006 or its launcher is already running."** The launcher you
   started first is still waiting for the game, or is running without a
-  window. Quit the game (or let that launcher finish), then start the
-  launcher again.
+  window, or the game is still running from the launcher's copy after its
+  launcher was closed. Quit the game (or let that launcher finish), then
+  start the launcher again. The launcher exits with code 5.
 - **The pad isn't seen, or the d-pad doesn't move the menus.** Try another
   Input API in the Controls tab (XInput under Wine and Proton, then
   DirectInput). On 8BitDo pads use the X-input mode switch.

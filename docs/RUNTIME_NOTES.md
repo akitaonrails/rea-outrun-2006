@@ -25,6 +25,31 @@ What was checked by running the game, newest first. Paths use
 - The HD pack drawn in a race (the download and unpack were checked).
 - `DX/FOG = 1` versus 0 (a side-by-side wasn't captured).
 
+## SDK v0.4.1 pass — to check by running the game
+
+Headless (`gamescope --backend headless`), as the 2026-11-02 verification
+below:
+
+- each look (`--look original|coast_to_coast|steam_deck`) still reaches
+  the game, with gamescope sized by `REA_LOOK_SIZES` (1280×800, the
+  screen, 640×480);
+- a Play-time error under or-play (an unknown `OR2006C2C.exe`, a missing
+  game folder) now shows a dialog (`report::audience`: the game run's
+  `--no-window` has a player watching under Wine);
+- a second start while the game runs is refused with exit 5 (was 0), for
+  `or-play --play`, `OutRunLauncher.exe --no-window` and `--settings
+  --linux`; the log says `second start: the game or another launcher run
+  is in progress; refused`;
+- a launcher killed while the game runs on Windows/Proton (no or-play
+  `wineserver -k`): the next Play is refused (`process::find_running`)
+  instead of syncing under the running game;
+- the first settings window on a fresh prefix opens at once
+  (`gpu::prefer_glx_or_restart`);
+- disabled rows (rumble strength with rumble off, impulse triggers under
+  Wine, shuffle without the CD switcher, the HD pack switch) show their
+  reason once and keep their description;
+- the quit paths below leave nothing behind.
+
 ## SDK v0.3.0 pass — to check by running the game
 
 (The two or-play items were verified on 2026-11-02; the Windows one is
