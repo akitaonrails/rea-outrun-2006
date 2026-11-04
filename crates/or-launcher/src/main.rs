@@ -31,6 +31,7 @@ mod app {
     use std::process::Command;
     use std::sync::OnceLock;
 
+    use or_launcher::cli::{self, Ask};
     use or_launcher::config::{self, Settings};
     use or_launcher::instance;
     use or_launcher::window::{self, Outcome};
@@ -40,7 +41,7 @@ mod app {
     use rea_launcher_win32::gpu::{self, Glx};
     use rea_launcher_win32::http::WinHttp;
     use rea_launcher_win32::instance::{self as win32_instance, SecondStart, Window};
-    use rea_launcher_win32::report::{self, Mode, Run};
+    use rea_launcher_win32::report::{self, Mode};
     use rea_launcher_win32::{disk, display, process, wine, xinput};
 
     use crate::ui;
@@ -292,28 +293,21 @@ mod app {
         log_line(concat!("OutRunLauncher ", env!("CARGO_PKG_VERSION")));
         let settings_path = settings_path();
         let cli: Vec<String> = std::env::args().skip(1).collect();
-        // --help and a bad command line answer like a command.
-        let as_command = Run {
-            command: true,
-            ..Run::from_args(&cli, instance::COMMANDS)
-        };
-        if cli
-            .iter()
-            .any(|a| matches!(a.as_str(), "--help" | "-h" | "/?"))
-        {
-            let _ = SAYS.set(report::audience(as_command).mode());
-            command(&config::usage(), false);
-            return Ok(0);
-        }
-        let (args, switches) = match Settings::parse_args(cli.clone()) {
-            Ok(parsed) => parsed,
-            Err(message) => {
-                let _ = SAYS.set(report::audience(as_command).mode());
-                command(&message, true);
-                return Ok(2);
+        // --help and a bad command line answer like a command (the SDK's
+        // Run::bad_command_line: never a play run's modal box).
+        let (ask, run) = cli::read(cli);
+        let _ = SAYS.set(report::audience(run).mode());
+        let (args, switches) = match ask {
+            Ask::Help => {
+                command(&config::usage(), false);
+                return Ok(0);
             }
+            Ask::Bad(message) => {
+                command(&message, true);
+                return Ok(cli::BAD_COMMAND_LINE);
+            }
+            Ask::Go(args, switches) => (args, switches),
         };
-        let _ = SAYS.set(report::audience(instance::run(&switches)).mode());
         let switch = |name: &str| switches.iter().any(|s| s == name);
         let settings_only = switch("--settings");
         let check_only = switch("--check");

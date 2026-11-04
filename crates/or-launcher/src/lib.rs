@@ -3,6 +3,7 @@
 //! lives here; the settings window (`window`) draws on any host; the Windows program
 //! (`main.rs`, `ui.rs`) gives it the system's dialogs, pad and downloads.
 
+pub mod cli;
 pub mod config;
 pub mod edition;
 pub mod form;
