@@ -71,7 +71,9 @@ Download from the [latest release](https://github.com/akitaonrails/rea-outrun-20
 1. Unpack the zip anywhere.
 2. Keep its folders (`tweaks`, `vc`, `linux`, `soundtrack`) next to
    `OutRunLauncher.exe`.
-3. Run `OutRunLauncher.exe`.
+3. Run `OutRunLauncher.exe`. The launcher is not signed, so on the first
+   start from a downloaded zip Windows may say "Windows protected your
+   PC": choose **More info**, then **Run anyway**.
 
 ### Steam Deck
 
@@ -245,6 +247,8 @@ A bad option or value exits with code 2 and says what it takes.
 | The downloaded HD pack | `%LOCALAPPDATA%\OutRunLauncher\hd-pack` (3.2 GB) | in the prefix, `…/AppData/Local/OutRunLauncher/hd-pack` |
 | Wine prefix | — | `~/.local/share/or-launcher/prefix` |
 | `or-play`'s log (`play.log`) and lock | — | `~/.config/or-launcher` |
+| Registry: the game's graphics preference (`GpuPreference=2;`, the high-performance GPU) | `HKCU\Software\Microsoft\DirectX\UserGpuPreferences`, a value named after the copy's `OR2006C2C.exe` (`%LOCALAPPDATA%\OutRunLauncher\OutRun2006\OR2006C2C.exe` by default) | — |
+| Registry, in the Wine prefix only | — | `OR2006C2C.exe`'s DLL overrides (`HKCU\Software\Wine\AppDefaults\OR2006C2C.exe\DllOverrides`, recorded in `HKCU\Software\rea-launcher\DllOverrides\OR2006C2C.exe`), the settings window's `UseEGL = N` (`HKCU\Software\Wine\X11 Driver`) and the controller baseline under `HKLM\System\CurrentControlSet\Services\winebus`; a value you set yourself is kept |
 
 A `launcher.cfg` next to `OutRunLauncher.exe` is used instead when it
 exists (a portable install). Under Proton everything is in Steam's
@@ -298,10 +302,17 @@ start, so your saves folder always has them.
 2. Delete the folder you unpacked (or the AppImage).
 3. Windows: delete `%LOCALAPPDATA%\OutRunLauncher`: settings, log, the
    private copy of the game (about 1 GB) and the downloaded HD pack
-   (3.2 GB).
+   (3.2 GB). The graphics preference in
+   `HKCU\Software\Microsoft\DirectX\UserGpuPreferences` names the copy's
+   `OR2006C2C.exe`; you can delete that value too.
 4. Linux: delete the prefix `~/.local/share/or-launcher/prefix` and
    `~/.config/or-launcher`, after copying the saves out. Proton: removing
    the shortcut in Steam offers to delete its prefix, saves included.
+   The prefix holds the launcher's registry entries (above), so they go
+   with it. In a Wine prefix of your own, delete the
+   `HKCU\Software\Wine\AppDefaults\OR2006C2C.exe` and
+   `HKCU\Software\rea-launcher` keys with `wine regedit`; keep `UseEGL`
+   and the winebus values if other programs use them.
 
 Your game folder was never changed, so there is nothing to undo there.
 
