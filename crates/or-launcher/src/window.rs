@@ -877,10 +877,7 @@ impl Window {
                 ui.add_space(METRICS.field_width + ui.spacing().item_spacing.x);
                 if widgets::outline_button(ui, "Test rumble").clicked() {
                     let took = self.platform.test_rumble(f.vibration_strength * 10);
-                    self.rumble_test = Some(match took {
-                        0 => "No pad took the rumble. Under Wine the pad must be in X-input mode; on 8BitDo pads use the X-input switch.".to_string(),
-                        _ => "Sent: your pad should have shaken for half a second. In a race it shakes on shifts, drifts and crashes.".to_string(),
-                    });
+                    self.rumble_test = Some(rumble_result(took, self.wine).to_string());
                 }
             });
             if let Some(result) = &self.rumble_test {
@@ -1099,6 +1096,22 @@ fn hd_pack_note(folder: &str) -> (String, Color32) {
     }
 }
 
+/// What "Test rumble" says after `took` pads took it. Wine is named only
+/// under Wine (`wine`): on Windows an Xbox-style pad needs no mode.
+fn rumble_result(took: usize, wine: bool) -> &'static str {
+    match (took, wine) {
+        (0, true) => {
+            "No pad took the rumble. Under Wine the pad must be in X-input mode; on 8BitDo pads use the X-input switch."
+        }
+        (0, false) => {
+            "No pad took the rumble. The test needs an Xbox-style (XInput) pad; on 8BitDo pads use the X-input switch."
+        }
+        _ => {
+            "Sent: your pad should have shaken for half a second. In a race it shakes on shifts, drifts and crashes."
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1113,6 +1126,8 @@ mod tests {
     struct Fake {
         rumbles: Arc<AtomicUsize>,
         downloads: Arc<AtomicUsize>,
+        /// No pad takes the rumble test.
+        no_pad: bool,
     }
 
     impl Platform for Fake {
@@ -1122,7 +1137,7 @@ mod tests {
         fn open_url(&self, _url: &str) {}
         fn test_rumble(&self, _percent: u32) -> usize {
             self.rumbles.fetch_add(1, Ordering::Relaxed);
-            1
+            usize::from(!self.no_pad)
         }
         fn pads(&self) -> usize {
             1
@@ -1457,6 +1472,33 @@ mod tests {
         assert_eq!(downloads.load(Ordering::Relaxed), 1);
         // Play waits while it runs.
         assert!(!ui.state().ready());
+    }
+
+    /// Windows 10 test (rea-launcher-sdk#1): with no pad, "Test rumble"
+    /// talked about Wine on native Windows. Wine is named only under Wine.
+    #[test]
+    fn the_rumble_test_names_wine_only_under_wine() {
+        for wine in [false, true] {
+            let dirs = Dirs::new(&format!("rumble-{wine}"));
+            let game = dirs.root.join("game").display().to_string();
+            let text = config::set_key(&config::template(), "game", &game);
+            let fake = Fake {
+                no_pad: true,
+                ..Fake::default()
+            };
+            let mut ui = harness(Window::new(
+                dirs.setup(Some(&text), false, wine),
+                Box::new(fake),
+                None,
+            ));
+            show(&mut ui, Tab::Controls);
+            ui.get_by_label("Test rumble").click();
+            ui.run();
+            let said = ui.state().rumble_test.clone().unwrap();
+            assert!(said.starts_with("No pad took the rumble."), "{said}");
+            assert_eq!(said.contains("Wine"), wine, "{said}");
+            let _ = ui.get_by_label(&said);
+        }
     }
 
     #[test]
