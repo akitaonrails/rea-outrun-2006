@@ -6,6 +6,24 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+From a test of the Windows build on Windows 10 (rea-launcher-sdk#1).
+
+### Fixed
+
+- `--check` while the launcher window is open no longer runs beside it:
+  it says the window is open and exits with code 5, like
+  `--download-hd-pack`. While the game runs it says so and exits 5 too.
+- "Test rumble" with no pad no longer talks about Wine on Windows; it
+  says the test needs an Xbox-style (XInput) pad.
+
+### Changed
+
+- The README says what to do when Windows SmartScreen stops the
+  launcher ("Windows protected your PC": More info, then Run anyway), and
+  lists every registry entry the launcher writes, with how to remove them.
+- Updated rea-launcher-sdk to v0.4.2. A bad option still prints what it
+  takes and exits with code 2, now through the SDK's shared rule.
+
 ## [0.3.0] - 2026-11-03
 
 ### Fixed
