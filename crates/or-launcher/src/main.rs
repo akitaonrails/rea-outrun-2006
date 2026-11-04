@@ -314,24 +314,21 @@ mod app {
         // One launcher at a time, held until the game this run starts has
         // ended: a second start raises this launcher's window (exit 0) or
         // says the game runs (exit 5, which or-play reads as "nothing
-        // started"). --check only reads and runs alongside.
-        let mut instance = if !instance::needs_instance(&switches) {
-            None
-        } else {
-            match win32_instance::single(instance::NAME) {
-                Ok(guard) => Some(guard),
-                Err(running) => {
-                    let action = instance::is_action(&switches);
-                    let second = running.second_start(action, Window::Own(window::TITLE));
-                    log_line(second.log_line());
-                    match instance::message(second) {
-                        // An action's outcome goes where its output goes.
-                        Some(message) if action => command(message, true),
-                        Some(message) => play_note(message),
-                        None => {}
-                    }
-                    return Ok(second.exit_code() as u32);
+        // started"). An action (--check, --download-hd-pack) takes it too
+        // and is refused with exit 5 while the window is open.
+        let mut instance = match win32_instance::single(instance::NAME) {
+            Ok(guard) => Some(guard),
+            Err(running) => {
+                let action = win32_instance::is_action(&switches, &[]);
+                let second = running.second_start(action, Window::Own(window::TITLE));
+                log_line(second.log_line());
+                match instance::message(second, &switches) {
+                    // An action's outcome goes where its output goes.
+                    Some(message) if action => command(message, true),
+                    Some(message) => play_note(message),
+                    None => {}
                 }
+                return Ok(second.exit_code() as u32);
             }
         };
         if switch("--download-hd-pack") {

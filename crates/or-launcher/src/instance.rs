@@ -8,7 +8,10 @@
 //! (`rea_launcher_win32::instance::SecondStart`, found by
 //! `Window::Own(window::TITLE)`). Play is also refused while the game from
 //! the runtime copy still runs (a launcher killed while it played).
-//! `--help` and `--check` only read and run alongside. On Linux,
+//! `--help` and a bad command line answer without it. An action
+//! (`--check`, `--download-hd-pack`: the SDK's `instance::is_action`)
+//! takes it like every run and is refused with exit 5 while the window
+//! is open (STANDARDS, "Action flags and one instance"). On Linux,
 //! `or-play`'s session lock does the same job.
 
 use rea_launcher_win32::instance::SecondStart;
@@ -29,6 +32,11 @@ pub const GAME_RUNNING: &str =
 /// pack right now.
 pub const WINDOW_OPEN: &str = "The launcher window is open: download the pack from its HD Pack tab, or close the window and run --download-hd-pack again.";
 
+/// What another action (`--check`) says when the settings window is open:
+/// the family's words (`SecondStart::message`).
+pub const WINDOW_OPEN_CHECK: &str =
+    "The OutRun 2006 launcher window is open. Use it there, or close it and try again.";
+
 /// The switches whose output is their result: a command for the SDK's
 /// audience rule (`--help` is one too, read before the switches).
 pub const COMMANDS: &[&str] = &["--check", "--download-hd-pack"];
@@ -41,26 +49,18 @@ pub fn run(switches: &[String]) -> Run {
     Run::from_args(switches, COMMANDS)
 }
 
-/// Whether a run with these switches is an action that does its work
-/// without the window.
-pub fn is_action(switches: &[String]) -> bool {
-    switches.iter().any(|switch| switch == "--download-hd-pack")
-}
-
-/// Whether a run with these switches takes the instance: every run but
-/// `--check`, which only reads.
-pub fn needs_instance(switches: &[String]) -> bool {
-    !switches.iter().any(|switch| switch == "--check")
-}
-
-/// What to tell the player about a second start, in OutRun's words;
+/// What to tell the player about a second start (`switches`: its parsed
+/// switches), in OutRun's words;
 /// `None` when the running launcher's window came forward. The exit code
 /// is the SDK's (`SecondStart::exit_code`: 0, or 5 when refused).
-pub fn message(second: SecondStart) -> Option<&'static str> {
+pub fn message(second: SecondStart, switches: &[String]) -> Option<&'static str> {
     match second {
         SecondStart::Focused => None,
         SecondStart::Busy => Some(GAME_RUNNING),
-        SecondStart::WindowOpen => Some(WINDOW_OPEN),
+        SecondStart::WindowOpen if switches.iter().any(|s| s == "--download-hd-pack") => {
+            Some(WINDOW_OPEN)
+        }
+        SecondStart::WindowOpen => Some(WINDOW_OPEN_CHECK),
     }
 }
 
@@ -68,6 +68,11 @@ pub fn message(second: SecondStart) -> Option<&'static str> {
 mod tests {
     use super::*;
     use rea_launcher_win32::instance::ALREADY_RUNNING;
+
+    /// The second start's `action`, as `main` computes it.
+    fn is_action(list: &[String]) -> bool {
+        rea_launcher_win32::instance::is_action(list, &[])
+    }
     use rea_launcher_win32::report::Audience;
 
     fn switches(list: &[&str]) -> Vec<String> {
@@ -78,11 +83,11 @@ mod tests {
     fn a_second_start_raises_the_window_or_says_the_game_runs() {
         let second = SecondStart::decide(false, || unreachable!(), || true);
         assert_eq!(second, SecondStart::Focused);
-        assert_eq!((message(second), second.exit_code()), (None, 0));
+        assert_eq!((message(second, &[]), second.exit_code()), (None, 0));
         // No window: refused with the family's 5, also for or-play's
         // --settings (the helper says "nothing started" for a 5).
         let second = SecondStart::decide(false, || unreachable!(), || false);
-        assert_eq!(message(second), Some(GAME_RUNNING));
+        assert_eq!(message(second, &[]), Some(GAME_RUNNING));
         assert_eq!(second.exit_code(), ALREADY_RUNNING);
     }
 
@@ -95,20 +100,44 @@ mod tests {
 
     #[test]
     fn download_hd_pack_never_exits_0_while_another_launcher_runs() {
-        let action = is_action(&switches(&["--download-hd-pack"]));
-        assert!(action && needs_instance(&switches(&["--download-hd-pack"])));
+        let list = switches(&["--download-hd-pack"]);
+        let action = is_action(&list);
+        assert!(action);
         // The window is open: say to use it, don't raise it, fail.
         let second = SecondStart::decide(action, || true, || unreachable!());
         assert_eq!(second, SecondStart::WindowOpen);
-        assert_eq!(message(second), Some(WINDOW_OPEN));
+        assert_eq!(message(second, &list), Some(WINDOW_OPEN));
         assert_eq!(second.exit_code(), ALREADY_RUNNING);
         // The game runs: say so, fail.
         let second = SecondStart::decide(action, || false, || unreachable!());
-        assert_eq!(message(second), Some(GAME_RUNNING));
+        assert_eq!(message(second, &list), Some(GAME_RUNNING));
         assert_eq!(second.exit_code(), ALREADY_RUNNING);
-        // Other runs are no action; --check takes no instance.
+        // Other runs are no action.
         assert!(!is_action(&switches(&["--linux", "--no-window"])));
-        assert!(!needs_instance(&switches(&["--check"])));
+        assert!(!is_action(&switches(&["--settings", "--linux"])));
+    }
+
+    /// Windows 10 test (rea-launcher-sdk#1): `--check` with the window
+    /// open ran anyway. It is an action like the download: refused with
+    /// exit 5 and the "window is open" message, the window left alone.
+    #[test]
+    fn check_is_refused_while_the_window_is_open() {
+        for list in [&["--check"][..], &["--check", "--linux"]] {
+            let list = switches(list);
+            let action = is_action(&list);
+            assert!(action, "{list:?}");
+            let second = SecondStart::decide(action, || true, || unreachable!());
+            assert_eq!(second, SecondStart::WindowOpen);
+            assert_eq!(second.exit_code(), ALREADY_RUNNING);
+            let text = message(second, &list).unwrap();
+            assert!(text.contains("window is open"), "{text}");
+            assert!(!text.contains("--download-hd-pack"), "{text}");
+            assert_eq!(Some(text.to_string()), second.message("OutRun 2006"));
+            // The game runs: refused too.
+            let second = SecondStart::decide(action, || false, || unreachable!());
+            assert_eq!(message(second, &list), Some(GAME_RUNNING));
+            assert_eq!(second.exit_code(), ALREADY_RUNNING);
+        }
     }
 
     /// Who sees a message is the SDK's rule (`report::Audience`), for the
