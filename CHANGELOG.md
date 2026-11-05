@@ -6,6 +6,16 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+To avoid antivirus false positives.
+
+### Changed
+
+- `OutRunLauncher.exe` now says what it is: its name, version, publisher
+  and icon show in Explorer's Properties and in Task Manager. A program
+  with none of these is one of the things antivirus programs distrust, so
+  they are less likely to flag the launcher.
+- Updated rea-launcher-sdk to v0.4.3.
+
 ## [0.3.1] - 2026-11-03
 
 From a test of the Windows build on Windows 10 (rea-launcher-sdk#1).
