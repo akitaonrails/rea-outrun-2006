@@ -1668,6 +1668,7 @@ name = "or-launcher"
 version = "0.3.1"
 dependencies = [
  "rea-launcher",
+ "rea-launcher-build",
  "rea-launcher-ui",
  "rea-launcher-win32",
 ]
@@ -1914,6 +1915,11 @@ dependencies = [
  "sha2",
  "zip",
 ]
+
+[[package]]
+name = "rea-launcher-build"
+version = "0.4.3"
+source = "git+https://github.com/akitaonrails/rea-launcher-sdk?tag=v0.4.3#160553090db5a7113d65fe5bc155ae3a3a08cf56"
 
 [[package]]
 name = "rea-launcher-ui"

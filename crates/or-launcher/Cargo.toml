@@ -19,6 +19,10 @@ rea-launcher-ui.workspace = true
 # start does are portable (tested on the host).
 rea-launcher-win32.workspace = true
 
+[build-dependencies]
+# build.rs: the exe's version information, icon and manifest.
+rea-launcher-build.workspace = true
+
 [dev-dependencies]
 # Headless window tests (egui_kittest, AccessKit queries).
 rea-launcher-ui = { workspace = true, features = ["testing"] }
