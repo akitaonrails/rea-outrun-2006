@@ -1,6 +1,6 @@
 [package]
 name = "or-launcher"
-version = "0.3.2"
+version = "0.3.3"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -11,6 +11,8 @@ name = "OutRunLauncher"
 path = "src/main.rs"
 
 [dependencies]
+# Unpacks Microsoft's June 2010 DirectX 9 cabinet archives (--download-directx).
+cab = "0.6"
 # `zip`: the SDK's download unpacks the HD texture pack.
 rea-launcher = { workspace = true, features = ["zip"] }
 # The settings window (drawn and tested on any host).

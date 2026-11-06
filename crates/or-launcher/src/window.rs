@@ -34,7 +34,7 @@ use rea_launcher_ui::window::{Layout, WindowFit};
 
 use crate::config::{self, Backend, Feedback, Vsync, option};
 use crate::form::{self, Form, Look};
-use crate::{edition, hdpack, tweaks};
+use crate::{directx, edition, hdpack, tweaks};
 
 // Rosso, Modena yellow and black: the colours of OutRun's car.
 const fn rgb(hex: u32) -> Color32 {
@@ -116,6 +116,15 @@ pub trait Platform {
     /// Starts `download::install(pin, root, …, job)` on a worker thread;
     /// `done` runs after it.
     fn download(&self, pin: Pin, root: PathBuf, job: Arc<Job>, done: Box<dyn FnOnce() + Send>);
+    /// Starts `directx::install(pin, root, …, job)` on a worker thread;
+    /// `done` runs after it.
+    fn download_directx(
+        &self,
+        pin: Pin,
+        root: PathBuf,
+        job: Arc<Job>,
+        done: Box<dyn FnOnce() + Send>,
+    );
 }
 
 /// Where the window is opened and on what.
@@ -130,6 +139,9 @@ pub struct Setup {
     /// The folder of OutRunLauncher.exe (its `tweaks/` holds the bundled
     /// replacement EXE).
     pub launcher_dir: Option<PathBuf>,
+    /// Windows' 32-bit DLL search folders (`SysWOW64`/`System32`), used to
+    /// check whether `d3dx9_29.dll` is already installed on the machine.
+    pub system_dirs: Vec<PathBuf>,
     /// Shown for `or-play`: adds the gamescope scaler.
     pub linux: bool,
     /// Under Wine or Proton.
@@ -273,6 +285,7 @@ pub struct Window {
     pad: PadNav,
     pending: Vec<Nav>,
     home: PathBuf,
+    system_dirs: Vec<PathBuf>,
     pin: Pin,
     /// The HD pack download (running, or failed), its speed, and how the
     /// last one ended.
@@ -281,6 +294,11 @@ pub struct Window {
     hd_result: Option<(String, Color32)>,
     /// Remove was pressed once; the second press deletes.
     confirm_remove: bool,
+    dx_pin: Pin,
+    dx_job: Option<Arc<Job>>,
+    dx_rate: Rate,
+    dx_result: Option<(String, Color32)>,
+    confirm_remove_dx: bool,
     platform: Box<dyn Platform>,
     outcome: Rc<Cell<Outcome>>,
 }
@@ -292,6 +310,7 @@ impl Window {
             saved,
             home,
             launcher_dir,
+            system_dirs,
             linux,
             wine,
             screen,
@@ -330,11 +349,17 @@ impl Window {
             pad: PadNav::default(),
             pending: Vec::new(),
             home,
+            system_dirs,
             pin: hdpack::pin(),
             hd_job: None,
             hd_rate: Rate::default(),
             hd_result: None,
             confirm_remove: false,
+            dx_pin: directx::pin(),
+            dx_job: None,
+            dx_rate: Rate::default(),
+            dx_result: None,
+            confirm_remove_dx: false,
             platform,
             outcome: Rc::new(Cell::new(Outcome::Closed)),
         }
@@ -351,7 +376,20 @@ impl Window {
     }
 
     pub fn ready(&self) -> bool {
-        matches!(self.check, Check::Found(_)) && !self.hd_running()
+        matches!(self.check, Check::Found(_)) && !self.hd_running() && !self.dx_running()
+    }
+
+    /// Which required DirectX 9 DLLs (`d3dx9_29.dll`) are missing on this
+    /// Windows machine (empty under Wine/Proton or once downloaded/installed).
+    pub fn missing_directx(&self) -> Vec<&'static str> {
+        if self.wine {
+            return Vec::new();
+        }
+        let trimmed = self.form.game.trim();
+        let game = Path::new(trimmed);
+        let game = (!trimmed.is_empty() && game.is_dir()).then_some(game);
+        let dx_dir = download::installed(&self.dx_pin, &directx::root(&self.home));
+        directx::missing_required_dlls(game, dx_dir.as_deref(), &self.system_dirs)
     }
 
     /// Saves and closes, when the game folder is good and no download runs.
@@ -490,11 +528,23 @@ impl Window {
     }
 
     fn status(&self, ui: &mut egui::Ui) {
+        let missing_dx = self.missing_directx();
         let (text, color) = match (&self.error, &self.check) {
             (Some(e), _) => (e.clone(), ERROR),
             (None, Check::Found(_)) if self.hd_running() => (
                 "Downloading the HD pack; Play waits until it's done.".to_string(),
                 MUTED,
+            ),
+            (None, Check::Found(_)) if self.dx_running() => (
+                "Downloading DirectX 9 files; Play waits until it's done.".to_string(),
+                MUTED,
+            ),
+            (None, Check::Found(_)) if !missing_dx.is_empty() => (
+                format!(
+                    "Missing {} on this PC. Click Download under Microsoft DirectX 9 files below before playing.",
+                    missing_dx.join(", ")
+                ),
+                ERROR,
             ),
             (None, Check::Found(_)) => ("Ready. Press Play or Enter.".to_string(), MUTED),
             (None, _) => (
@@ -610,6 +660,114 @@ impl Window {
             ui,
             "Leave empty for the default. Your License.dat and records are copied in before the game starts and back when it ends.",
         );
+        if !self.wine {
+            ui.add_space(14.0);
+            self.directx_section(ui);
+        }
+    }
+
+    fn directx_section(&mut self, ui: &mut egui::Ui) {
+        widgets::heading(ui, "Microsoft DirectX 9 files");
+        let missing = self.missing_directx();
+        let dx_root = directx::root(&self.home);
+        let dx_installed = download::installed(&self.dx_pin, &dx_root).is_some();
+        if !missing.is_empty() {
+            ui.label(
+                egui::RichText::new(format!(
+                    "Missing on this PC: {}. OutRun 2006 will fail to start without it — click Download below to install it into the launcher's private runtime folder.",
+                    missing.join(", ")
+                ))
+                .font(font(13.0))
+                .color(ERROR),
+            );
+            ui.add_space(4.0);
+        } else if !dx_installed {
+            widgets::note(
+                ui,
+                "d3dx9_29.dll is already present on this PC. You can still download a private copy if needed.",
+            );
+            ui.add_space(4.0);
+        }
+        let phase = self.dx_job.as_ref().map(|job| job.phase());
+        let rate = match &phase {
+            Some(Phase::Downloading { done, .. }) => Some(self.dx_rate.update(*done)),
+            _ => None,
+        };
+        let state = DownloadState::from_phase(
+            phase.as_ref(),
+            dx_installed,
+            download::partial(&self.dx_pin, &dx_root),
+        )
+        .with_rate(rate);
+        let row = Download {
+            label: directx::LABEL,
+            size: self.dx_pin.size,
+            state,
+        };
+        match download_row(ui, &row) {
+            Some(DownloadAction::Start) => {
+                let job = Arc::new(Job::default());
+                let ctx = ui.ctx().clone();
+                self.platform.download_directx(
+                    self.dx_pin.clone(),
+                    dx_root,
+                    job.clone(),
+                    Box::new(move || ctx.request_repaint()),
+                );
+                self.dx_job = Some(job);
+                self.dx_rate = Rate::default();
+                self.dx_result = None;
+                self.confirm_remove_dx = false;
+            }
+            Some(DownloadAction::Cancel) => {
+                if let Some(job) = &self.dx_job {
+                    job.cancel();
+                }
+            }
+            Some(DownloadAction::Remove) if !self.confirm_remove_dx => {
+                self.confirm_remove_dx = true;
+                self.dx_result = Some((
+                    format!(
+                        "Press Remove again to delete the DirectX 9 files ({}).",
+                        rea_launcher_ui::download::size_text(self.dx_pin.unpacked_size)
+                    ),
+                    YELLOW,
+                ));
+            }
+            Some(DownloadAction::Remove) => match download::remove(&self.dx_pin, &dx_root) {
+                Ok(()) => {
+                    self.confirm_remove_dx = false;
+                    self.dx_job = None;
+                    self.dx_result = Some((
+                        format!(
+                            "Removed; {} freed.",
+                            rea_launcher_ui::download::size_text(self.dx_pin.unpacked_size)
+                        ),
+                        MUTED,
+                    ));
+                }
+                Err(e) => self.dx_result = Some((e.to_string(), ERROR)),
+            },
+            None => {}
+        }
+        widgets::note(
+            ui,
+            "Clean Windows 10 and 11 installs do not include d3dx9_29.dll, and Microsoft's licence does not allow bundling it in the download zip. Downloaded from Microsoft and unpacked into the launcher's private runtime folder (no system-wide installer).",
+        );
+        if let Some((text, color)) = &self.dx_result {
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new(text).font(font(13.5)).color(*color));
+        }
+        if state.running() {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(100));
+        }
+    }
+
+    fn dx_running(&self) -> bool {
+        self.dx_job
+            .as_ref()
+            .is_some_and(|job| job.phase().running())
     }
 
     fn picture_tab(&mut self, ui: &mut egui::Ui) {
@@ -832,24 +990,43 @@ impl Window {
     /// Picks up how a finished download ended: done switches the pack on;
     /// a failure stays in the row until the next attempt.
     fn poll_download(&mut self) {
-        let Some(job) = &self.hd_job else {
-            return;
-        };
-        match job.phase() {
-            Phase::Done(dir) => {
-                self.hd_job = None;
-                self.form.hd_folder = dir.display().to_string();
-                self.form.hd_textures = true;
-                self.hd_result = Some(("Installed and switched on.".to_string(), YELLOW));
+        if let Some(job) = &self.hd_job {
+            match job.phase() {
+                Phase::Done(dir) => {
+                    self.hd_job = None;
+                    self.form.hd_folder = dir.display().to_string();
+                    self.form.hd_textures = true;
+                    self.hd_result = Some(("Installed and switched on.".to_string(), YELLOW));
+                }
+                Phase::Cancelled => {
+                    self.hd_job = None;
+                    self.hd_result = Some((
+                        "Stopped. Press Download to carry on from there later.".to_string(),
+                        MUTED,
+                    ));
+                }
+                _ => {}
             }
-            Phase::Cancelled => {
-                self.hd_job = None;
-                self.hd_result = Some((
-                    "Stopped. Press Download to carry on from there later.".to_string(),
-                    MUTED,
-                ));
+        }
+        if let Some(job) = &self.dx_job {
+            match job.phase() {
+                Phase::Done(_) => {
+                    self.dx_job = None;
+                    self.dx_result = Some((
+                        "DirectX 9 files installed; they will be placed in the runtime folder on Play."
+                            .to_string(),
+                        YELLOW,
+                    ));
+                }
+                Phase::Cancelled => {
+                    self.dx_job = None;
+                    self.dx_result = Some((
+                        "Stopped. Press Download to carry on from there later.".to_string(),
+                        MUTED,
+                    ));
+                }
+                _ => {}
             }
-            _ => {}
         }
     }
 
@@ -1126,6 +1303,7 @@ mod tests {
     struct Fake {
         rumbles: Arc<AtomicUsize>,
         downloads: Arc<AtomicUsize>,
+        directx_downloads: Arc<AtomicUsize>,
         /// No pad takes the rumble test.
         no_pad: bool,
     }
@@ -1153,6 +1331,15 @@ mod tests {
             _done: Box<dyn FnOnce() + Send>,
         ) {
             self.downloads.fetch_add(1, Ordering::Relaxed);
+        }
+        fn download_directx(
+            &self,
+            _pin: Pin,
+            _root: PathBuf,
+            _job: Arc<Job>,
+            _done: Box<dyn FnOnce() + Send>,
+        ) {
+            self.directx_downloads.fetch_add(1, Ordering::Relaxed);
         }
     }
 
@@ -1188,6 +1375,7 @@ mod tests {
                 saved: saved.map(str::to_string),
                 home: self.root.join("home"),
                 launcher_dir: Some(self.root.join("launcher")),
+                system_dirs: Vec::new(),
                 linux,
                 wine,
                 screen: Some((2560, 1440)),
@@ -1620,5 +1808,34 @@ mod tests {
         ui.run();
         assert!(!dir.exists());
         assert!(ui.state().form.hd_folder.is_empty());
+    }
+
+    #[test]
+    fn windows_warns_when_directx_dll_is_missing_and_offers_download() {
+        let dirs = Dirs::new("directx-missing");
+        let fake = Fake::default();
+        let dx_downloads = fake.directx_downloads.clone();
+        let game = dirs.root.join("game").display().to_string();
+        let text = config::set_key(&config::template(), "game", &game);
+        let mut ui = harness(Window::new(
+            dirs.setup(Some(&text), false, false),
+            Box::new(fake),
+            None,
+        ));
+        show(&mut ui, Tab::Play);
+        assert_eq!(ui.state().missing_directx(), vec!["d3dx9_29.dll"]);
+        ui.get_by_label(
+            "Missing d3dx9_29.dll on this PC. Click Download under Microsoft DirectX 9 files below before playing.",
+        );
+        ui.get_by_label("Download").click();
+        ui.run();
+        assert_eq!(dx_downloads.load(Ordering::Relaxed), 1);
+
+        // Once d3dx9_29.dll is present in the game folder, the warning is gone.
+        std::fs::write(dirs.root.join("game/d3dx9_29.dll"), b"dll").unwrap();
+        let mut ui2 = open(&dirs, None, false, false);
+        show(&mut ui2, Tab::Play);
+        assert!(ui2.state().missing_directx().is_empty());
+        ui2.get_by_label("Ready. Press Play or Enter.");
     }
 }

@@ -5,6 +5,7 @@
 
 pub mod cli;
 pub mod config;
+pub mod directx;
 pub mod edition;
 pub mod form;
 pub mod hdpack;

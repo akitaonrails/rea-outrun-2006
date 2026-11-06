@@ -32,6 +32,9 @@ pub const GAME_RUNNING: &str =
 /// pack right now.
 pub const WINDOW_OPEN: &str = "The launcher window is open: download the pack from its HD Pack tab, or close the window and run --download-hd-pack again.";
 
+/// What `--download-directx` says when the settings window is open.
+pub const WINDOW_OPEN_DIRECTX: &str = "The launcher window is open: download the DirectX 9 files from its Play tab, or close the window and run --download-directx again.";
+
 /// What another action (`--check`) says when the settings window is open:
 /// the family's words (`SecondStart::message`).
 pub const WINDOW_OPEN_CHECK: &str =
@@ -39,7 +42,7 @@ pub const WINDOW_OPEN_CHECK: &str =
 
 /// The switches whose output is their result: a command for the SDK's
 /// audience rule (`--help` is one too, read before the switches).
-pub const COMMANDS: &[&str] = &["--check", "--download-hd-pack"];
+pub const COMMANDS: &[&str] = &["--check", "--download-hd-pack", "--download-directx"];
 
 /// The family flags of a run with these (parsed) switches, for
 /// `rea_launcher_win32::report::audience`. Never decide who is watching
@@ -59,6 +62,9 @@ pub fn message(second: SecondStart, switches: &[String]) -> Option<&'static str>
         SecondStart::Busy => Some(GAME_RUNNING),
         SecondStart::WindowOpen if switches.iter().any(|s| s == "--download-hd-pack") => {
             Some(WINDOW_OPEN)
+        }
+        SecondStart::WindowOpen if switches.iter().any(|s| s == "--download-directx") => {
+            Some(WINDOW_OPEN_DIRECTX)
         }
         SecondStart::WindowOpen => Some(WINDOW_OPEN_CHECK),
     }

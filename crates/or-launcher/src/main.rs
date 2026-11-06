@@ -35,7 +35,7 @@ mod app {
     use or_launcher::config::{self, Settings};
     use or_launcher::instance;
     use or_launcher::window::{self, Outcome};
-    use or_launcher::{edition, form, hdpack, runtime, tweaks};
+    use or_launcher::{directx, edition, form, hdpack, runtime, tweaks};
     use rea_launcher::fsx;
     use rea_launcher::log::Log;
     use rea_launcher_win32::gpu::{self, Glx};
@@ -233,6 +233,48 @@ mod app {
         }
     }
 
+    /// `--download-directx`: downloads and unpacks Microsoft's June 2010
+    /// DirectX 9 DLLs (`d3dx9_29.dll`, …) without opening the window.
+    fn download_directx() -> Result<u32, String> {
+        use rea_launcher::download::{Job, Phase};
+        let pin = directx::pin();
+        let root = directx::root(&home());
+        let job = std::sync::Arc::new(Job::default());
+        let worker = job.clone();
+        let handle = std::thread::spawn(move || {
+            let free = |dir: &Path| disk::free_space(dir);
+            directx::install(&pin, &root, &free, &http(), &worker)
+        });
+        let mut logged = None;
+        while !handle.is_finished() {
+            let phase = job.phase();
+            let what = match phase {
+                Phase::Downloading { .. } => Some("downloading"),
+                Phase::Unpacking { .. } => Some("unpacking"),
+                _ => None,
+            };
+            let step = what.zip(phase.fraction().map(|f| (f * 10.0) as u32));
+            if step.is_some() && step != logged {
+                let (what, tenth) = step.unwrap_or_default();
+                log_line(&format!("directx: {what} {}%", tenth * 10));
+                logged = step;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        match handle
+            .join()
+            .map_err(|_| "the download stopped unexpectedly".to_string())?
+        {
+            Phase::Done(dir) => {
+                let msg = format!("directx: installed in {}", dir.display());
+                command(&msg, false);
+                Ok(0)
+            }
+            Phase::Failed(e) => Err(e),
+            other => Err(format!("directx: {other:?}")),
+        }
+    }
+
     /// `--check`: everything a launch needs, without launching. Exit code
     /// 0 when it would play, 1 when something stops it.
     fn check(
@@ -333,6 +375,9 @@ mod app {
         };
         if switch("--download-hd-pack") {
             return download_hd_pack(&settings_path);
+        }
+        if switch("--download-directx") {
+            return download_directx();
         }
         if config::opens_window(&args, &switches) {
             // A fresh Wine prefix draws eframe windows through EGL, which
@@ -478,6 +523,10 @@ mod app {
             &settings,
             &mut |line| log_line(line),
         )?;
+        let dx_dir = (!wine).then(|| directx::installed(&home())).flatten();
+        for note in directx::for_launch(&game, &runtime_dir, dx_dir.as_deref())? {
+            log_line(&format!("directx: {note}"));
+        }
         // An outrun2006.ini naming a display adapter that isn't attached
         // (another PC, a laptop off its dock) stops the game: use the first.
         let attached = display::adapters().iter().filter(|a| a.attached).count();
@@ -546,7 +595,7 @@ mod app {
         })?;
         xinput::stop_rumble();
         let code = status.code().unwrap_or(1) as u32;
-        log_line(&format!("game exited with {code}"));
+        log_line(&format!("game exited with {code} (0x{code:08X})"));
         // The mod writes crash reports into CrashDumps.
         if let Ok(dir) = fs::read_dir(runtime_dir.join("CrashDumps"))
             && dir.filter_map(|e| e.ok()).any(|e| {
@@ -556,6 +605,28 @@ mod app {
             })
         {
             log_line("the game crashed: a report is in the runtime's CrashDumps folder");
+        }
+        // Windows loader / NTSTATUS failures (0xC0000135 STATUS_DLL_NOT_FOUND,
+        // 0xC000007B STATUS_INVALID_IMAGE_FORMAT, 0xC0000005 access violation)
+        // terminate the child before main() runs without showing a dialog.
+        if code >= 0xC000_0000 {
+            let reason = match code {
+                0xC000_0135 => {
+                    "a required DLL was not found (STATUS_DLL_NOT_FOUND, 0xC0000135). \
+                     Open OutRunLauncher and click Download under Microsoft DirectX 9 files \
+                     on the Play tab (or run OutRunLauncher --download-directx), and keep \
+                     the tweaks/ and vc/ folders next to OutRunLauncher.exe"
+                }
+                0xC000_007B => {
+                    "a 32-bit/64-bit DLL mismatch occurred (STATUS_INVALID_IMAGE_FORMAT, 0xC000007B)"
+                }
+                0xC000_0005 => "the game crashed with an access violation (0xC0000005)",
+                _ => "the game stopped with a Windows system error",
+            };
+            fatal(&format!(
+                "OutRun 2006 could not run (exit code 0x{code:08X}): {reason}.\n\nSee {} for details.",
+                home().join("launcher.log").display()
+            ));
         }
         match runtime::saves_out(&rt_save, &saves, &saves_state) {
             Ok(copied) if !copied.is_empty() => {

@@ -5,6 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use or_launcher::directx;
 use or_launcher::window::{METRICS, Outcome, PALETTE, Platform, SIZE, Setup, TITLE, Window};
 use rea_launcher::download::{self, Job, Pin};
 use rea_launcher_ui::eframe;
@@ -43,6 +44,20 @@ impl Platform for Win32 {
             done();
         });
     }
+
+    fn download_directx(
+        &self,
+        pin: Pin,
+        root: PathBuf,
+        job: Arc<Job>,
+        done: Box<dyn FnOnce() + Send>,
+    ) {
+        std::thread::spawn(move || {
+            let free = |dir: &Path| disk::free_space(dir);
+            directx::install(&pin, &root, &free, &crate::app::http(), &job);
+            done();
+        });
+    }
 }
 
 /// Shows the window over `settings_path`, whose text is `saved` (`None`
@@ -72,6 +87,7 @@ pub fn show(
         launcher_dir: std::env::current_exe()
             .ok()
             .and_then(|exe| exe.parent().map(Path::to_path_buf)),
+        system_dirs: directx::windows_system_dirs(),
         linux,
         wine,
         screen,

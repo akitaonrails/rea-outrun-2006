@@ -268,12 +268,13 @@ pub fn outrun2006_ini_upgrade(runtime: &str, games: &str) -> String {
 pub const ORIGINAL: (u32, u32) = (640, 480);
 
 /// The flags that take no value: the launcher's modes.
-pub const SWITCHES: [&str; 5] = [
+pub const SWITCHES: [&str; 6] = [
     "--no-window",
     "--settings",
     "--linux",
     "--check",
     "--download-hd-pack",
+    "--download-directx",
 ];
 
 /// Whether a run opens the settings window: `--settings`, or no option at
@@ -601,6 +602,8 @@ These override launcher.cfg for one run; only --game is remembered.
                        without playing (report in launcher.log)
   --download-hd-pack   downloads the community HD texture pack (progress in
                        launcher.log) and switches it on in launcher.cfg
+  --download-directx   downloads Microsoft's June 2010 DirectX 9 DLLs
+                       (d3dx9_29.dll, …) for clean Windows 10/11 installs
   --help               this text
 
 Every option is described in launcher.cfg.

@@ -15,6 +15,7 @@ by SHA-256. Add a row (and a pin) before bundling anything new.
 | `eframe`, `egui` and their dependencies (`winit`, `glutin`, `glow`, …): the settings window | MIT OR Apache-2.0 (dependencies: MIT, Apache-2.0, Zlib, BSD; see `cargo tree`) | https://github.com/emilk/egui |
 | `jpeg-decoder` | MIT OR Apache-2.0 | https://github.com/image-rs/jpeg-decoder |
 | `zip`, `flate2`, `zlib-rs` and `crc32fast`: unpacking the HD texture pack | zip: MIT; flate2, crc32fast: MIT OR Apache-2.0; zlib-rs: Zlib | https://github.com/zip-rs/zip2, https://github.com/rust-lang/flate2-rs, https://github.com/trifectatechfoundation/zlib-rs |
+| `cab` and `lzxd`: unpacking Microsoft's June 2010 DirectX 9 cabinet archives (`--download-directx`) | MIT | https://github.com/mdsteele/rust-cab |
 | Rust standard library | MIT OR Apache-2.0 | https://github.com/rust-lang/rust |
 | MinGW-w64 runtime (static parts linked by the GNU target) | ZPL-2.1 / public domain | https://www.mingw-w64.org |
 
@@ -65,6 +66,13 @@ The community HD texture pack (Envido32's OR2006Sprites compilation): no
 licence is stated, so it is never shipped. The launcher downloads it from
 the pack's own GitHub release when the player asks for it, pinned by
 `packaging/hd-pack.txt` (docs/HD_TEXTURES.md).
+
+Microsoft's June 2010 DirectX 9 redistributable (`d3dx9_29.dll`, …):
+Microsoft's DirectX End-User Runtime licence does not allow redistributing
+the unpacked DLLs inside our zip. On Windows the launcher checks whether
+`d3dx9_29.dll` is present, shows a warning in the settings window when it
+is missing, and offers a one-click download from Microsoft's official
+redistributable into `%LOCALAPPDATA%\OutRunLauncher\directx`.
 
 The game itself. OutRun is a trademark of SEGA; players need their own
 copy of OutRun 2006: Coast 2 Coast.

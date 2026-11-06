@@ -6,6 +6,26 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-06
+
+### Added
+
+- **Microsoft DirectX 9 files (`d3dx9_29.dll`) download and missing-DLL
+  indicator on Windows:** `OR2006C2C.exe` imports `d3dx9_29.dll`, which
+  clean Windows 10 and 11 installations do not include out of the box (and
+  Microsoft's DirectX End-User Runtime licence does not allow bundling the
+  unpacked DLLs inside our release zip). On Windows the settings window now
+  checks whether `d3dx9_29.dll` is present in `SysWOW64`/`System32`, the
+  game folder or the launcher's downloaded copy, shows a warning in the
+  status bar and on the Play tab when it is missing, and offers a one-click
+  **Download** button (and `--download-directx`) that fetches Microsoft's
+  pinned June 2010 DirectX redistributable and extracts the 32-bit DirectX 9
+  DLLs in pure Rust into `%LOCALAPPDATA%\OutRunLauncher\directx` — no
+  `DXSETUP.exe`, no administrator prompt, and nothing written to `System32`.
+- If the game exits with a Windows NTSTATUS / loader failure code such as
+  `0xC0000135` (`STATUS_DLL_NOT_FOUND`), the launcher now reports a clear
+  dialog explaining which component is missing and how to download it.
+
 ## [0.3.2] - 2026-11-05
 
 To avoid antivirus false positives.
@@ -379,7 +399,8 @@ Coast 2 Coast on Windows 10/11 and on Linux (Proton, Wine, AppImage).
   builds and publishes the Windows zip and the AppImage; a weekly workflow
   proposing newer OutRun2006Tweaks builds.
 
-[Unreleased]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.2.1...v0.3.0

@@ -54,6 +54,9 @@ pub fn plan(settings: &Settings, wine: bool, pack: Option<&Path>) -> Plan {
                 .map(|(name, value)| (name.to_string(), *value)),
         );
         components.push("d3d9.dll <- linux/d3d9.dll (DXVK)".into());
+    } else {
+        components
+            .push("d3dx9_29.dll (and sibling DirectX 9 DLLs) <- directx/ when downloaded".into());
     }
     components.push(if settings.soundtrack_fix.unwrap_or(true) {
         "Sound/14_Rush_a_Difficulty_1989.ogg patched <- soundtrack/ (xdelta3)".into()

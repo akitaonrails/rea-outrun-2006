@@ -18,6 +18,7 @@ OutRun2006Tweaks.lods.ini <- tweaks/
 msvcp140.dll <- vc/
 vcruntime140.dll <- vc/
 vcomp140.dll <- vc/
+d3dx9_29.dll (and sibling DirectX 9 DLLs) <- directx/ when downloaded
 Sound/14_Rush_a_Difficulty_1989.ogg patched <- soundtrack/ (xdelta3)
 
 ## command line
