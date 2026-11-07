@@ -6,6 +6,17 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Updated rea-launcher-sdk to v0.4.4: the AppImage's portable Wine is now
+  11.21, which fixes the startup crash on machines that cannot reserve
+  ~64 GiB of address space (16 GB handhelds).
+- The Windows build now ships the DirectX 9 files downloader first written
+  for v0.3.3, whose release page was never published. `OR2006C2C.exe`
+  needs `d3dx9_29.dll`, which Windows 10 and 11 do not include; the Play
+  tab's Download button (and `--download-directx`) fetches it from
+  Microsoft.
+
 ## [0.3.3] - 2026-11-06
 
 ### Added
