@@ -30,7 +30,16 @@ pub const TWEAKS: Edition = Edition {
     patched: true,
 };
 
-static EDITIONS: [Known<Edition>; 2] = [
+/// The replacement EXE from OutRun2006Tweaks v0.1 to v0.2.5 (2024): the
+/// same 3,674,112 bytes without the Large Address Aware flag. Players who
+/// installed an early Tweaks still have it; the launcher swaps in its
+/// bundled EXE as for every edition.
+pub const TWEAKS_EARLY: Edition = Edition {
+    name: "OutRun 2006 + OutRun2006Tweaks 0.1-0.2.5 EXE",
+    patched: true,
+};
+
+static EDITIONS: [Known<Edition>; 3] = [
     Known::new(
         "bdafa88a5abdd2a9743f6bdcc5e2189288c0203790412fce10b9bb649933482f",
         ORIGINAL,
@@ -38,6 +47,10 @@ static EDITIONS: [Known<Edition>; 2] = [
     Known::new(
         "68ceb386829066f8455b9d027320af962584321f3e2e8a79c72841495a6134c3",
         TWEAKS,
+    ),
+    Known::new(
+        "c926e54a5620e8e47199caf532235c25ddaba512da198bde15db1ee4375f806f",
+        TWEAKS_EARLY,
     ),
 ];
 
@@ -71,6 +84,21 @@ mod tests {
         );
         assert_ne!(EDITIONS[0].sha256, EDITIONS[1].sha256);
         assert!(!EDITIONS[0].value.patched && EDITIONS[1].value.patched);
+    }
+
+    #[test]
+    fn the_early_tweaks_exe_is_known() {
+        // OutRun2006Tweaks v0.1 to v0.2.5 shipped this replacement EXE: the
+        // later one without the Large Address Aware flag (issue #1 audit).
+        let early = EDITIONS
+            .iter()
+            .find(|known| {
+                to_hex(&known.sha256)
+                    == "c926e54a5620e8e47199caf532235c25ddaba512da198bde15db1ee4375f806f"
+            })
+            .expect("the Tweaks 0.1-0.2.5 EXE is in the table");
+        assert_eq!(early.value, TWEAKS_EARLY);
+        assert!(early.value.patched);
     }
 
     #[test]

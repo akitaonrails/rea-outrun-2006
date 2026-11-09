@@ -6,6 +6,13 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The replacement `OR2006C2C.exe` from OutRun2006Tweaks 0.1 to 0.2.5
+  (SHA-256 `c926e54a…`) is now recognised. A game folder patched with an
+  early Tweaks release was refused as an unknown edition; the launcher
+  now plays it with its own bundled Tweaks EXE, as for every edition.
+
 ## [0.3.4] - 2026-11-07
 
 ### Changed

@@ -112,8 +112,10 @@ MinGW, lld and Wine live in the `gaming` distrobox: run the last three as
 
 - **Editions:** the original 2006 retail/repack `OR2006C2C.exe` (DRM-wrapped,
   `bdafa88a…`; the launcher swaps in the Tweaks EXE in its copy) and the
-  Tweaks DRM-free EXE (`68ceb386…`, an install already patched). Others are
-  refused with their SHA-256 and the unknown-edition issue form.
+  Tweaks DRM-free EXE (`68ceb386…`, an install already patched; Tweaks
+  0.1-0.2.5 shipped `c926e54a…`, the same EXE without the Large Address
+  Aware flag). Others are refused with their SHA-256 and the
+  unknown-edition issue form; a build is added only when we can verify it.
 - **Renderer, input, audio:** Direct3D 9 (DXVK under Wine); input through
   Tweaks' SDL layer (WGI on Windows, XInput under Wine by default; rumble
   and impulse triggers); the game's own audio, plus the Soundtrack Fix

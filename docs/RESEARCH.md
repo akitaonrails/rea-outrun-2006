@@ -18,6 +18,25 @@ page, the projects' own repositories, ProtonDB/WineHQ for Linux.
 | SpecialK `d3d9.dll` (shipped by some repacks) | General D3D tweaks | GPL-3.0 | yes | **Not used**: it loads before the real D3D9 and fights Tweaks/DXVK; the runtime copy never takes the game folder's `d3d9.dll` |
 | Community online server (clarissa.port0.org) | Online play after SEGA's servers closed | — | yes | **Configured** through Tweaks' `DemonwareServerOverride` (Tweaks' default) |
 
+## Known `OR2006C2C.exe` builds
+
+The launcher identifies the game by its EXE's SHA-256
+(`crates/or-launcher/src/edition.rs`) and always plays its own bundled
+Tweaks EXE in its private copy. A build is added only when we can verify
+where it comes from.
+
+| SHA-256 | Size | What it is | Verified from |
+| --- | --- | --- | --- |
+| `bdafa88a5abdd2a9743f6bdcc5e2189288c0203790412fce10b9bb649933482f` | 14,950,400 | the 2006 EXE (DRM-wrapped, PE timestamp 2006-05-26) | the owner's install |
+| `68ceb386829066f8455b9d027320af962584321f3e2e8a79c72841495a6134c3` | 3,674,112 | OutRun2006Tweaks' DRM-free EXE, Large Address Aware | every upstream release from v0.3.0-rc1 to v0.6.1, and the owner's install |
+| `c926e54a5620e8e47199caf532235c25ddaba512da198bde15db1ee4375f806f` | 3,674,112 | the same Tweaks EXE without the Large Address Aware flag (one byte) | upstream releases v0.1 to v0.2.5 |
+
+Not yet verified (2026-11-09): the 2007-2010 Steam release (app 4730,
+delisted). Tweaks says its EXE works with the Steam and DVD releases, but
+no Steam `OR2006C2C.exe` digest is published anywhere we could check;
+issue #1 reports `4876712f…9fec1` as a Steam copy, which matches no
+Tweaks release.
+
 ## Owner decisions
 
 - **2026-11-02: OutRun2006Tweaks' DRM-free replacement `OR2006C2C.exe` is
