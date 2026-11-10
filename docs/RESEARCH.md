@@ -23,7 +23,8 @@ page, the projects' own repositories, ProtonDB/WineHQ for Linux.
 The launcher identifies the game by its EXE's SHA-256
 (`crates/or-launcher/src/edition.rs`) and always plays its own bundled
 Tweaks EXE in its private copy. A build is added only when we can verify
-where it comes from.
+where it comes from. An EXE that isn't in this table is accepted when the
+game's data matches the 2006 release (next section).
 
 | SHA-256 | Size | What it is | Verified from |
 | --- | --- | --- | --- |
@@ -44,6 +45,51 @@ mentions this size or digest, and no store page or wiki publishes it.
 Nothing else the launcher does depends on the EXE; the soundtrack fix
 patches the song only when it has the known truncated size. The Steam
 release's data files have not been played by us.
+
+## Identifying the game by its data (v0.3.7, issues #3 and #4)
+
+DVD owners kept being refused as unknown editions: the 2006 EXE is
+SecuROM-wrapped, and its digest differs between regions and pressings
+(#4's European DVD ISO, `OutRun-2006-Coast-2-Coast_Win_EN-FR-DE-IT-ES_ISO`,
+gave a digest other than our repack's `bdafa88a…`). The EXE digest is the
+wrong question for this launcher:
+
+- The game's `OR2006C2C.exe` is never run, patched or copied: the runtime
+  copy's policy owns `or2006c2c.exe` (`runtime.rs`), and the launcher
+  places its bundled Tweaks EXE there (`tweaks.rs`, `plan.rs`). Tweaks'
+  EXE is the 2006 game code without the wrapper, so what has to be right
+  is the data it loads.
+- No other step depends on the EXE. The soundtrack fix patches "Rush a
+  Difficulty" only when the song has the known truncated size
+  (3,055,933 bytes) and leaves any other file alone; the INI writers, the
+  saves mirror, DXVK and the HD pack don't look at the edition. The
+  edition's `patched` flag is informational.
+
+So when the EXE is unknown, the launcher checks five data files by size
+and SHA-256 (`DATA_2006`) and plays when all match, saying in the window
+and `launcher.log` that the EXE wasn't recognised and isn't used. When
+one differs, it refuses as before, naming the EXE's SHA-256 and the first
+file that differs.
+
+| File | Size | SHA-256 (in full in `edition.rs`) |
+| --- | --- | --- |
+| `Common/obj_course_obj_common_pmt.sz` | 844,991 | `0cfc9a4d…` |
+| `Common/def_orhiscores.bin` | 67,680 | `426ad7d8…` |
+| `Driver/obj_driver_rival_pmt.sz` | 1,138,698 | `132618f4…` |
+| `Stage/PALM_BT/CS_CS_PALM_BT_bin.sz` | 56,073 | `93d84b3f…` |
+| `Stage/YOSE_R/CS_CS_YOSE_R_bin.sz` | 19,811 | `e0768983…` |
+
+The files were chosen to be language-free (the European DVD carries five
+languages in `Text/`, other regions may not), outside the folders mods
+replace (the owner's FXT repack changed files in `Sprite/`, `RVT/` and
+`effects/`; players replace songs in `Sound/`, and the soundtrack fix
+rewrites one), and two of them are Coast 2 Coast stages a demo would
+lack. They are identical in the owner's install and in its repack
+installer (extracted separately with innoextract, the installer that
+holds the `bdafa88a…` EXE). Both copies come from one European release,
+so another region whose data differs is still refused, with the file
+named; that case needs a player's report. Hashing the five files takes
+about 60 ms.
 
 ## Owner decisions
 

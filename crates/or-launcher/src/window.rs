@@ -200,7 +200,8 @@ pub enum Check {
 }
 
 /// Checks a game folder: its `OR2006C2C.exe` (any spelling) is a build
-/// the launcher knows, or the replacement EXE in `bundled`.
+/// the launcher knows or the replacement EXE in `bundled`, or else its
+/// data files are the 2006 release's.
 pub fn check_game(folder: &str, bundled: Option<&[u8]>) -> Check {
     let folder = folder.trim();
     if folder.is_empty() {
@@ -220,12 +221,13 @@ pub fn check_game(folder: &str, bundled: Option<&[u8]>) -> Check {
         ));
     };
     match std::fs::read(&exe) {
-        Ok(bytes) => match edition::identify_with_bundled(&bytes, bundled) {
+        Ok(bytes) => match edition::identify_folder(dir, &bytes, bundled) {
             Ok(e) => Check::Found(e.name),
-            Err(digest) => Check::Problem(format!(
-                "This {} is a version the launcher doesn't know (SHA-256 {}). Please report it: {REPORT_URL}",
+            Err(unknown) => Check::Problem(format!(
+                "This {} is a version the launcher doesn't know (SHA-256 {}), and the game files don't match the 2006 release ({}). Please report it: {REPORT_URL}",
                 edition::EXE,
-                edition::to_hex(&digest)
+                edition::to_hex(&unknown.exe_sha256),
+                unknown.data
             )),
         },
         Err(e) => Check::Problem(format!("Can't read {}: {e}", edition::EXE)),
@@ -1582,7 +1584,10 @@ mod tests {
         let mut ui = open(&dirs, None, false, false);
         ui.run();
         match ui.state().check() {
-            Check::Problem(p) => assert!(p.contains("SHA-256") && p.contains(REPORT_URL), "{p}"),
+            Check::Problem(p) => assert!(
+                p.contains("SHA-256") && p.contains("game files") && p.contains(REPORT_URL),
+                "{p}"
+            ),
             other => panic!("{other:?}"),
         }
         ui.get_by_label("Report this version");

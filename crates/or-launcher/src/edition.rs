@@ -1,10 +1,15 @@
-//! Which `OR2006C2C.exe` the game folder holds, by SHA-256.
+//! Which game the folder holds: its `OR2006C2C.exe` by SHA-256, else its
+//! data.
 //!
 //! The 2006 EXE is wrapped in disc DRM that breaks DLL wrappers, so
 //! OutRun2006Tweaks ships its own DRM-free replacement EXE. The launcher
 //! recognises original installs (the 2006 disc and Steam EXEs; it swaps in
 //! the replacement) and an install already patched by Tweaks (it refreshes
-//! the files it manages).
+//! the files it manages). Since it never runs or copies the folder's EXE,
+//! an EXE it doesn't know (DVD pressings differ) is accepted when the data
+//! files the Tweaks EXE loads are the 2006 release's.
+
+use std::path::Path;
 
 use rea_launcher::identify::{self, Known};
 
@@ -88,6 +93,122 @@ pub fn identify_with_bundled(bytes: &[u8], bundled: Option<&[u8]>) -> Result<Edi
 
 pub use rea_launcher::identify::hex as to_hex;
 
+/// One of the game's data files as the 2006 release ships it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DataFile {
+    /// `/`-separated, matched without regard to case.
+    pub path: &'static str,
+    pub size: u64,
+    pub sha256: [u8; 32],
+}
+
+impl DataFile {
+    const fn new(path: &'static str, size: u64, sha256_hex: &str) -> DataFile {
+        DataFile {
+            path,
+            size,
+            sha256: identify::hex32(sha256_hex),
+        }
+    }
+}
+
+/// Data files that identify the 2006 release (the game the Tweaks EXE
+/// runs), from the owner's install and its repack installer, which agree.
+/// Language-free files no known mod replaces (mods touch `Sprite/`,
+/// `RVT/` and `Sound/`); two are Coast 2 Coast stages a demo would lack.
+pub static DATA_2006: [DataFile; 5] = [
+    DataFile::new(
+        "Common/obj_course_obj_common_pmt.sz",
+        844_991,
+        "0cfc9a4dc659be92f9da7cab3e659638066ca2013125ba90ecc43057c72a6a99",
+    ),
+    DataFile::new(
+        "Common/def_orhiscores.bin",
+        67_680,
+        "426ad7d8d5e706f67435bec9590c7a356a2ef8f58bdc1f38d52af7f8d6d1aa51",
+    ),
+    DataFile::new(
+        "Driver/obj_driver_rival_pmt.sz",
+        1_138_698,
+        "132618f4bf7bc379aea74472d1c74b40a1e62c8f00115c582dce092743a71e6d",
+    ),
+    DataFile::new(
+        "Stage/PALM_BT/CS_CS_PALM_BT_bin.sz",
+        56_073,
+        "93d84b3f7dd10d07981e16f62a21b2867ef17d4ffca23ad50cb53c5d46df2e38",
+    ),
+    DataFile::new(
+        "Stage/YOSE_R/CS_CS_YOSE_R_bin.sz",
+        19_811,
+        "e0768983cc61734e3431f0b1d75701aef6b5602e8e0b4a04345432a01f0764bc",
+    ),
+];
+
+/// An `OR2006C2C.exe` we don't know in a folder whose data is the 2006
+/// release. The launcher never runs or copies the game's EXE (it plays its
+/// bundled Tweaks EXE in its copy), so only the data has to be right.
+/// DVD EXEs are SecuROM-wrapped and differ by region and pressing.
+pub const DATA_ONLY: Edition = Edition {
+    name: "OutRun 2006 (your OR2006C2C.exe isn't one we know, but it isn't used: the game files match the 2006 release)",
+    patched: false,
+};
+
+/// A folder the launcher doesn't recognise: its EXE's SHA-256 and the
+/// first data file that differs from the 2006 release.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unknown {
+    pub exe_sha256: [u8; 32],
+    pub data: String,
+}
+
+/// Identifies a game folder: by its EXE (`exe`, the bytes of its
+/// `OR2006C2C.exe`), else by its data.
+pub fn identify_folder(
+    game: &Path,
+    exe: &[u8],
+    bundled: Option<&[u8]>,
+) -> Result<Edition, Unknown> {
+    identify_folder_with(game, exe, bundled, &DATA_2006)
+}
+
+fn identify_folder_with(
+    game: &Path,
+    exe: &[u8],
+    bundled: Option<&[u8]>,
+    data: &[DataFile],
+) -> Result<Edition, Unknown> {
+    let exe_sha256 = match identify_with_bundled(exe, bundled) {
+        Ok(edition) => return Ok(edition),
+        Err(digest) => digest,
+    };
+    match data_mismatch(game, data) {
+        None => Ok(DATA_ONLY),
+        Some(data) => Err(Unknown { exe_sha256, data }),
+    }
+}
+
+/// The first file of `table` that `game` lacks or holds differently,
+/// described for the player's report; `None` when all match.
+fn data_mismatch(game: &Path, table: &[DataFile]) -> Option<String> {
+    table.iter().find_map(|file| {
+        let Some(path) = rea_launcher::paths::find_ignoring_case(game, file.path) else {
+            return Some(format!("{} is missing", file.path));
+        };
+        let size = match std::fs::metadata(&path) {
+            Ok(meta) => meta.len(),
+            Err(e) => return Some(format!("{}: {e}", file.path)),
+        };
+        if size != file.size {
+            return Some(format!("{} has {size} bytes, not {}", file.path, file.size));
+        }
+        match identify::sha256_file(&path) {
+            Ok(digest) if digest == file.sha256 => None,
+            Ok(digest) => Some(format!("{} has SHA-256 {}", file.path, to_hex(&digest))),
+            Err(e) => Some(format!("{}: {e}", file.path)),
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,6 +264,128 @@ mod tests {
         );
         assert!(identify_with_bundled(b"something else", Some(b"newer tweaks")).is_err());
         assert!(identify_with_bundled(b"newer tweaks", None).is_err());
+    }
+
+    /// A game folder holding `files` (path, bytes).
+    fn folder(name: &str, files: &[(&str, &[u8])]) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("or-edition-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (path, bytes) in files {
+            let path = dir.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, bytes).unwrap();
+        }
+        dir
+    }
+
+    fn table() -> [DataFile; 2] {
+        [
+            DataFile {
+                path: "Common/a.bin",
+                size: 5,
+                sha256: identify::sha256(b"alpha"),
+            },
+            DataFile {
+                path: "Stage/PALM_BT/b.sz",
+                size: 4,
+                sha256: identify::sha256(b"beta"),
+            },
+        ]
+    }
+
+    #[test]
+    fn an_unknown_exe_is_accepted_when_the_data_matches() {
+        // A DVD whose SecuROM-wrapped EXE we have never seen: the EXE is
+        // never run or copied, so the data the Tweaks EXE loads decides.
+        let dir = folder(
+            "match",
+            &[("common/A.BIN", b"alpha"), ("Stage/palm_bt/B.sz", b"beta")],
+        );
+        assert_eq!(
+            identify_folder_with(&dir, b"another dvd exe", None, &table()),
+            Ok(DATA_ONLY)
+        );
+        assert!(DATA_ONLY.name.contains("isn't used") && DATA_ONLY.name.contains("2006"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_known_exe_wins_without_reading_the_data() {
+        let dir = folder("known", &[]);
+        // No data at all: a recognised EXE never needs it.
+        let bundled = b"the bundled tweaks exe";
+        assert_eq!(
+            identify_folder_with(&dir, bundled, Some(bundled), &table()),
+            Ok(TWEAKS)
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn an_unknown_exe_with_other_data_is_refused_with_both_reasons() {
+        let digest = identify::sha256(b"another exe");
+        let missing = folder("missing", &[("Common/a.bin", b"alpha")]);
+        let unknown = identify_folder_with(&missing, b"another exe", None, &table()).unwrap_err();
+        assert_eq!(unknown.exe_sha256, digest);
+        assert!(unknown.data.contains("Stage/PALM_BT/b.sz") && unknown.data.contains("missing"));
+
+        let resized = folder(
+            "resized",
+            &[("Common/a.bin", b"alpha!"), ("Stage/PALM_BT/b.sz", b"beta")],
+        );
+        let unknown = identify_folder_with(&resized, b"another exe", None, &table()).unwrap_err();
+        assert!(unknown.data.contains("Common/a.bin") && unknown.data.contains("6 bytes"));
+
+        // Same size, other content: a modded or different release.
+        let modded = folder(
+            "modded",
+            &[("Common/a.bin", b"alpha"), ("Stage/PALM_BT/b.sz", b"BETA")],
+        );
+        let unknown = identify_folder_with(&modded, b"another exe", None, &table()).unwrap_err();
+        assert!(
+            unknown.data.contains("Stage/PALM_BT/b.sz"),
+            "{}",
+            unknown.data
+        );
+        assert!(unknown.data.contains(&to_hex(&identify::sha256(b"BETA"))));
+        for dir in [missing, resized, modded] {
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    #[test]
+    fn the_data_table_is_the_2006_release() {
+        // From the owner's install and, independently extracted, its
+        // repack installer (the one holding the bdafa88a EXE): language-
+        // free files no known mod replaces, two of them Coast 2 Coast
+        // stages a demo lacks.
+        assert_eq!(DATA_2006.len(), 5);
+        for file in &DATA_2006 {
+            assert!(file.size > 0 && !file.path.contains('\\'), "{}", file.path);
+            assert!(
+                !["Sound/", "Sprite/", "RVT/", "Text/", "SaveGame/"]
+                    .iter()
+                    .any(|skip| file.path.starts_with(skip)),
+                "{} is a folder mods or languages change",
+                file.path
+            );
+        }
+        assert!(
+            DATA_2006
+                .iter()
+                .any(|f| f.path.starts_with("Stage/PALM_BT/"))
+        );
+    }
+
+    #[test]
+    #[ignore = "needs an install: OR2006_GAME_DIR=<game folder> cargo test -- --ignored"]
+    fn a_real_install_is_recognised_by_its_data() {
+        let dir = std::env::var_os("OR2006_GAME_DIR").expect("OR2006_GAME_DIR");
+        assert_eq!(
+            identify_folder(Path::new(&dir), b"an EXE nobody knows", None),
+            Ok(DATA_ONLY)
+        );
     }
 
     #[test]

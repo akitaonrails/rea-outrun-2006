@@ -77,7 +77,7 @@ This file holds only what is specific to OutRun.
 
 | Path | What |
 |---|---|
-| `crates/or-launcher/src/edition.rs` | Known `OR2006C2C.exe` builds (SHA-256), the unknown-edition refusal |
+| `crates/or-launcher/src/edition.rs` | Known `OR2006C2C.exe` builds (SHA-256), the 2006 data fingerprint, the unknown-edition refusal |
 | `crates/or-launcher/src/config.rs` | The option table (`OPTIONS`): `launcher.cfg`, flags, `--help`, template, looks |
 | `crates/or-launcher/src/form.rs`, `window.rs`, `ui.rs` | The settings window, its look cards and its headless tests |
 | `crates/or-launcher/src/plan.rs` | What a launch writes, for the option tests and golden snapshots |
@@ -116,8 +116,11 @@ MinGW, lld and Wine live in the `gaming` distrobox: run the last three as
   0.1-0.2.5 shipped `c926e54a…`, the same EXE without the Large Address
   Aware flag), and the 2007-2010 Steam EXE (`4876712f…`, 962,560 bytes;
   reported by two Steam owners in issue #1, not checked by us: the
-  launcher never runs the game's EXE). Others are refused with their SHA-256 and the
-  unknown-edition issue form; a build is added only when we can verify it.
+  launcher never runs the game's EXE). Any other EXE is accepted when five
+  data files match the 2006 release (`DATA_2006`, sizes and SHA-256 from
+  the owner's install and its repack installer); otherwise it is refused
+  with its SHA-256, the first differing file and the unknown-edition issue
+  form. An EXE is added to the table only when we can verify it.
 - **Renderer, input, audio:** Direct3D 9 (DXVK under Wine); input through
   Tweaks' SDL layer (WGI on Windows, XInput under Wine by default; rumble
   and impulse triggers); the game's own audio, plus the Soundtrack Fix

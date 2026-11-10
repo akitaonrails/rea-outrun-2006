@@ -6,6 +6,18 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- A game folder whose `OR2006C2C.exe` the launcher doesn't know is now
+  accepted when five of the game's data files match the 2006 release
+  (#3, #4). DVD EXEs are copy-protected and their SHA-256 varies by region
+  and pressing, so legitimate DVDs were refused as unknown editions, but
+  the launcher never runs or copies the game's EXE: it plays its bundled
+  OutRun2006Tweaks EXE in its own copy, so only the data has to be right.
+  The window and `launcher.log` say that the EXE wasn't recognised and
+  isn't used. When the data doesn't match either, the refusal now also
+  names the first file that differs.
+
 ## [0.3.6] - 2026-11-09
 
 ### Added

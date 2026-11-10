@@ -58,9 +58,15 @@ OutRun2006Tweaks' replacement EXE. It always plays the Tweaks EXE in its
 own copy of the game, never yours. We have no Steam copy ourselves: the
 Steam EXE is recognised from the code two Steam owners reported.
 
-If your `OR2006C2C.exe` is another version, the launcher says so, shows
-its SHA-256 and doesn't start it. Report that code (never the EXE itself)
-with the
+DVD EXEs are copy-protected and differ between regions and pressings, and
+yours is never run or copied anyway. So when the launcher doesn't know
+your `OR2006C2C.exe`, it checks the game's own files instead: when a few
+key data files match the 2006 release, it plays, and the window and
+`launcher.log` say that your EXE wasn't recognised but isn't used.
+
+If neither your EXE nor the game files match, the launcher says so, shows
+the EXE's SHA-256 and which file differs, and doesn't start. Report that
+message (never the EXE itself) with the
 [unknown edition form](https://github.com/akitaonrails/rea-outrun-2006/issues/new?template=unknown-edition.yml).
 
 ## Download and install
@@ -262,9 +268,12 @@ start, so your saves folder always has them.
 
 ## Troubleshooting
 
-- **"This OR2006C2C.exe is a version the launcher doesn't know."** Your
-  EXE isn't one of the known builds. Report the SHA-256 it shows and where
-  your copy comes from with the
+- **"This OR2006C2C.exe is a version the launcher doesn't know, and the
+  game files don't match the 2006 release."** Neither your EXE nor the
+  key data files the launcher checks are ones it knows (the message names
+  the first file that differs; a mod that replaced it, or a damaged
+  install, does this too). Report the SHA-256 and the file it shows and
+  where your copy comes from with the
   [unknown edition form](https://github.com/akitaonrails/rea-outrun-2006/issues/new?template=unknown-edition.yml).
 - **"OutRun 2006 or its launcher is already running."** The launcher you
   started first is still waiting for the game, or is running without a
