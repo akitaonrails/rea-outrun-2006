@@ -52,8 +52,11 @@ a real window (docs/RUNTIME_NOTES.md). -->
 ## What you need
 
 **OutRun 2006: Coast 2 Coast for Windows PC**, installed: the folder with
-`OR2006C2C.exe`. The launcher recognises the original 2006 `OR2006C2C.exe`
-and a folder already patched with OutRun2006Tweaks' replacement EXE.
+`OR2006C2C.exe`. The launcher recognises the original 2006 `OR2006C2C.exe`,
+the Steam release's (sold 2007-2010) and a folder already patched with
+OutRun2006Tweaks' replacement EXE. It always plays the Tweaks EXE in its
+own copy of the game, never yours. We have no Steam copy ourselves: the
+Steam EXE is recognised from the code two Steam owners reported.
 
 If your `OR2006C2C.exe` is another version, the launcher says so, shows
 its SHA-256 and doesn't start it. Report that code (never the EXE itself)

@@ -30,12 +30,20 @@ where it comes from.
 | `bdafa88a5abdd2a9743f6bdcc5e2189288c0203790412fce10b9bb649933482f` | 14,950,400 | the 2006 EXE (DRM-wrapped, PE timestamp 2006-05-26) | the owner's install |
 | `68ceb386829066f8455b9d027320af962584321f3e2e8a79c72841495a6134c3` | 3,674,112 | OutRun2006Tweaks' DRM-free EXE, Large Address Aware | every upstream release from v0.3.0-rc1 to v0.6.1, and the owner's install |
 | `c926e54a5620e8e47199caf532235c25ddaba512da198bde15db1ee4375f806f` | 3,674,112 | the same Tweaks EXE without the Large Address Aware flag (one byte) | upstream releases v0.1 to v0.2.5 |
+| `4876712f501640951d892069db826e431aede3e4ab87686fc1d556e26df9fec1` | 962,560 | the 2007-2010 Steam release (app 4730, delisted 2010), packed | **reported, not checked by us**: the same digest and size from two Steam owners who bought it before the delisting (issue #1) |
 
-Not yet verified (2026-11-09): the 2007-2010 Steam release (app 4730,
-delisted). Tweaks says its EXE works with the Steam and DVD releases, but
-no Steam `OR2006C2C.exe` digest is published anywhere we could check;
-issue #1 reports `4876712f…9fec1` as a Steam copy, which matches no
-Tweaks release.
+The Steam row is the one build we accept without a copy of our own,
+because the launcher never runs the game's EXE: it identifies the folder
+by it, then plays its bundled Tweaks EXE in its private copy. What the
+Steam EXE is comes from OutRun2006Tweaks (2026-11-09): its README says the
+replacement EXE "should be compatible with both the Steam release & the
+original DVD version", and `src/hooks_bugfixes.cpp` (`FixC2CRankings`)
+notes that for the Steam release "they repacked the original
+pre-securom-wrapper 2006 game EXE without any changes". No Tweaks issue
+mentions this size or digest, and no store page or wiki publishes it.
+Nothing else the launcher does depends on the EXE; the soundtrack fix
+patches the song only when it has the known truncated size. The Steam
+release's data files have not been played by us.
 
 ## Owner decisions
 

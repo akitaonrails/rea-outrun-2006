@@ -6,6 +6,15 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The Steam release's `OR2006C2C.exe` (sold 2007-2010; SHA-256
+  `4876712f…`, 962,560 bytes) is now recognised (#1). It was refused as an
+  unknown edition. The launcher plays its bundled OutRun2006Tweaks EXE
+  instead, as for every edition; OutRun2006Tweaks supports the Steam
+  release. We have no Steam copy: the digest is the one two Steam owners
+  reported, and the Steam release has not been played by us.
+
 ## [0.3.5] - 2026-11-09
 
 ### Added

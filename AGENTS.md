@@ -114,7 +114,9 @@ MinGW, lld and Wine live in the `gaming` distrobox: run the last three as
   `bdafa88a…`; the launcher swaps in the Tweaks EXE in its copy) and the
   Tweaks DRM-free EXE (`68ceb386…`, an install already patched; Tweaks
   0.1-0.2.5 shipped `c926e54a…`, the same EXE without the Large Address
-  Aware flag). Others are refused with their SHA-256 and the
+  Aware flag), and the 2007-2010 Steam EXE (`4876712f…`, 962,560 bytes;
+  reported by two Steam owners in issue #1, not checked by us: the
+  launcher never runs the game's EXE). Others are refused with their SHA-256 and the
   unknown-edition issue form; a build is added only when we can verify it.
 - **Renderer, input, audio:** Direct3D 9 (DXVK under Wine); input through
   Tweaks' SDL layer (WGI on Windows, XInput under Wine by default; rumble

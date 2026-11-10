@@ -2,8 +2,9 @@
 //!
 //! The 2006 EXE is wrapped in disc DRM that breaks DLL wrappers, so
 //! OutRun2006Tweaks ships its own DRM-free replacement EXE. The launcher
-//! recognises both: an original install (it swaps in the replacement) and an
-//! install already patched by Tweaks (it refreshes the files it manages).
+//! recognises original installs (the 2006 disc and Steam EXEs; it swaps in
+//! the replacement) and an install already patched by Tweaks (it refreshes
+//! the files it manages).
 
 use rea_launcher::identify::{self, Known};
 
@@ -39,7 +40,18 @@ pub const TWEAKS_EARLY: Edition = Edition {
     patched: true,
 };
 
-static EDITIONS: [Known<Edition>; 3] = [
+/// The EXE of the 2007-2010 Steam release (962,560 bytes, packed).
+/// OutRun2006Tweaks' source describes it as the 2006 EXE before its
+/// SecuROM wrapper, repacked for Steam, and its README says the
+/// replacement EXE works with the Steam release. We have no Steam copy:
+/// the digest is the one two Steam owners reported (issue #1), and the
+/// launcher plays its bundled Tweaks EXE instead, as for every edition.
+pub const STEAM: Edition = Edition {
+    name: "OutRun 2006 Steam EXE (reported by owners; the launcher replaces it)",
+    patched: false,
+};
+
+static EDITIONS: [Known<Edition>; 4] = [
     Known::new(
         "bdafa88a5abdd2a9743f6bdcc5e2189288c0203790412fce10b9bb649933482f",
         ORIGINAL,
@@ -51,6 +63,10 @@ static EDITIONS: [Known<Edition>; 3] = [
     Known::new(
         "c926e54a5620e8e47199caf532235c25ddaba512da198bde15db1ee4375f806f",
         TWEAKS_EARLY,
+    ),
+    Known::new(
+        "4876712f501640951d892069db826e431aede3e4ab87686fc1d556e26df9fec1",
+        STEAM,
     ),
 ];
 
@@ -99,6 +115,24 @@ mod tests {
             .expect("the Tweaks 0.1-0.2.5 EXE is in the table");
         assert_eq!(early.value, TWEAKS_EARLY);
         assert!(early.value.patched);
+    }
+
+    #[test]
+    fn the_steam_exe_is_known_as_reported_not_verified() {
+        // The 2007-2010 Steam release (962,560 bytes): two Steam owners
+        // reported this digest in issue #1. We have no Steam copy, so the
+        // name says it was reported, and the launcher plays its bundled
+        // Tweaks EXE instead of it, as for every edition.
+        let steam = EDITIONS
+            .iter()
+            .find(|known| {
+                to_hex(&known.sha256)
+                    == "4876712f501640951d892069db826e431aede3e4ab87686fc1d556e26df9fec1"
+            })
+            .expect("the Steam EXE is in the table");
+        assert_eq!(steam.value, STEAM);
+        assert!(!steam.value.patched);
+        assert!(STEAM.name.contains("Steam") && STEAM.name.contains("reported"));
     }
 
     #[test]
