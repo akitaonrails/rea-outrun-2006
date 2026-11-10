@@ -6,6 +6,8 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-11-10
+
 ### Changed
 
 - A game folder whose `OR2006C2C.exe` the launcher doesn't know is now
@@ -444,7 +446,8 @@ Coast 2 Coast on Windows 10/11 and on Linux (Proton, Wine, AppImage).
   builds and publishes the Windows zip and the AppImage; a weekly workflow
   proposing newer OutRun2006Tweaks builds.
 
-[Unreleased]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.6...HEAD
+[Unreleased]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.7...HEAD
+[0.3.7]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.3...v0.3.4
