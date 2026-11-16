@@ -3,6 +3,6 @@
 # Upstream ships current builds only as expiring CI artifacts, so each
 # build we use is repacked and kept as a release of this repository by
 # packaging/update-tweaks.sh (docs/TWEAKS.md); never edit this by hand.
-# Commit 08e5efb4 (2026-08-26T13:11:38Z), build run 32972770753.
+# Commit 270cf935 (2026-10-09T07:42:50Z), build run 37900601545.
 # One line: URL SHA-256.
-https://github.com/akitaonrails/rea-outrun-2006/releases/download/tweaks-08e5efb4/OutRun2006Tweaks-08e5efb4.zip 1ec7dee827d3f619c7f7469817f5a036965eee09a2cfc24da5d421bc5ab7aef1
+https://github.com/akitaonrails/rea-outrun-2006/releases/download/tweaks-270cf935/OutRun2006Tweaks-270cf935.zip cff9b87e9f2490b922a1ea9302c15fc8ba83865271c65f76a9ee1c1e206bf7cd
