@@ -6,6 +6,14 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Updated rea-launcher-sdk to v0.11.1 (from v0.4.4). For players: a line in
+  `launcher.cfg` that isn't `key = value` (a typo like
+  `resolution 1920x1080`) is now reported in `--check` and the log instead of
+  being dropped silently, and a `launcher.cfg` saved in a Windows code page
+  stays readable. It also brings the portable-mode helper this release uses.
+
 ## [0.3.7] - 2026-11-10
 
 ### Changed

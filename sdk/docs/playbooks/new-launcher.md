@@ -190,6 +190,23 @@ program for the Windows build.
 - Pads in the window: `rea_launcher_ui::pad::joystick::Joysticks` feeding
   `PadNav` (`/dev/input/js*`).
 
+**A series of arcade games in one launcher** (the TeknoParrot launchers:
+Initial D, Nintendo, Sega, Wangan). Use the hub look rather than a
+settings window per game: `rea_launcher_ui::hub::run` over the launcher's
+`HubBackend` (crates/rea-launcher-ui/README.md, "The hub").
+- The launcher keeps the game knowledge: its catalog as `HubGame`s and a
+  `Support` per host, its scan, its option table (`cfg::spec`, one table
+  for the rows, `--help` and the settings files), the session it prepares
+  (supervised by `rea_launcher_native::supervise`), its controls view.
+- Paths besides the library (a BIOS file or folder) are `PathField`s:
+  one row each on the setup page, a `launcher.cfg` key with its old names,
+  a flag in `rea_launcher::hub::cli`.
+- Folders: `HubPaths::discover(&HubDirs { env_prefix, name, dev_assets })`.
+- Before the window: `hub::cli::parse`, `instance::single`, and
+  `rea_launcher_ui::hub::fatal` for anything refused.
+- Tests: `hub::testing` (fits at 1280×720 and 1280×800, pad, close →
+  stop, golden `dump`s).
+
 **Old native Linux ports** (2015–2018 Feral/Aspyr builds, DiRT Rally).
 - Zen 3+ CPUs with protection keys fault on execute-only mappings: a small
   `LD_PRELOAD` library that adds read to exec-only `mmap`/`mprotect`
@@ -218,6 +235,41 @@ desktop, not the game, as the process to wait for.
 folder from the registry, point the value at the launcher's saves folder
 (no mirror), and import old saves once, with a marker, so a save the
 player deleted never comes back.
+
+**Registry** (a game that reads its folders or settings from `HKLM`:
+CMR1, CMR4, CMR2005, Sega Rally Revo). An unelevated launcher can't write
+`HKLM`, and the VirtualStore copy Windows makes instead reaches the game
+only while UAC registry virtualization is on for the game process: off by
+policy, per key, and always for an exe with a `requestedExecutionLevel`
+manifest (SRR's `asInvoker`). CMR1 read nothing on a player's Windows 11
+and crashed while `--check` said ready (rea-colin-mcrae#6). So:
+- Find how the game opens its key (REA: the `RegOpenKey*`/`RegCreateKey*`
+  calls and their arguments): the full path at once (CMR4, CMR2005, SRR),
+  or `SOFTWARE` from `HKLM` and one level at a time (CMR1).
+- Write the values to `HKCU` with `rea_launcher_win32::reg::write_verified`
+  (`When::Always` for the launcher's paths, `When::IfMissing` for the
+  game's own settings), on Windows and Wine alike: one code path.
+- Give the game that key: put `rea_close_hook.dll` in the runtime copy's
+  import table (`rea_close_hook::import_into`; it does nothing else
+  without `REA_CLOSE_HOOK_ATTACH`) and set
+  `rea_close_hook::registry::ENV` to the rule, built and checked with
+  `registry::Config` (`FROM -> TO`; `walk FROM -> TO` for a game that walks
+  down from `SOFTWARE`). Build the DLL with the workspace's `[profile.dll]`
+  (`panic = "unwind"`) and `--profile dll`, never the launcher's release
+  profile (the crate README's recipe; `launcher-check` rule `dll-unwind`).
+- Read back: `write_verified` returns every value that differs. Play stops
+  with that list and the issue link; `--check` fails loudly when the DLL is
+  missing, the runtime exe doesn't import it, the rules don't parse or the
+  read-back differs. Never report "ready" from the write alone.
+- Carry over the game's own values (language, first-run state, the
+  player's choices) from where the game read them before: read the old key
+  with `Key::read_machine` (VirtualStore first, then `HKLM`) and use those
+  values as the `IfMissing` data on the first `HKCU` write. Never write
+  `HKLM` or the VirtualStore again; `Key::machine` (no fallback) only when
+  a key truly must be machine-wide.
+- Test it end to end under `scripts/wine-test` with no key anywhere but
+  `HKCU`, and record the real-game check (no admin, Windows) in
+  `RUNTIME_NOTES.md`.
 
 **Headless screenshots** for the README: `docs/playbooks/readme.md`,
 "Screenshots, headless".
