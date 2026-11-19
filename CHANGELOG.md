@@ -6,6 +6,16 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Portable mode (#6): an empty `portable.txt` next to `OutRunLauncher.exe`
+  keeps the settings, log, the launcher's copy of the game, the saves, the
+  HD pack and the DirectX files in a `data` folder beside it, instead of
+  `%LOCALAPPDATA%\OutRunLauncher` and `Saved Games\OutRun 2006`. Folders
+  in `launcher.cfg` are then written relative to the launcher's folder, so
+  the whole folder can move to another PC or drive letter. Without the
+  file nothing changes. README → "Portable mode".
+
 ### Changed
 
 - Updated rea-launcher-sdk to v0.11.1 (from v0.4.4). For players: a line in

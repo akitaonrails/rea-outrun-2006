@@ -260,11 +260,45 @@ A bad option or value exits with code 2 and says what it takes.
 | Registry, in the Wine prefix only | — | `OR2006C2C.exe`'s DLL overrides (`HKCU\Software\Wine\AppDefaults\OR2006C2C.exe\DllOverrides`, recorded in `HKCU\Software\rea-launcher\DllOverrides\OR2006C2C.exe`), the settings window's `UseEGL = N` (`HKCU\Software\Wine\X11 Driver`) and the controller baseline under `HKLM\System\CurrentControlSet\Services\winebus`; a value you set yourself is kept |
 
 A `launcher.cfg` next to `OutRunLauncher.exe` is used instead when it
-exists (a portable install). Under Proton everything is in Steam's
+exists. Under Proton everything is in Steam's
 `compatdata/<appid>/pfx` for the non-Steam game. The game writes its saves
 (`License.dat`, your records) into the launcher's copy; the launcher copies
 them into your saves folder when the game ends and back in before the next
 start, so your saves folder always has them.
+
+### Portable mode (Windows)
+
+To keep everything in one folder you can carry to another PC, put an empty
+file named `portable.txt` next to `OutRunLauncher.exe` (in Explorer: New →
+Text Document, named `portable`). From the next start, the launcher keeps
+its settings, log, copy of the game, saves, HD pack and DirectX files in a
+`data` folder beside it, and nothing under `%LOCALAPPDATA%` or `Saved
+Games`:
+
+```text
+OutRun portable\
+  OutRunLauncher.exe, portable.txt, tweaks\, vc\, …
+  OutRun 2006\      your game folder (launcher.cfg: game = OutRun 2006)
+  data\             made by the launcher: launcher.cfg, launcher.log,
+                    OutRun2006\ (the copy), Saves\, hd-pack\, directx\
+```
+
+- The game folder can sit anywhere on the same drive: the launcher writes
+  the folders in `launcher.cfg` relative to its own folder (`..\OutRun
+  2006`), so the whole tree can move to another PC or drive letter. A
+  folder on another drive is kept as written. Relative folders, in the
+  file and on the command line, are the launcher folder's.
+- The launcher's folder must be writable, and it can't be the game folder
+  itself (its copy of the game would land inside the game): give it a
+  folder of its own, with the game inside it or next to it.
+- Turning it on starts afresh: copy your saves from `Saved Games\OutRun
+  2006` into `data\Saves` (and `launcher.cfg` from
+  `%LOCALAPPDATA%\OutRunLauncher` into `data`) to keep them. The old
+  `%LOCALAPPDATA%\OutRunLauncher` can then be deleted.
+- One thing stays on the PC: Windows' graphics preference for the game
+  (`HKCU\Software\Microsoft\DirectX\UserGpuPreferences`, a value named
+  after `data\OutRun2006\OR2006C2C.exe`), which picks the fast GPU on
+  laptops. Settings → Display → Graphics shows and removes it.
 
 ## Troubleshooting
 
@@ -311,7 +345,9 @@ start, so your saves folder always has them.
    `saves` folder you chose). On Linux they are inside the Wine prefix
    (`drive_c/users/<you>/Saved Games/OutRun 2006`), so the prefix steps
    below delete them: copy them out first.
-2. Delete the folder you unpacked (or the AppImage).
+2. Delete the folder you unpacked (or the AppImage). In portable mode
+   that is all of it, saves included, except the graphics preference
+   below.
 3. Windows: delete `%LOCALAPPDATA%\OutRunLauncher`: settings, log, the
    private copy of the game (about 1 GB) and the downloaded HD pack
    (3.2 GB). The graphics preference in

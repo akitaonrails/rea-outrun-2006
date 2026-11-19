@@ -36,8 +36,8 @@ mod app {
     use or_launcher::instance;
     use or_launcher::window::{self, Outcome};
     use or_launcher::{directx, edition, form, hdpack, runtime, tweaks};
-    use rea_launcher::fsx;
     use rea_launcher::log::Log;
+    use rea_launcher::{fsx, paths};
     use rea_launcher_win32::gpu::{self, Glx};
     use rea_launcher_win32::http::WinHttp;
     use rea_launcher_win32::instance::{self as win32_instance, SecondStart, Window};
@@ -48,11 +48,71 @@ mod app {
 
     const EXE: &str = edition::EXE;
 
+    /// The folder beside `OutRunLauncher.exe` that holds everything the
+    /// launcher writes when the player put `portable.txt` there (portable
+    /// mode); `None` otherwise.
+    fn portable() -> Option<&'static Path> {
+        static DATA: OnceLock<Option<PathBuf>> = OnceLock::new();
+        DATA.get_or_init(|| {
+            launcher_dir().and_then(|dir| paths::portable_dir(&dir, config::PORTABLE_DATA))
+        })
+        .as_deref()
+    }
+
+    /// The launcher's home folder: `%LOCALAPPDATA%\OutRunLauncher`, or the
+    /// portable `data` folder.
     fn home() -> PathBuf {
+        if let Some(data) = portable() {
+            return data.to_path_buf();
+        }
         std::env::var_os("LOCALAPPDATA")
             .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir)
             .join("OutRunLauncher")
+    }
+
+    /// In portable mode, the folder paths in launcher.cfg rewritten
+    /// relative to the launcher's folder (`..\OutRun 2006`), so the
+    /// folders can move to another PC or drive letter together.
+    fn keep_portable(settings_path: &Path) {
+        let (Some(_), Some(base)) = (portable(), launcher_dir()) else {
+            return;
+        };
+        let Ok(Some(text)) = config::read_file(settings_path) else {
+            return;
+        };
+        let Some(relative) = config::paths_relative_to(&text, &base) else {
+            return;
+        };
+        match fsx::write_atomic(settings_path, relative) {
+            Ok(()) => {
+                log_line("portable: folders in launcher.cfg written relative to the launcher")
+            }
+            Err(error) => log_line(&format!(
+                "warning: portable: cannot update {}: {error}",
+                settings_path.display()
+            )),
+        }
+    }
+
+    /// A folder as launcher.cfg keeps it: relative to the launcher's folder
+    /// in portable mode when on the same drive, otherwise as given.
+    fn stored(path: &Path) -> String {
+        portable()
+            .and(launcher_dir())
+            .and_then(|base| paths::relative_to(path, &base))
+            .unwrap_or_else(|| path.to_path_buf())
+            .display()
+            .to_string()
+    }
+
+    /// `check_separate`, with what to do about it in portable mode, where
+    /// the copy sits beside the launcher.
+    fn separate(game: &Path, runtime_dir: &Path) -> Result<(), String> {
+        runtime::check_separate(game, runtime_dir).map_err(|error| match portable() {
+            Some(_) => format!("{error}\n\n{}", config::PORTABLE_IN_GAME),
+            None => error,
+        })
     }
 
     /// `launcher.log` in the launcher's home folder (started afresh past
@@ -74,8 +134,12 @@ mod app {
     }
 
     /// `%USERPROFILE%\Saved Games\OutRun 2006`, Windows' usual place for
-    /// game saves (inside the prefix under Wine/Proton).
+    /// game saves (inside the prefix under Wine/Proton); `data\Saves` in
+    /// portable mode.
     fn default_saves() -> PathBuf {
+        if let Some(data) = portable() {
+            return data.join("Saves");
+        }
         std::env::var_os("USERPROFILE")
             .map(PathBuf::from)
             .unwrap_or_else(home)
@@ -217,7 +281,7 @@ mod app {
             Phase::Done(dir) => {
                 let text = read_settings(settings_path)?.unwrap_or_else(config::template);
                 let text = config::set_key(&text, "hd_textures", "on");
-                let text = config::set_key(&text, "hd_textures_folder", &dir.display().to_string());
+                let text = config::set_key(&text, "hd_textures_folder", &stored(&dir));
                 if let Some(parent) = settings_path.parent() {
                     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
                 }
@@ -292,7 +356,7 @@ mod app {
             .map(|dir| tweaks::check_components(&dir, wine))
             .unwrap_or_default();
         let mut problems = found.errors.clone();
-        if let Err(e) = runtime::check_separate(game, runtime_dir) {
+        if let Err(e) = separate(game, runtime_dir) {
             problems.push(e);
         }
         let probe = runtime_dir.join(".or-check");
@@ -333,6 +397,13 @@ mod app {
 
     pub fn run() -> Result<u32, String> {
         log_line(concat!("OutRunLauncher ", env!("CARGO_PKG_VERSION")));
+        // Portable mode: relative folders (launcher.cfg's, the command
+        // line's) are the launcher folder's, wherever it was started from.
+        if let (Some(data), Some(dir)) = (portable(), launcher_dir()) {
+            std::env::set_current_dir(&dir)
+                .map_err(|error| format!("portable: cannot use {}: {error}", dir.display()))?;
+            log_line(&format!("portable: everything in {}", data.display()));
+        }
         let settings_path = settings_path();
         let cli: Vec<String> = std::env::args().skip(1).collect();
         // --help and a bad command line answer like a command (the SDK's
@@ -373,6 +444,7 @@ mod app {
                 return Ok(second.exit_code() as u32);
             }
         };
+        keep_portable(&settings_path);
         if switch("--download-hd-pack") {
             return download_hd_pack(&settings_path);
         }
@@ -400,7 +472,10 @@ mod app {
             }
             // No launcher.cfg yet: the window opens on the recommended look.
             let saved = read_settings(&settings_path)?;
-            match ui::show(&settings_path, &home(), saved.as_deref(), switch("--linux")) {
+            let shown = ui::show(&settings_path, &home(), saved.as_deref(), switch("--linux"));
+            // The window's folder pickers give absolute folders.
+            keep_portable(&settings_path);
+            match shown {
                 Ok(Outcome::Play) => {
                     log_line("settings window: play");
                     if settings_only {
@@ -465,7 +540,7 @@ mod app {
         if check_only {
             return Ok(check(&game, &detected, &runtime_dir, wine, &warnings));
         }
-        runtime::check_separate(&game, &runtime_dir)?;
+        separate(&game, &runtime_dir)?;
         // A launcher that was killed while it played released the
         // instance, but its game may still run from this runtime copy:
         // never sync under it or start a second one.
@@ -544,7 +619,7 @@ mod app {
 
         // Remember the game folder; the rest of the file stays as written.
         if existing.is_none() || saved.game.as_ref() != Some(&game) {
-            let text = config::set_key(file_text, "game", &game.display().to_string());
+            let text = config::set_key(file_text, "game", &stored(&game));
             if let Some(parent) = settings_path.parent() {
                 fs::create_dir_all(parent).map_err(|error| error.to_string())?;
             }

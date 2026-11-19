@@ -214,6 +214,38 @@ impl Scaler {
 
 pub const FILE_NAME: &str = "launcher.cfg";
 
+/// The folder beside `OutRunLauncher.exe` that holds everything the
+/// launcher writes in portable mode (`portable.txt` beside the exe).
+pub const PORTABLE_DATA: &str = "data";
+
+/// Why a portable launcher can't sit in the game folder.
+pub const PORTABLE_IN_GAME: &str = "portable.txt keeps the launcher's copy of the game in the data folder beside OutRunLauncher.exe, so in portable mode the launcher can't be in the game folder. Put the launcher in a folder of its own (the game folder can go inside it), or set runtime in launcher.cfg to a folder outside the game.";
+
+/// The keys whose values are folders.
+const FOLDER_KEYS: [&str; 4] = ["game", "runtime", "saves", "hd_textures_folder"];
+
+/// `text` with its absolute folders (`game`, `runtime`, `saves`,
+/// `hd_textures_folder`) written relative to `base`, the launcher's folder
+/// in portable mode, where `paths::relative_to` gives one (not across
+/// drives); `None` when nothing changes. The rest of the text is kept.
+pub fn paths_relative_to(text: &str, base: &Path) -> Option<String> {
+    let moves: Vec<(&str, String)> = cfg::entries(text)
+        .filter_map(|e| {
+            let key = FOLDER_KEYS
+                .into_iter()
+                .find(|k| k.eq_ignore_ascii_case(e.key))?;
+            let relative = rea_launcher::paths::relative_to(Path::new(e.value), base)?;
+            Some((key, relative.display().to_string()))
+        })
+        .collect();
+    if moves.is_empty() {
+        return None;
+    }
+    Some(moves.iter().fold(text.to_string(), |text, (key, value)| {
+        set_key(&text, key, value)
+    }))
+}
+
 /// A complete `outrun2006.ini` with the game's own defaults (the format
 /// the game's setup tool writes), for a copy of the game without one.
 pub const OUTRUN2006_SEED: &str = "DX/ADAPTER = 0\nDX/RES/WIDTH = 640\nDX/RES/HEIGHT = 480\nDX/ANTIALIASING = 0\nDX/FOG = 1\nLANGUAGE = 0\nDX/WINDOWED = 1\n";
@@ -309,14 +341,14 @@ pub const OPTIONS: &[OptionSpec] = &[
         "runtime",
         Kind::Path,
         "Runtime folder",
-        "Where the launcher keeps its private, writable copy of the game. Default: %LOCALAPPDATA%\\OutRunLauncher\\OutRun2006.",
+        "Where the launcher keeps its private, writable copy of the game. Default: %LOCALAPPDATA%\\OutRunLauncher\\OutRun2006 (data\\OutRun2006 beside the launcher with portable.txt).",
     )
     .launcher_only(),
     OptionSpec::new(
         "saves",
         Kind::Path,
         "Saves",
-        "Where your saves (License.dat, your records) are kept: copied into the game before it starts and back when it ends. Default: Saved Games\\OutRun 2006.",
+        "Where your saves (License.dat, your records) are kept: copied into the game before it starts and back when it ends. Default: Saved Games\\OutRun 2006 (data\\Saves beside the launcher with portable.txt).",
     ),
     OptionSpec::new(
         "look",
@@ -573,7 +605,7 @@ pub fn option(key: &str) -> &'static OptionSpec {
 /// The comment heading of `launcher.cfg`.
 const HEADING: &str = "OutRun 2006 launcher settings.
 
-One setting per line as key = value; lines starting with # are comments. Command-line options (--resolution 1920x1080) override this file for one run. A launcher.cfg next to OutRunLauncher.exe is used instead of this one when it exists (portable installs).
+One setting per line as key = value; lines starting with # are comments. Command-line options (--resolution 1920x1080) override this file for one run. A launcher.cfg next to OutRunLauncher.exe is used instead of this one when it exists. With a portable.txt next to OutRunLauncher.exe (portable mode), this file, launcher.log, the copy of the game and your saves live in the data folder beside it, and folders here are relative to the launcher's folder.
 
 Unset settings get the launcher's defaults (the Coast to Coast look), shown in each #key = line. Everything is applied to the launcher's private copy of the game; your game folder is never changed.";
 
@@ -1046,6 +1078,26 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn portable_folders_are_kept_relative_to_the_launcher() {
+        // absolute on both hosts: `C:/g` under Windows (Wine), `/g` elsewhere
+        let r = if cfg!(windows) { "C:" } else { "" };
+        let text = format!(
+            "# mine\ngame = {r}/g/OutRun 2006\nruntime = {r}/g/L/data/OutRun2006\nsaves = saves\nhd_textures = on\nhd_textures_folder = {r}/g/L/data/hd-pack/x\nlook = original\n"
+        );
+        let base = PathBuf::from(format!("{r}/g/L"));
+        let moved = paths_relative_to(&text, &base).unwrap();
+        let (s, warnings) = Settings::parse_file(&moved);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(s.game, Some(PathBuf::from("../OutRun 2006")));
+        assert_eq!(s.runtime, Some(PathBuf::from("data/OutRun2006")));
+        assert_eq!(s.saves, Some(PathBuf::from("saves")), "already relative");
+        assert_eq!(s.hd_textures_folder, Some(PathBuf::from("data/hd-pack/x")));
+        assert!(moved.starts_with("# mine\n") && moved.contains("look = original"));
+        assert_eq!(paths_relative_to(&moved, &base), None, "once");
+        assert_eq!(paths_relative_to("look = original\n", &base), None);
+    }
 
     fn args(list: &[&str]) -> Result<Settings, String> {
         Settings::parse_args(list.iter().map(|s| s.to_string())).map(|(s, _)| s)
