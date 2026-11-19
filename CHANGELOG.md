@@ -6,6 +6,8 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-19
+
 ### Added
 
 - Portable mode (#6): an empty `portable.txt` next to `OutRunLauncher.exe`
@@ -464,7 +466,8 @@ Coast 2 Coast on Windows 10/11 and on Linux (Proton, Wine, AppImage).
   builds and publishes the Windows zip and the AppImage; a weekly workflow
   proposing newer OutRun2006Tweaks builds.
 
-[Unreleased]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.7...HEAD
+[Unreleased]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.7...v0.4.0
 [0.3.7]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.4...v0.3.5
