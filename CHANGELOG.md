@@ -3,6 +3,8 @@
 
 ## Unreleased
 
+## [0.4.1] - 2026-11-21
+
 ### Changed
 
 - Replaced placeholder launcher icon with custom high-contrast 256×256 OutRun 2006 coastal sunset artwork for Windows executable and Linux AppImage shortcuts.
@@ -473,7 +475,8 @@ Coast 2 Coast on Windows 10/11 and on Linux (Proton, Wine, AppImage).
   builds and publishes the Windows zip and the AppImage; a weekly workflow
   proposing newer OutRun2006Tweaks builds.
 
-[Unreleased]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.7...v0.4.0
 [0.3.7]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/akitaonrails/rea-outrun-2006/compare/v0.3.5...v0.3.6
