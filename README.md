@@ -320,6 +320,14 @@ OutRun portable\
 - **The HD pack is on but the game looks the same.** Check the HD Pack
   tab: the note under the folder says whether it holds the pack.
   `launcher.log` says which folder the game was given.
+- **"OUTRUN2 15 STAGE CONTINUOUS" or "OUTRUN2SP 15 STAGE CONTINUOUS" says
+  NOT AVAILABLE.** There is no DLC: all 30 stages and both 15-stage
+  continuous courses are in the base game, locked behind progression.
+  Unlock them normally by playing **Coast 2 Coast** mode and buying them in
+  the **Showroom** with OutRun Miles. To unlock everything immediately with
+  the game's built-in code, open **Edit License**, enter `ENTIRETY` (all
+  caps), press **Done**, and choose **No** when asked to save the name
+  change (repeat with `MILESANDMILES` for 1,000,000 OutRun Miles).
 - **Your own `WINEDLLOVERRIDES` don't apply.** Rules for the DLLs the
   launcher sets (`dinput8`, `d3d9`, `mscoree`, `mshtml`) are replaced by
   the launcher's; your other rules are kept.
