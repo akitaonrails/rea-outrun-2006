@@ -853,13 +853,21 @@ impl Settings {
 
     /// Wheel layer setup (`rea_wheel.ini` / `REA_WHEEL_MODE`) for this launch.
     pub fn wheel_setup(&self) -> rea_launcher::wheel::dinput::Setup {
-        use rea_launcher::wheel::SteeringLock;
+        use rea_launcher::ffb::FfbSettings;
         use rea_launcher::wheel::dinput::{Mode, Setup};
-        let mut setup = Setup::default();
-        setup.mode = self.wheel.unwrap_or(Mode::Auto);
-        setup.wheel.lock = self.wheel_lock.unwrap_or(SteeringLock::DEFAULT);
-        setup.ffb.strength = self.wheel_ffb.unwrap_or(100).min(100) as u8;
-        setup
+        use rea_launcher::wheel::{SteeringLock, WheelSettings};
+        Setup {
+            mode: self.wheel.unwrap_or(Mode::Auto),
+            wheel: WheelSettings {
+                lock: self.wheel_lock.unwrap_or(SteeringLock::DEFAULT),
+                ..WheelSettings::default()
+            },
+            ffb: FfbSettings {
+                strength: self.wheel_ffb.unwrap_or(100).min(100) as u8,
+                ..FfbSettings::default()
+            },
+            ..Setup::default()
+        }
     }
 
     /// The video resolution to apply, if any beyond the game's own.

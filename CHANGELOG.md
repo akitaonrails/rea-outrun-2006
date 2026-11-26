@@ -3,6 +3,13 @@
 
 ## Unreleased
 
+## [0.5.1] - 2026-11-26
+
+### Fixed
+
+- Fixed `clippy::field_reassign_with_default` in `Settings::wheel_setup` so the
+  Windows release build passes CI cleanly.
+
 ## [0.5.0] - 2026-11-26
 
 ### Added
