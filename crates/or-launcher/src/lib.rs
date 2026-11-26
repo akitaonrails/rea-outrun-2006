@@ -14,4 +14,5 @@ pub mod plan;
 pub mod runtime;
 pub mod soundtrack;
 pub mod tweaks;
+pub mod wheel;
 pub mod window;

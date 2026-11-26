@@ -64,6 +64,12 @@ pub struct Settings {
     pub input_backend: Option<Backend>,
     /// Start races with the manual gearbox selected.
     pub manual_gearbox: Option<bool>,
+    /// Virtual DirectInput wheel + FFB layer (`rea_dinput.dll`): auto / on / off.
+    pub wheel: Option<rea_launcher::wheel::dinput::Mode>,
+    /// Steering lock for the virtual wheel (180..900 or full; default 270°).
+    pub wheel_lock: Option<rea_launcher::wheel::SteeringLock>,
+    /// Force feedback strength for the virtual wheel, 0–100%.
+    pub wheel_ffb: Option<u32>,
 
     // Extras
     /// Change music mid-race (Back or X = next, Z = previous).
@@ -532,6 +538,36 @@ pub const OPTIONS: &[OptionSpec] = &[
     )
     .with_example("off"),
     OptionSpec::new(
+        "wheel",
+        Kind::Choice(&[("auto", "Auto"), ("on", "On"), ("off", "Off")]),
+        "Steering wheel",
+        "Virtual DirectInput wheel and force feedback layer (rea_dinput.dll, supports Logitech G923, Fanatec, Thrustmaster, etc.). Auto enables it when a wheel is connected.",
+    )
+    .with_example("auto"),
+    OptionSpec::new(
+        "wheel_lock",
+        Kind::Choice(&[
+            ("180", "180°"),
+            ("270", "270°"),
+            ("360", "360°"),
+            ("540", "540°"),
+            ("900", "900°"),
+            ("full", "Full"),
+        ]),
+        "Wheel lock",
+        "Degrees of wheel turn for full in-game lock (270° matches the OutRun 2 arcade cabinet).",
+    )
+    .with_aliases(&["wheel-lock"])
+    .with_example("270"),
+    OptionSpec::new(
+        "wheel_ffb",
+        Kind::Range { min: 0, max: 100 },
+        "Wheel FFB",
+        "Force feedback strength for the virtual wheel, 0 to 100%.",
+    )
+    .with_aliases(&["wheel-ffb"])
+    .with_example("100"),
+    OptionSpec::new(
         "cd_switcher",
         Kind::Toggle,
         "CD switcher",
@@ -708,6 +744,21 @@ impl Settings {
             ("input_backend", Value::Choice(b)) => {
                 self.input_backend = Backend::ALL.into_iter().find(|x| x.key() == b)
             }
+            ("wheel", Value::Choice(m)) => {
+                self.wheel = rea_launcher::wheel::dinput::Mode::parse(m);
+            }
+            ("wheel_lock", Value::Choice(l)) => {
+                self.wheel_lock = if l.eq_ignore_ascii_case("full") {
+                    Some(rea_launcher::wheel::SteeringLock::Full)
+                } else {
+                    l.parse::<i64>()
+                        .ok()
+                        .map(rea_launcher::wheel::SteeringLock::from_setting)
+                };
+            }
+            ("wheel_ffb", Value::Number(n)) => {
+                self.wheel_ffb = Some(n.min(100));
+            }
             (key, Value::Toggle(on)) => *self.toggle(key).ok_or(Rejected::Unknown)? = Some(on),
             _ => return Err(Rejected::Unknown),
         }
@@ -779,6 +830,9 @@ impl Settings {
             impulse_triggers,
             input_backend,
             manual_gearbox,
+            wheel,
+            wheel_lock,
+            wheel_ffb,
             cd_switcher,
             music_shuffle,
             skip_logos,
@@ -795,6 +849,17 @@ impl Settings {
 
     pub fn on(&self, setting: &Option<bool>) -> bool {
         setting.unwrap_or(true)
+    }
+
+    /// Wheel layer setup (`rea_wheel.ini` / `REA_WHEEL_MODE`) for this launch.
+    pub fn wheel_setup(&self) -> rea_launcher::wheel::dinput::Setup {
+        use rea_launcher::wheel::SteeringLock;
+        use rea_launcher::wheel::dinput::{Mode, Setup};
+        let mut setup = Setup::default();
+        setup.mode = self.wheel.unwrap_or(Mode::Auto);
+        setup.wheel.lock = self.wheel_lock.unwrap_or(SteeringLock::DEFAULT);
+        setup.ffb.strength = self.wheel_ffb.unwrap_or(100).min(100) as u8;
+        setup
     }
 
     /// The video resolution to apply, if any beyond the game's own.

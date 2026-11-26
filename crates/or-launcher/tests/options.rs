@@ -179,6 +179,23 @@ const CASES: &[(&str, &str, Lands)] = &[
         "off",
         Lands::Plan(|p| p.components.iter().any(|c| c.ends_with("the game's own"))),
     ),
+    (
+        "wheel",
+        "on",
+        Lands::Settings(|s| s.wheel_setup().mode == rea_launcher::wheel::dinput::Mode::On),
+    ),
+    (
+        "wheel_lock",
+        "540",
+        Lands::Settings(|s| {
+            s.wheel_setup().wheel.lock == rea_launcher::wheel::SteeringLock::Degrees(540)
+        }),
+    ),
+    (
+        "wheel_ffb",
+        "75",
+        Lands::Settings(|s| s.wheel_setup().ffb.strength == 75),
+    ),
 ];
 
 fn lands(s: &Settings, key: &str, value: &str, lands: &Lands, how: &str) {

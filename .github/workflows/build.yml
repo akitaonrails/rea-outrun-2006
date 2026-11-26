@@ -24,9 +24,10 @@ permissions:
 
 jobs:
   ci:
-    uses: akitaonrails/rea-launcher-sdk/.github/workflows/launcher-ci.yml@v0.11.1
+    uses: akitaonrails/rea-launcher-sdk/.github/workflows/launcher-ci.yml@v0.12.7
     with:
       apt-packages: gcc-mingw-w64-i686 lld zip unzip cabextract
+      extra-build: sh packaging/build-dlls.sh
       # The Windows-target tests (window, WinHTTP, registry) under Wine, headless.
       wine-tests: true
       shell-tests: linux/tests/*.sh packaging/tests/*.sh
@@ -54,7 +55,7 @@ jobs:
       contents: write
       id-token: write
       attestations: write
-    uses: akitaonrails/rea-launcher-sdk/.github/workflows/launcher-release.yml@v0.11.1
+    uses: akitaonrails/rea-launcher-sdk/.github/workflows/launcher-release.yml@v0.12.7
     with:
       package: or-launcher
       artifact-pattern: OutRunLauncher-*

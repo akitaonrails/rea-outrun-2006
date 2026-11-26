@@ -1077,6 +1077,32 @@ impl Window {
         );
         chip_row(ui, "input_backend", &BACKENDS, &mut f.input_backend, None);
         bool_row(ui, "manual_gearbox", &mut f.manual_gearbox, None);
+        const WHEEL_MODES: [(rea_launcher::wheel::dinput::Mode, &str); 3] = [
+            (rea_launcher::wheel::dinput::Mode::Auto, "Auto"),
+            (rea_launcher::wheel::dinput::Mode::On, "On"),
+            (rea_launcher::wheel::dinput::Mode::Off, "Off"),
+        ];
+        chip_row(ui, "wheel", &WHEEL_MODES, &mut f.wheel, None);
+        let wheel_off = (f.wheel == rea_launcher::wheel::dinput::Mode::Off)
+            .then_some("Turn steering wheel support on (or Auto) first.");
+        const WHEEL_LOCKS: [(rea_launcher::wheel::SteeringLock, &str); 6] = [
+            (rea_launcher::wheel::SteeringLock::Degrees(180), "180°"),
+            (rea_launcher::wheel::SteeringLock::Degrees(270), "270°"),
+            (rea_launcher::wheel::SteeringLock::Degrees(360), "360°"),
+            (rea_launcher::wheel::SteeringLock::Degrees(540), "540°"),
+            (rea_launcher::wheel::SteeringLock::Degrees(900), "900°"),
+            (rea_launcher::wheel::SteeringLock::Full, "Full"),
+        ];
+        chip_row(ui, "wheel_lock", &WHEEL_LOCKS, &mut f.wheel_lock, wheel_off);
+        const WHEEL_FFB: [(u32, &str); 5] = [
+            (0, "0%"),
+            (25, "25%"),
+            (50, "50%"),
+            (75, "75%"),
+            (100, "100%"),
+        ];
+        let wheel_ffb = with_current(&WHEEL_FFB, f.wheel_ffb, |n| format!("{n}%"));
+        chip_row(ui, "wheel_ffb", &wheel_ffb, &mut f.wheel_ffb, wheel_off);
         let pads = match self.pads {
             0 => "The Test button checks Xbox-style (XInput) pads; in the game, PlayStation and Switch pads rumble too.".to_string(),
             1 => "One Xbox-style pad connected.".to_string(),
@@ -1470,6 +1496,9 @@ mod tests {
                     "impulse_triggers",
                     "input_backend",
                     "manual_gearbox",
+                    "wheel",
+                    "wheel_lock",
+                    "wheel_ffb",
                 ][..],
             ),
             (

@@ -86,6 +86,21 @@ pub fn install(
     settings: &Settings,
     log: &mut dyn FnMut(&str),
 ) -> Result<(), String> {
+    install_with_wheel(game, runtime, launcher_dir, linux, settings, false, log)
+}
+
+/// Like [`install`], additionally wiring `rea_dinput.dll` into the runtime's
+/// `OR2006C2C.exe` and disabling Tweaks' SDL pad hook (`UseNewInput = false`)
+/// when `wheel_shown` is `true`.
+pub fn install_with_wheel(
+    game: &Path,
+    runtime: &Path,
+    launcher_dir: &Path,
+    linux: bool,
+    settings: &Settings,
+    wheel_shown: bool,
+    log: &mut dyn FnMut(&str),
+) -> Result<(), String> {
     let tweaks = launcher_dir.join(TWEAKS_DIR);
     for name in ["dinput8.dll", "OR2006C2C.exe"] {
         let source = tweaks.join(name);
@@ -98,6 +113,23 @@ pub fn install(
         if freshen(&source, &runtime.join(name))? {
             log(&format!("tweaks: {name} installed"));
         }
+    }
+    let wheel_dll_src = tweaks.join(crate::wheel::DLL);
+    if wheel_shown && wheel_dll_src.is_file() {
+        if freshen(&wheel_dll_src, &runtime.join(crate::wheel::DLL))? {
+            log(&format!("wheel: {} installed", crate::wheel::DLL));
+        }
+        let exe_path = runtime.join("OR2006C2C.exe");
+        let bytes =
+            fs::read(&exe_path).map_err(|e| format!("cannot read {}: {e}", exe_path.display()))?;
+        let patched = rea_dinput::import_into(&bytes)
+            .map_err(|e| format!("OR2006C2C.exe can't import {} ({e})", crate::wheel::DLL))?;
+        fsx::install(&exe_path, patched)
+            .map_err(|e| format!("cannot write {}: {e}", exe_path.display()))?;
+        log(&format!(
+            "wheel: OR2006C2C.exe imports {}",
+            crate::wheel::DLL
+        ));
     }
     let lods = tweaks.join("OutRun2006Tweaks.lods.ini");
     if lods.is_file() {
@@ -132,7 +164,7 @@ pub fn install(
         };
     }
     let pack = hd_texture_base(settings, launcher_dir, log);
-    let ini = tweaks_ini(&base, settings, pack.as_deref(), linux);
+    let ini = tweaks_ini_for_wheel(&base, settings, pack.as_deref(), linux, wheel_shown);
     fsx::install(&ini_path, ini.to_bytes()).map_err(|e| format!("cannot write {e}"))?;
     reset_overlay_keys(&runtime.join(USER_INI), log)?;
 
@@ -328,11 +360,26 @@ fn hd_texture_base(
 /// settings, the HD pack's folder (`pack`, from `texture_base`) and the
 /// input API, which follows the platform (`wine`) unless one was chosen.
 pub fn tweaks_ini(base: &str, settings: &Settings, pack: Option<&Path>, wine: bool) -> Ini {
+    tweaks_ini_for_wheel(base, settings, pack, wine, false)
+}
+
+/// Like [`tweaks_ini`], setting `[Controls] UseNewInput = false` when the
+/// virtual DirectInput wheel layer (`rea_dinput.dll`) is active.
+pub fn tweaks_ini_for_wheel(
+    base: &str,
+    settings: &Settings,
+    pack: Option<&Path>,
+    wine: bool,
+    wheel_shown: bool,
+) -> Ini {
     let mut ini = Ini::parse(base);
     settings.tweak(&mut ini);
     texture_keys(&mut ini, pack);
     let backend = settings.backend_on(wine).ini().to_string();
     ini.set("Controls", "InputBackend", &backend);
+    if wheel_shown {
+        ini.set("Controls", "UseNewInput", "false");
+    }
     ini
 }
 

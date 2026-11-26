@@ -10,14 +10,20 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 # The shared launcher SDK (docs: its README). Bump the tag here and rerun
 # scripts/sdk-sync from the SDK checkout at the same tag.
-rea-launcher = { git = "https://github.com/akitaonrails/rea-launcher-sdk", tag = "v0.11.1" }
-rea-launcher-win32 = { git = "https://github.com/akitaonrails/rea-launcher-sdk", tag = "v0.11.1" }
-rea-launcher-ui = { git = "https://github.com/akitaonrails/rea-launcher-sdk", tag = "v0.11.1" }
+rea-launcher = { git = "https://github.com/akitaonrails/rea-launcher-sdk", tag = "v0.12.7" }
+rea-launcher-win32 = { git = "https://github.com/akitaonrails/rea-launcher-sdk", tag = "v0.12.7" }
+rea-launcher-ui = { git = "https://github.com/akitaonrails/rea-launcher-sdk", tag = "v0.12.7" }
+# Virtual DirectInput wheel + FFB layer (`rea_dinput.dll`, imported by OR2006C2C.exe).
+rea-launcher-dinput = { git = "https://github.com/akitaonrails/rea-launcher-sdk", tag = "v0.12.7", default-features = false }
 # Version information, icon and manifest in the Windows executable (build.rs).
-rea-launcher-build = { git = "https://github.com/akitaonrails/rea-launcher-sdk", tag = "v0.11.1" }
+rea-launcher-build = { git = "https://github.com/akitaonrails/rea-launcher-sdk", tag = "v0.12.7" }
 
 [profile.release]
 panic = "abort"
 opt-level = "s"
 lto = true
 strip = true
+
+[profile.dll]
+inherits = "release"
+panic = "unwind"

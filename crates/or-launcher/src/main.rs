@@ -591,14 +591,38 @@ mod app {
             if created { 0 } else { moved.to_saves.len() }
         ));
 
-        tweaks::install(
+        let wheel_setup = settings.wheel_setup();
+        let wheel_shown = or_launcher::wheel::shown(&wheel_setup, rea_launcher_win32::dinput::list);
+        log_line(&format!(
+            "wheel support {}: {}",
+            wheel_setup.mode.key(),
+            if wheel_shown {
+                "virtual wheel active (rea_dinput.dll, Tweaks UseNewInput=false)"
+            } else {
+                "off (standard pad/keyboard input)"
+            }
+        ));
+        tweaks::install_with_wheel(
             &game,
             &runtime_dir,
             &launcher_dir().unwrap_or_default(),
             wine,
             &settings,
+            wheel_shown,
             &mut |line| log_line(line),
         )?;
+        if wheel_shown {
+            let local_cal = settings_path
+                .parent()
+                .map(|p| p.join("rea_wheel.ini"))
+                .and_then(|p| fs::read_to_string(p).ok());
+            let shared_cal =
+                fs::read_to_string(rea_launcher::hub::HubPaths::shared_wheel_file()).ok();
+            let cal = local_cal.or(shared_cal).unwrap_or_default();
+            let wheel_ini = or_launcher::wheel::runtime_ini(&wheel_setup, &cal);
+            fsx::install(&runtime_dir.join("rea_wheel.ini"), wheel_ini)
+                .map_err(|e| format!("cannot write rea_wheel.ini: {e}"))?;
+        }
         let dx_dir = (!wine).then(|| directx::installed(&home())).flatten();
         for note in directx::for_launch(&game, &runtime_dir, dx_dir.as_deref())? {
             log_line(&format!("directx: {note}"));
@@ -659,6 +683,10 @@ mod app {
 
         let mut command = Command::new(runtime_dir.join(EXE));
         command.current_dir(&runtime_dir);
+        command.env(
+            or_launcher::wheel::MODE_ENV,
+            or_launcher::wheel::mode_value(wheel_shown),
+        );
         if wine {
             command.env("WINEDLLOVERRIDES", wine_overrides());
             command.env(

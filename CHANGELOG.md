@@ -3,6 +3,22 @@
 
 ## Unreleased
 
+## [0.5.0] - 2026-11-26
+
+### Added
+
+- **Native steering wheel & Force Feedback layer (`rea_dinput.dll`, #7)**:
+  wired the SDK's `rea-launcher-dinput` virtual DirectInput wheel layer
+  alongside `OutRun2006Tweaks`'s `dinput8.dll` (supporting Logitech G923,
+  Fanatec, Thrustmaster, and other DirectInput wheels, with shared
+  `wheel.ini` calibration discovery via `rea-launcher-sdk v0.12.7`).
+- Added `wheel` (`auto` / `on` / `off`), `wheel_lock` (`180°`–`900°` / `full`,
+  default `270°`), and `wheel_ffb` (`0`–`100%`) options in the Controls tab,
+  `launcher.cfg`, and CLI (`--wheel`, `--wheel-lock`, `--wheel-ffb`). When a
+  wheel is active, `OR2006C2C.exe` imports `rea_dinput.dll` and Tweaks'
+  `UseNewInput` is automatically switched to `false` while keeping all
+  Tweaks graphics/widescreen/FPS/HD-pack fixes active.
+
 ## [0.4.1] - 2026-11-21
 
 ### Changed

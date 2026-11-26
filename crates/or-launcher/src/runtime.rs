@@ -36,10 +36,12 @@ impl Policy for OutRun {
     /// load before the real D3D9), the repack's uninstaller, and the crash
     /// dumps the mod writes.
     fn owned(&self, rel: &str, _source: Stamp) -> bool {
-        const OWNED: [&str; 13] = [
+        const OWNED: [&str; 15] = [
             "d3d9.dll",
             "d3d9.ini",
             "dinput8.dll",
+            "rea_dinput.dll",
+            "rea_wheel.ini",
             "or2006c2c.exe",
             "or2006c2c.exe.original",
             "outrun2006.ini",

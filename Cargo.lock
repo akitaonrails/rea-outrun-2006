@@ -1701,11 +1701,12 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "or-launcher"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "cab",
  "rea-launcher",
  "rea-launcher-build",
+ "rea-launcher-dinput",
  "rea-launcher-ui",
  "rea-launcher-win32",
 ]
@@ -1952,8 +1953,8 @@ checksum = "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539"
 
 [[package]]
 name = "rea-launcher"
-version = "0.11.1"
-source = "git+https://github.com/akitaonrails/rea-launcher-sdk?tag=v0.11.1#b732990f8c6068dc392490f98a4835402f292ba5"
+version = "0.12.7"
+source = "git+https://github.com/akitaonrails/rea-launcher-sdk?tag=v0.12.7#d4ef79463dc57988b3370637fc5974b73b947dd7"
 dependencies = [
  "sha2",
  "zip",
@@ -1961,13 +1962,23 @@ dependencies = [
 
 [[package]]
 name = "rea-launcher-build"
-version = "0.11.1"
-source = "git+https://github.com/akitaonrails/rea-launcher-sdk?tag=v0.11.1#b732990f8c6068dc392490f98a4835402f292ba5"
+version = "0.12.7"
+source = "git+https://github.com/akitaonrails/rea-launcher-sdk?tag=v0.12.7#d4ef79463dc57988b3370637fc5974b73b947dd7"
+
+[[package]]
+name = "rea-launcher-dinput"
+version = "0.12.7"
+source = "git+https://github.com/akitaonrails/rea-launcher-sdk?tag=v0.12.7#d4ef79463dc57988b3370637fc5974b73b947dd7"
+dependencies = [
+ "rea-launcher",
+ "rea-launcher-build",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "rea-launcher-ui"
-version = "0.11.1"
-source = "git+https://github.com/akitaonrails/rea-launcher-sdk?tag=v0.11.1#b732990f8c6068dc392490f98a4835402f292ba5"
+version = "0.12.7"
+source = "git+https://github.com/akitaonrails/rea-launcher-sdk?tag=v0.12.7#d4ef79463dc57988b3370637fc5974b73b947dd7"
 dependencies = [
  "eframe",
  "egui_kittest",
@@ -1978,8 +1989,8 @@ dependencies = [
 
 [[package]]
 name = "rea-launcher-win32"
-version = "0.11.1"
-source = "git+https://github.com/akitaonrails/rea-launcher-sdk?tag=v0.11.1#b732990f8c6068dc392490f98a4835402f292ba5"
+version = "0.12.7"
+source = "git+https://github.com/akitaonrails/rea-launcher-sdk?tag=v0.12.7#d4ef79463dc57988b3370637fc5974b73b947dd7"
 dependencies = [
  "rea-launcher",
  "windows-sys 0.61.2",

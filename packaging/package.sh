@@ -44,6 +44,17 @@ chmod +x "$OUT/linux/or-play"
 unzip -q -j -o "$(fetch tweaks)" dinput8.dll OR2006C2C.exe \
   OutRun2006Tweaks.ini OutRun2006Tweaks.lods.ini LICENSE.md SOURCE.txt -d "$OUT/tweaks"
 
+# Virtual DirectInput wheel + FFB layer (rea-launcher-dinput, built by packaging/build-dlls.sh).
+DLL_DIR=${REA_DLL_DIR:-$ROOT/target/i686-pc-windows-gnu/dll}
+if [ -f "$DLL_DIR/rea_dinput.dll" ]; then
+  cp "$DLL_DIR/rea_dinput.dll" "$OUT/tweaks/rea_dinput.dll"
+elif [ "${REA_STANDIN_COMPONENTS:-}" = 1 ]; then
+  printf 'stand-in\n' > "$OUT/tweaks/rea_dinput.dll"
+else
+  echo "build the wheel layer first: $DLL_DIR/rea_dinput.dll is missing (sh packaging/build-dlls.sh)" >&2
+  exit 1
+fi
+
 # The soundtrack fix and the xdelta3 that applies it.
 unzip -q -j -o "$(fetch soundtrack)" 14_Rush_a_Difficulty_1989.ogg.vcdiff \
   xdelta3-3.1.0-i686.exe -d "$OUT/soundtrack"

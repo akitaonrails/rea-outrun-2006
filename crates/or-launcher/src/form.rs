@@ -80,6 +80,9 @@ pub struct Form {
     pub impulse_triggers: Feedback,
     pub input_backend: Backend,
     pub manual_gearbox: bool,
+    pub wheel: rea_launcher::wheel::dinput::Mode,
+    pub wheel_lock: rea_launcher::wheel::SteeringLock,
+    pub wheel_ffb: u32,
 
     // Extras
     pub cd_switcher: bool,
@@ -124,6 +127,9 @@ impl Form {
             impulse_triggers: Feedback::Off,
             input_backend: Backend::default_on(wine),
             manual_gearbox: false,
+            wheel: rea_launcher::wheel::dinput::Mode::Auto,
+            wheel_lock: rea_launcher::wheel::SteeringLock::DEFAULT,
+            wheel_ffb: 100,
             cd_switcher: false,
             music_shuffle: false,
             skip_logos: false,
@@ -165,6 +171,9 @@ impl Form {
             impulse_triggers: Feedback::Swapped,
             input_backend: Backend::default_on(wine),
             manual_gearbox: false,
+            wheel: rea_launcher::wheel::dinput::Mode::Auto,
+            wheel_lock: rea_launcher::wheel::SteeringLock::DEFAULT,
+            wheel_ffb: 100,
             cd_switcher: true,
             music_shuffle: false,
             skip_logos: true,
@@ -222,6 +231,11 @@ impl Form {
             impulse_triggers: s.impulse_triggers.unwrap_or(Feedback::Swapped),
             input_backend: s.backend_on(wine),
             manual_gearbox: s.manual_gearbox.unwrap_or(false),
+            wheel: s.wheel.unwrap_or(rea_launcher::wheel::dinput::Mode::Auto),
+            wheel_lock: s
+                .wheel_lock
+                .unwrap_or(rea_launcher::wheel::SteeringLock::DEFAULT),
+            wheel_ffb: s.wheel_ffb.unwrap_or(100),
             cd_switcher: s.cd_switcher.unwrap_or(true),
             music_shuffle: s.music_shuffle.unwrap_or(false),
             skip_logos: s.skip_logos.unwrap_or(true),
@@ -386,6 +400,13 @@ impl Form {
                 .then(|| self.input_backend.key().into()),
         );
         put("manual_gearbox", Some(self.manual_gearbox.to_string()));
+        put("wheel", Some(self.wheel.key().into()));
+        let lock_key = match self.wheel_lock {
+            rea_launcher::wheel::SteeringLock::Degrees(d) => d.to_string(),
+            rea_launcher::wheel::SteeringLock::Full => "full".to_string(),
+        };
+        put("wheel_lock", Some(lock_key));
+        put("wheel_ffb", Some(self.wheel_ffb.to_string()));
         put("cd_switcher", Some(self.cd_switcher.to_string()));
         put("music_shuffle", Some(self.music_shuffle.to_string()));
         put("skip_logos", Some(self.skip_logos.to_string()));

@@ -27,6 +27,9 @@ OutRunLauncher [options]
   --impulse-triggers off|on|swapped|merged    Impulse triggers
   --input-backend auto|wgi|raw|dinput|xinput  Input API
   --manual-gearbox on|off                     Manual gearbox
+  --wheel auto|on|off                         Steering wheel
+  --wheel-lock 180|270|360|540|900|full       Wheel lock
+  --wheel-ffb <0-100>                         Wheel FFB
   --cd-switcher on|off                        CD switcher
   --music-shuffle on|off                      Shuffle the music
   --skip-logos on|off                         Skip the boot logos

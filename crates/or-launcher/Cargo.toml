@@ -1,6 +1,6 @@
 [package]
 name = "or-launcher"
-version = "0.4.1"
+version = "0.5.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -20,6 +20,12 @@ rea-launcher-ui.workspace = true
 # Its Windows parts are cfg(windows); who sees a message and what a second
 # start does are portable (tested on the host).
 rea-launcher-win32.workspace = true
+# Virtual DirectInput wheel + FFB layer (`rea_dinput.dll`).
+rea-launcher-dinput.workspace = true
+
+[features]
+# Used only by packaging/build-dlls.sh to compile `rea_dinput.dll` with its DllMain.
+layer-dlls = ["rea-launcher-dinput/dll"]
 
 [build-dependencies]
 # build.rs: the exe's version information, icon and manifest.

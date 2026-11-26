@@ -10,6 +10,7 @@ linux/rea-play.sh
 linux/README.md
 linux/d3d9.dll
 tweaks/dinput8.dll
+tweaks/rea_dinput.dll
 tweaks/OR2006C2C.exe
 tweaks/OutRun2006Tweaks.ini
 tweaks/OutRun2006Tweaks.lods.ini
