@@ -9,6 +9,7 @@ use crate::instance;
 
 /// What the command line asks for.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Ask {
     /// `--help`, `-h` or `/?`: the usage, exit 0.
     Help,

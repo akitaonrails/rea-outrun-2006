@@ -3,6 +3,17 @@
 
 ## Unreleased
 
+## [0.5.2] - 2026-11-28
+
+### Fixed
+
+- Made the virtual DirectInput wheel layer (`rea_dinput.dll`) opt-in by
+  default (`wheel = off` instead of `auto`; [#7](https://github.com/akitaonrails/rea-outrun-2006/issues/7)),
+  preventing a `0xC0000005` crash on launch for wheels that already work
+  through `OutRun2006Tweaks` (such as the Logitech RS50). Players who need
+  the virtual wheel layer can still enable `Auto` or `On` in **Controls →
+  Steering wheel** (or `--wheel auto` / `--wheel on`).
+
 ## [0.5.1] - 2026-11-26
 
 ### Fixed

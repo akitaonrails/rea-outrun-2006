@@ -857,7 +857,7 @@ impl Settings {
         use rea_launcher::wheel::dinput::{Mode, Setup};
         use rea_launcher::wheel::{SteeringLock, WheelSettings};
         Setup {
-            mode: self.wheel.unwrap_or(Mode::Auto),
+            mode: self.wheel.unwrap_or(Mode::Off),
             wheel: WheelSettings {
                 lock: self.wheel_lock.unwrap_or(SteeringLock::DEFAULT),
                 ..WheelSettings::default()

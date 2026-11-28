@@ -127,7 +127,7 @@ impl Form {
             impulse_triggers: Feedback::Off,
             input_backend: Backend::default_on(wine),
             manual_gearbox: false,
-            wheel: rea_launcher::wheel::dinput::Mode::Auto,
+            wheel: rea_launcher::wheel::dinput::Mode::Off,
             wheel_lock: rea_launcher::wheel::SteeringLock::DEFAULT,
             wheel_ffb: 100,
             cd_switcher: false,
@@ -171,7 +171,7 @@ impl Form {
             impulse_triggers: Feedback::Swapped,
             input_backend: Backend::default_on(wine),
             manual_gearbox: false,
-            wheel: rea_launcher::wheel::dinput::Mode::Auto,
+            wheel: rea_launcher::wheel::dinput::Mode::Off,
             wheel_lock: rea_launcher::wheel::SteeringLock::DEFAULT,
             wheel_ffb: 100,
             cd_switcher: true,
@@ -231,7 +231,7 @@ impl Form {
             impulse_triggers: s.impulse_triggers.unwrap_or(Feedback::Swapped),
             input_backend: s.backend_on(wine),
             manual_gearbox: s.manual_gearbox.unwrap_or(false),
-            wheel: s.wheel.unwrap_or(rea_launcher::wheel::dinput::Mode::Auto),
+            wheel: s.wheel.unwrap_or(rea_launcher::wheel::dinput::Mode::Off),
             wheel_lock: s
                 .wheel_lock
                 .unwrap_or(rea_launcher::wheel::SteeringLock::DEFAULT),
